@@ -19,9 +19,8 @@ export async function extractText(
 }
 
 async function extractPdf(buffer: Buffer): Promise<string> {
-  const { PDFParse } = await import('pdf-parse')
-  const parser = new PDFParse({ data: buffer })
-  const result = await parser.getText()
+  const pdfParse = (await import('pdf-parse')).default
+  const result = await pdfParse(buffer)
   return result.text
 }
 
