@@ -6,7 +6,6 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3'
-import type { Readable } from 'stream'
 
 const BUCKET = process.env.MINIO_BUCKET ?? 'memory-docs'
 
@@ -53,13 +52,10 @@ export async function getFileBuffer(key: string): Promise<Buffer> {
   const response = await s3Client.send(
     new GetObjectCommand({ Bucket: BUCKET, Key: key })
   )
-  const stream = response.Body as Readable
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-    stream.on('end', () => resolve(Buffer.concat(chunks)))
-    stream.on('error', reject)
-  })
+  if (!response.Body) throw new Error('Empty response body from storage')
+  // transformToByteArray works in both Node.js and Edge/serverless runtimes
+  const bytes = await response.Body.transformToByteArray()
+  return Buffer.from(bytes)
 }
 
 export async function deleteFile(key: string): Promise<void> {

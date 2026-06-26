@@ -37,7 +37,13 @@ export async function GET(
     return NextResponse.json({ error: 'Text entries have no file to view' }, { status: 400 })
   }
 
-  const buffer = await getFileBuffer(doc.storageKey)
+  let buffer: Buffer
+  try {
+    buffer = await getFileBuffer(doc.storageKey)
+  } catch (err) {
+    console.error(`Failed to fetch file from storage [${doc.storageKey}]:`, err)
+    return NextResponse.json({ error: 'Could not retrieve file from storage' }, { status: 502 })
+  }
   const contentType = CONTENT_TYPES[doc.fileType] ?? 'application/octet-stream'
   const disposition = doc.fileType === 'pdf' ? 'inline' : `attachment; filename="${encodeURIComponent(doc.name)}"`
 
