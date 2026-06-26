@@ -7,7 +7,7 @@ export default async function RootPage() {
   if (session) redirect('/spaces')
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100">
+    <div className="min-h-dvh bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100">
 
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-900">

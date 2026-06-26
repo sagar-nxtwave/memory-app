@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
@@ -62,8 +62,7 @@ export default function SpacePage() {
   const [pasteTitle, setPasteTitle] = useState('')
   const [pasteContent, setPasteContent] = useState('')
   const [pasting, setPasting] = useState(false)
-  const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null)
-  const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
+  const [docSheet, setDocSheet] = useState<Doc | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
 
@@ -225,11 +224,21 @@ export default function SpacePage() {
   }
 
   async function deleteDocument(docId: string) {
-    setDeletingDocId(docId)
     await fetch(`/api/documents/${docId}`, { method: 'DELETE' })
     setDocs((prev) => prev.filter((d) => d.id !== docId))
-    setDeletingDocId(null)
-    setConfirmDeleteDocId(null)
+    setDocSheet(null)
+  }
+
+  async function renameDoc(docId: string, name: string) {
+    const res = await fetch(`/api/documents/${docId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      setDocs((prev) => prev.map((d) => d.id === docId ? { ...d, name } : d))
+      setDocSheet((prev) => prev ? { ...prev, name } : null)
+    }
   }
 
   async function openDocInsights(docId: string) {
@@ -410,12 +419,10 @@ export default function SpacePage() {
                     const isReady = doc.status === 'ready'
                     return (
                       <motion.div key={doc.id} custom={i} variants={cardVariants}
-                        className={`group flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
+                        className={`flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
                           isReady ? 'hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer' : ''
                         }`}
-                        onClick={() => {
-                          if (isReady && confirmDeleteDocId !== doc.id) openDocInsights(doc.id)
-                        }}
+                        onClick={() => { if (isReady) openDocInsights(doc.id) }}
                       >
                         <span className="text-2xl shrink-0 mt-0.5">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                         <div className="flex-1 min-w-0">
@@ -445,33 +452,15 @@ export default function SpacePage() {
                           <span className="text-xs text-gray-400 dark:text-gray-500">
                             {new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
-                          {confirmDeleteDocId === doc.id ? (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => deleteDocument(doc.id)}
-                                disabled={deletingDocId === doc.id}
-                                className="text-xs text-red-500 font-medium hover:text-red-600 disabled:opacity-50 transition-colors"
-                              >
-                                {deletingDocId === doc.id ? '…' : 'Delete'}
-                              </button>
-                              <button onClick={() => setConfirmDeleteDocId(null)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDeleteDocId(doc.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 dark:text-gray-600 hover:text-red-400 dark:hover:text-red-400 transition-all rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                              title="Delete document"
-                            >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                <path d="M10 11v6M14 11v6" />
-                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                              </svg>
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
+                            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
+                            title="More options"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                              <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                            </svg>
+                          </button>
                         </div>
                       </motion.div>
                     )
@@ -588,6 +577,19 @@ export default function SpacePage() {
             doc={selectedDoc}
             loading={loadingDocDetail}
             onClose={() => { setSelectedDoc(null); setLoadingDocDetail(false) }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Document Action Sheet ── */}
+      <AnimatePresence>
+        {docSheet && (
+          <DocActionSheet
+            doc={docSheet}
+            onClose={() => setDocSheet(null)}
+            onViewInsights={(id) => { setDocSheet(null); openDocInsights(id) }}
+            onDelete={deleteDocument}
+            onRename={renameDoc}
           />
         )}
       </AnimatePresence>
@@ -828,5 +830,198 @@ function InsightSection({
         </div>
       )}
     </div>
+  )
+}
+
+function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename }: {
+  doc: Doc
+  onClose: () => void
+  onViewInsights: (id: string) => void
+  onDelete: (id: string) => Promise<void>
+  onRename: (id: string, name: string) => Promise<void>
+}) {
+  const [mode, setMode] = useState<'actions' | 'rename' | 'delete'>('actions')
+  const [newName, setNewName] = useState(doc.name)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleRename() {
+    if (!newName.trim()) return
+    setSaving(true)
+    await onRename(doc.id, newName.trim())
+    setSaving(false)
+    setMode('actions')
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    await onDelete(doc.id)
+    setDeleting(false)
+  }
+
+  const isReady = doc.status === 'ready'
+  const canViewFile = isReady && doc.fileType !== 'text'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 420, damping: 36 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg bg-white dark:bg-[#1c1c1e] rounded-t-3xl shadow-2xl"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-9 h-1 bg-gray-200 dark:bg-gray-700 rounded-full" />
+        </div>
+
+        {mode === 'actions' && (
+          <>
+            {/* Doc info */}
+            <div className="px-5 pt-3 pb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate">{doc.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
+                    {' · '}{fmt(doc.fileSize)}
+                    {' · '}{new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 pb-2 space-y-1">
+              {canViewFile && (
+                <SheetRow
+                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+                  label="View document"
+                  onClick={() => { window.open(`/api/documents/${doc.id}/file`, '_blank'); onClose() }}
+                />
+              )}
+              {isReady && (
+                <SheetRow
+                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+                  label="Insights & details"
+                  onClick={() => onViewInsights(doc.id)}
+                />
+              )}
+              <SheetRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
+                label="Rename"
+                onClick={() => { setNewName(doc.name); setMode('rename') }}
+              />
+              <SheetRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>}
+                label="Delete"
+                destructive
+                onClick={() => setMode('delete')}
+              />
+            </div>
+
+            <div className="px-4 pt-1 pb-5">
+              <button
+                onClick={onClose}
+                className="w-full py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {mode === 'rename' && (
+          <div className="px-5 pt-3 pb-5">
+            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              Back
+            </button>
+            <p className="text-base font-semibold text-gray-900 dark:text-white mb-4">Rename document</p>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRename() }}
+              autoFocus
+              className="w-full px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMode('actions')}
+                className="flex-1 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRename}
+                disabled={saving || !newName.trim()}
+                className="flex-1 py-3 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'delete' && (
+          <div className="px-5 pt-3 pb-5">
+            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              Back
+            </button>
+            <p className="text-base font-semibold text-gray-900 dark:text-white mb-2">Delete document?</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+              This removes the file and all memory associated with it. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMode('actions')}
+                className="flex-1 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-3 text-sm font-medium text-white bg-red-500 rounded-xl disabled:opacity-50 hover:bg-red-600 transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function SheetRow({ icon, label, onClick, destructive }: {
+  icon: React.ReactNode; label: string; onClick: () => void; destructive?: boolean
+}) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left transition-colors ${
+        destructive
+          ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10'
+          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+      }`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="text-sm font-medium">{label}</span>
+    </motion.button>
   )
 }
