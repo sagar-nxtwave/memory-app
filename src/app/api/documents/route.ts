@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
-
-// Give large document uploads time to be received + processed
-export const maxDuration = 60
 import { db } from '@/lib/db'
 import { documents, spaceMembers } from '@/lib/db/schema'
 import { detectFileType, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from '@/lib/parsers'
 import { processDocumentFromBuffer } from '@/lib/ai/processing'
 import { uploadFile, generateStorageKey } from '@/lib/storage/minio'
+
+// Keep the function alive long enough for document processing
+export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -106,11 +106,13 @@ export async function POST(req: NextRequest) {
     // MinIO not available in dev — processing continues from in-memory buffer
   }
 
-  // Process document (extract text, embed, generate summary)
-  // Run without awaiting so the response returns immediately
-  processDocumentFromBuffer(doc.id, buffer, fileType).catch((err) =>
-    console.error('Document processing error:', err)
-  )
+  // after() tells Vercel to keep the Lambda alive after the response is sent
+  // Without this, Vercel freezes the function immediately and processing never runs
+  after(async () => {
+    await processDocumentFromBuffer(doc.id, buffer, fileType).catch((err) =>
+      console.error('Document processing error:', err)
+    )
+  })
 
   return NextResponse.json({ ...doc, status: 'processing' }, { status: 201 })
 }
