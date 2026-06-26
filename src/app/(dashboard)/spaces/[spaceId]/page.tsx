@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
 interface Message { id: string; role: MessageRole; content: string; createdAt: string }
-interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; createdAt: string; fileSize: number }
+interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number }
 interface DocDetail extends Doc {
   keyNumbers: string[] | null
   risks: string[] | null
@@ -229,6 +229,14 @@ export default function SpacePage() {
     setDocSheet(null)
   }
 
+  async function retryDoc(docId: string) {
+    const res = await fetch(`/api/documents/${docId}/retry`, { method: 'POST' })
+    if (res.ok) {
+      setDocs((prev) => prev.map((d) => d.id === docId ? { ...d, status: 'processing', failureReason: null } : d))
+      setDocSheet(null)
+    }
+  }
+
   async function renameDoc(docId: string, name: string) {
     const res = await fetch(`/api/documents/${docId}`, {
       method: 'PATCH',
@@ -427,8 +435,11 @@ export default function SpacePage() {
                         <span className="text-2xl shrink-0 mt-0.5">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{doc.name}</p>
-                          {doc.summary && doc.status === 'ready' && (
+                          {doc.status === 'ready' && doc.summary && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
+                          )}
+                          {doc.status === 'failed' && doc.failureReason && (
+                            <p className="text-xs text-red-400 dark:text-red-400 mt-0.5 line-clamp-2">{doc.failureReason}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             {doc.status === 'processing' || doc.status === 'pending' ? (
@@ -590,6 +601,7 @@ export default function SpacePage() {
             onViewInsights={(id) => { setDocSheet(null); openDocInsights(id) }}
             onDelete={deleteDocument}
             onRename={renameDoc}
+            onRetry={retryDoc}
           />
         )}
       </AnimatePresence>
@@ -833,17 +845,25 @@ function InsightSection({
   )
 }
 
-function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename }: {
+function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRetry }: {
   doc: Doc
   onClose: () => void
   onViewInsights: (id: string) => void
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, name: string) => Promise<void>
+  onRetry: (id: string) => Promise<void>
 }) {
   const [mode, setMode] = useState<'actions' | 'rename' | 'delete'>('actions')
   const [newName, setNewName] = useState(doc.name)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+
+  async function handleRetry() {
+    setRetrying(true)
+    await onRetry(doc.id)
+    setRetrying(false)
+  }
 
   async function handleRename() {
     if (!newName.trim()) return
@@ -898,12 +918,22 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename }: {
                     {' · '}{fmt(doc.fileSize)}
                     {' · '}{new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </p>
+                  {doc.status === 'failed' && doc.failureReason && (
+                    <p className="text-xs text-red-400 mt-1.5 leading-relaxed">{doc.failureReason}</p>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Actions */}
             <div className="px-4 pb-2 space-y-1">
+              {doc.status === 'failed' && doc.fileType !== 'text' && (
+                <SheetRow
+                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>}
+                  label={retrying ? 'Retrying…' : 'Retry processing'}
+                  onClick={handleRetry}
+                />
+              )}
               {canViewFile && (
                 <SheetRow
                   icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}

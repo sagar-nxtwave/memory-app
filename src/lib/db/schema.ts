@@ -91,6 +91,7 @@ export const documents = pgTable('documents', {
   fileSize: bigint('file_size', { mode: 'number' }).notNull(),
   storageKey: text('storage_key').notNull(),
   status: documentStatusEnum('status').notNull().default('pending'),
+  failureReason: text('failure_reason'),
   summary: text('summary'),
   keyNumbers: jsonb('key_numbers').$type<string[]>(),
   risks: jsonb('risks').$type<string[]>(),

@@ -8,6 +8,21 @@ import { mistral, CHAT_MODEL, EMBED_MODEL } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
 
+function toUserFriendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (msg.includes('No text could be extracted') || msg.includes('no extractable text'))
+    return 'No text could be extracted. This may be a scanned PDF or image-based document. Try a text-based PDF.'
+  if (msg.includes('password') || msg.includes('encrypted'))
+    return 'This document appears to be password protected. Remove the password and re-upload.'
+  if (msg.includes('token') || msg.includes('rate') || msg.includes('quota'))
+    return 'AI processing limit reached. Please try again in a few minutes.'
+  if (msg.includes('timeout') || msg.includes('ETIMEDOUT'))
+    return 'Processing timed out. Try a smaller document or split it into parts.'
+  if (msg.includes('corrupt') || msg.includes('invalid') || msg.includes('parse'))
+    return 'The file appears to be corrupted or in an unsupported format.'
+  return 'Processing failed. Please delete and re-upload the document.'
+}
+
 interface ExtractedData {
   summary: string
   keyNumbers: string[]
@@ -89,7 +104,7 @@ export async function processDocumentFromBuffer(
     console.error(`Failed to process document ${documentId}:`, error)
     await db
       .update(documents)
-      .set({ status: 'failed', updatedAt: new Date() })
+      .set({ status: 'failed', failureReason: toUserFriendlyError(error), updatedAt: new Date() })
       .where(eq(documents.id, documentId))
     throw error
   }
@@ -158,7 +173,7 @@ export async function processDocumentFromText(
     console.error(`Failed to process text document ${documentId}:`, error)
     await db
       .update(documents)
-      .set({ status: 'failed', updatedAt: new Date() })
+      .set({ status: 'failed', failureReason: toUserFriendlyError(error), updatedAt: new Date() })
       .where(eq(documents.id, documentId))
     throw error
   }
