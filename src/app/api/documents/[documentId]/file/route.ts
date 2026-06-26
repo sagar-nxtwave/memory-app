@@ -41,7 +41,7 @@ export async function GET(
   const contentType = CONTENT_TYPES[doc.fileType] ?? 'application/octet-stream'
   const disposition = doc.fileType === 'pdf' ? 'inline' : `attachment; filename="${encodeURIComponent(doc.name)}"`
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': contentType,
       'Content-Disposition': disposition,
