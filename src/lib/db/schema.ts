@@ -35,6 +35,7 @@ export const documentTypeEnum = pgEnum('document_type', [
   'docx',
   'xlsx',
   'csv',
+  'text',
 ])
 
 export const messageRoleEnum = pgEnum('message_role', ['user', 'assistant'])

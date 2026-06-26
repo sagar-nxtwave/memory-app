@@ -95,6 +95,75 @@ export async function processDocumentFromBuffer(
   }
 }
 
+export async function processDocumentFromText(
+  documentId: string,
+  text: string
+): Promise<void> {
+  await db
+    .update(documents)
+    .set({ status: 'processing', updatedAt: new Date() })
+    .where(eq(documents.id, documentId))
+
+  try {
+    const [doc] = await db
+      .select({ name: documents.name })
+      .from(documents)
+      .where(eq(documents.id, documentId))
+      .limit(1)
+
+    if (!doc) throw new Error('Document not found')
+
+    const safeText = sanitizeForPrompt(text)
+    if (!safeText.trim()) throw new Error('No text provided')
+
+    const extracted = await extractDocumentData(doc.name, safeText)
+    const chunks = chunkText(safeText)
+
+    if (chunks.length > 0) {
+      const BATCH_SIZE = 50
+      const embeddings: number[][] = []
+
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE)
+        const response = await mistral.embeddings.create({
+          model: EMBED_MODEL,
+          inputs: batch,
+        })
+        embeddings.push(...response.data.map((d) => d.embedding ?? []))
+      }
+
+      await db.insert(documentChunks).values(
+        chunks.map((content, index) => ({
+          documentId,
+          content,
+          chunkIndex: index,
+          embedding: embeddings[index] ?? [],
+        }))
+      )
+    }
+
+    await db
+      .update(documents)
+      .set({
+        status: 'ready',
+        summary: extracted.summary,
+        keyNumbers: extracted.keyNumbers,
+        risks: extracted.risks,
+        decisions: extracted.decisions,
+        importantDates: extracted.importantDates,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, documentId))
+  } catch (error) {
+    console.error(`Failed to process text document ${documentId}:`, error)
+    await db
+      .update(documents)
+      .set({ status: 'failed', updatedAt: new Date() })
+      .where(eq(documents.id, documentId))
+    throw error
+  }
+}
+
 async function extractDocumentData(name: string, text: string): Promise<ExtractedData> {
   const truncated = text.slice(0, 8000)
 

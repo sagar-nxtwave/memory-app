@@ -19,7 +19,7 @@ interface TimelineEvent { id: string; title: string; subtitle: string; decisions
 interface Space { id: string; name: string; description: string | null; lastVisit: string | null }
 type View = 'chat' | 'documents' | 'timeline'
 
-const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋' }
+const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️' }
 const STATUS_COLOR: Record<string, string> = {
   ready: 'text-emerald-500',
   processing: 'text-amber-500',
@@ -58,6 +58,10 @@ export default function SpacePage() {
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [docInputMode, setDocInputMode] = useState<'upload' | 'text'>('upload')
+  const [pasteTitle, setPasteTitle] = useState('')
+  const [pasteContent, setPasteContent] = useState('')
+  const [pasting, setPasting] = useState(false)
   const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null)
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
@@ -205,6 +209,21 @@ export default function SpacePage() {
     setUploading(false)
   }, [spaceId, fetchDocs])
 
+  async function pasteText() {
+    if (!pasteTitle.trim() || !pasteContent.trim()) return
+    setPasting(true)
+    await fetch('/api/documents/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: pasteTitle.trim(), content: pasteContent.trim(), spaceId }),
+    })
+    setPasteTitle('')
+    setPasteContent('')
+    setDocInputMode('upload')
+    await fetchDocs()
+    setPasting(false)
+  }
+
   async function deleteDocument(docId: string) {
     setDeletingDocId(docId)
     await fetch(`/api/documents/${docId}`, { method: 'DELETE' })
@@ -303,36 +322,83 @@ export default function SpacePage() {
                 </motion.button>
               </div>
 
-              <motion.div
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-5 ${
-                  dragOver
-                    ? 'border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-800/50 scale-[1.01]'
-                    : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-900/50'
-                }`}
-              >
-                <AnimatePresence mode="wait">
-                  {uploading ? (
-                    <motion.div key="uploading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }} className="text-2xl inline-block mb-2">⏳</motion.div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Uploading…</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">AI will process your document</p>
-                    </motion.div>
-                  ) : (
-                    <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      <div className="text-3xl mb-3">📎</div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Drop a file or click to upload</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 50MB</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
+              {/* Tab toggle */}
+              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl mb-4">
+                {(['upload', 'text'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setDocInputMode(mode)}
+                    className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
+                      docInputMode === mode
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    {mode === 'upload' ? 'Upload file' : 'Paste text'}
+                  </button>
+                ))}
+              </div>
 
-              <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+              <AnimatePresence mode="wait">
+                {docInputMode === 'upload' ? (
+                  <motion.div key="upload-area" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                    <motion.div
+                      onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                      onDragLeave={() => setDragOver(false)}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-5 ${
+                        dragOver
+                          ? 'border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-800/50 scale-[1.01]'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-900/50'
+                      }`}
+                    >
+                      <AnimatePresence mode="wait">
+                        {uploading ? (
+                          <motion.div key="uploading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }} className="text-2xl inline-block mb-2">⏳</motion.div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Uploading…</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">AI will process your document</p>
+                          </motion.div>
+                        ) : (
+                          <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            <div className="text-3xl mb-3">📎</div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Drop a file or click to upload</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 50MB</p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                    <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+                  </motion.div>
+                ) : (
+                  <motion.div key="paste-area" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="mb-5 space-y-3">
+                    <input
+                      type="text"
+                      value={pasteTitle}
+                      onChange={(e) => setPasteTitle(e.target.value)}
+                      placeholder="Title — e.g. Meeting minutes, 25 Jun"
+                      className="w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                    />
+                    <textarea
+                      value={pasteContent}
+                      onChange={(e) => setPasteContent(e.target.value)}
+                      placeholder="Paste meeting minutes, notes, decisions, ideas… Memory will extract insights automatically."
+                      rows={8}
+                      className="w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={pasteText}
+                      disabled={pasting || !pasteTitle.trim() || !pasteContent.trim()}
+                      className="w-full py-3 text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl hover:bg-gray-700 dark:hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                    >
+                      {pasting ? 'Adding to Memory…' : 'Add to Memory'}
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {docs.length === 0 ? (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-500 dark:text-gray-400 text-center py-10">
