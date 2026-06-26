@@ -133,6 +133,17 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
+// Global chat messages (cross-space — no spaceId)
+export const globalMessages = pgTable('global_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  role: messageRoleEnum('role').notNull(),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // Space visits (powers "Catch Me Up")
 export const spaceVisits = pgTable('space_visits', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -151,6 +162,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   spaceMembers: many(spaceMembers),
   documents: many(documents),
   messages: many(messages),
+  globalMessages: many(globalMessages),
   spaceVisits: many(spaceVisits),
 }))
 

@@ -5,8 +5,8 @@ export const maxDuration = 60
 import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
-import { messages, spaceMembers, documentChunks, documents } from '@/lib/db/schema'
-import { generateEmbedding, chat } from '@/lib/ai/provider'
+import { messages, spaceMembers } from '@/lib/db/schema'
+import { generateEmbedding, chatStream } from '@/lib/ai/provider'
 import { chatPrompt } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 
@@ -45,18 +45,16 @@ export async function POST(req: NextRequest) {
 
   if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  // Save user message
   const [userMsg] = await db
     .insert(messages)
     .values({ spaceId, userId: session.user.id, role: 'user', content: content.trim() })
     .returning()
 
-  // RAG: embed query → find similar chunks (fall back gracefully if embedding fails)
   let queryEmbedding: number[] = []
   try {
     queryEmbedding = await generateEmbedding(content)
   } catch (err) {
-    console.error('[chat] Embedding failed, proceeding without RAG:', err)
+    console.error('[chat] Embedding failed:', err)
   }
 
   const embeddingStr = `[${queryEmbedding.join(',')}]`
@@ -72,12 +70,10 @@ export async function POST(req: NextRequest) {
     LIMIT 6
   `)
 
-  // Build context from chunks
   const context = (relevantChunks as unknown as { content: string; document_name: string }[])
     .map((c) => `[From: ${c.document_name}]\n${c.content}`)
     .join('\n\n---\n\n')
 
-  // Get recent conversation history (both user + assistant turns)
   const recentHistory = await db
     .select({ role: messages.role, content: messages.content })
     .from(messages)
@@ -89,30 +85,54 @@ export async function POST(req: NextRequest) {
 
 ${context ? `Context from project documents:\n\n${truncateToTokenLimit(context)}` : 'No documents have been uploaded to this space yet.'}`
 
-  // Reverse to chronological order, exclude the user message just saved (last item after reverse)
   const history = recentHistory
     .reverse()
     .slice(0, -1)
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-  let responseText: string
-  try {
-    responseText = await chat(systemPrompt, sanitizeForPrompt(content), history)
-  } catch (err) {
-    console.error('[chat] AI call failed:', err)
-    // Save a fallback assistant message so the user message isn't orphaned
-    const [assistantMsg] = await db
-      .insert(messages)
-      .values({ spaceId, userId: session.user.id, role: 'assistant', content: 'I encountered an error processing your request. Please try again.' })
-      .returning()
-    return NextResponse.json({ userMessage: userMsg, assistantMessage: assistantMsg })
-  }
+  const encoder = new TextEncoder()
+  const userId = session.user.id
 
-  // Save assistant message
-  const [assistantMsg] = await db
-    .insert(messages)
-    .values({ spaceId, userId: session.user.id, role: 'assistant', content: responseText })
-    .returning()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
 
-  return NextResponse.json({ userMessage: userMsg, assistantMessage: assistantMsg })
+      try {
+        send({ type: 'start', userMessageId: userMsg.id })
+
+        let fullContent = ''
+        for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
+          fullContent += chunk
+          send({ type: 'delta', content: chunk })
+        }
+
+        const [assistantMsg] = await db
+          .insert(messages)
+          .values({ spaceId, userId, role: 'assistant', content: fullContent || 'No response generated.' })
+          .returning()
+
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id })
+      } catch (err) {
+        console.error('[chat] Stream error:', err)
+        try {
+          const [assistantMsg] = await db
+            .insert(messages)
+            .values({ spaceId, userId, role: 'assistant', content: 'I encountered an error. Please try again.' })
+            .returning()
+          send({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
+        } catch {}
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 }

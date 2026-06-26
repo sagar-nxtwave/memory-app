@@ -41,3 +41,22 @@ export async function chat(
   })
   return response.choices?.[0]?.message?.content as string ?? ''
 }
+
+export async function* chatStream(
+  systemPrompt: string,
+  userMessage: string,
+  history: { role: 'user' | 'assistant'; content: string }[] = []
+): AsyncGenerator<string> {
+  const stream = await mistral.chat.stream({
+    model: CHAT_MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...history,
+      { role: 'user', content: userMessage },
+    ],
+  })
+  for await (const event of stream) {
+    const delta = event.data?.choices?.[0]?.delta?.content
+    if (typeof delta === 'string' && delta) yield delta
+  }
+}

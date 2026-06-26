@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -20,6 +20,15 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+
+  // Draggable sidebar width
+  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const dragState = useRef({ dragging: false, startX: 0, startWidth: 0 })
+
+  useEffect(() => {
+    const saved = parseInt(localStorage.getItem('sidebar-width') ?? '240', 10)
+    if (!isNaN(saved)) setSidebarWidth(Math.min(320, Math.max(160, saved)))
+  }, [])
 
   const loadSpaces = useCallback(() => {
     fetch('/api/spaces')
@@ -81,6 +90,24 @@ export function Sidebar() {
           Memory
         </button>
         <ThemeToggle />
+      </div>
+
+      {/* All Projects */}
+      <div className="px-3 mb-1 shrink-0">
+        <button
+          onClick={() => router.push('/spaces/global')}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
+            pathname === '/spaces/global'
+              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          All Projects
+        </button>
       </div>
 
       {/* New Space */}
@@ -240,14 +267,39 @@ export function Sidebar() {
 
   return (
     <>
-      {/* ── Desktop sidebar ── */}
+      {/* ── Desktop sidebar (draggable width) ── */}
       <motion.aside
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28 }}
-        className="hidden md:flex w-60 shrink-0 flex-col border-r border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111111] h-full"
+        className="hidden md:flex shrink-0 flex-col border-r border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111111] h-full relative"
+        style={{ width: sidebarWidth }}
       >
         {sidebarContent}
+
+        {/* Drag handle */}
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault()
+            dragState.current = { dragging: true, startX: e.clientX, startWidth: sidebarWidth }
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+          onPointerMove={(e) => {
+            if (!dragState.current.dragging) return
+            const delta = e.clientX - dragState.current.startX
+            const next = Math.min(320, Math.max(160, dragState.current.startWidth + delta))
+            dragState.current.startWidth = next // keep ref in sync for live save
+            setSidebarWidth(next)
+          }}
+          onPointerUp={() => {
+            dragState.current.dragging = false
+            localStorage.setItem('sidebar-width', String(dragState.current.startWidth))
+          }}
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize group"
+          title="Drag to resize"
+        >
+          <div className="absolute right-0 top-0 bottom-0 w-px bg-transparent group-hover:bg-gray-300 dark:group-hover:bg-gray-600 transition-colors" />
+        </div>
       </motion.aside>
 
       {/* ── Mobile: hamburger button ── */}

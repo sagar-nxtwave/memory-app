@@ -55,6 +55,15 @@ If the answer is not in the provided context, clearly state that.
 Keep answers concise and executive-focused.`
 }
 
+export function globalChatPrompt(): string {
+  return `${SYSTEM_BASE}
+
+You are answering questions that span multiple business projects.
+The context provided includes documents from different projects — each labeled with [ProjectName › DocumentName].
+Always cite which project your information comes from.
+Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.`
+}
+
 export function timelinePrompt(spaceName: string): string {
   return `${SYSTEM_BASE}
 
