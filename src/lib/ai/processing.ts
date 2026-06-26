@@ -11,16 +11,16 @@ import type { DocumentType } from '@/types'
 function toUserFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   if (msg.includes('No text could be extracted') || msg.includes('no extractable text'))
-    return 'No text could be extracted. This may be a scanned PDF or image-based document. Try a text-based PDF.'
+    return 'Scanned or image-based PDF — no extractable text'
   if (msg.includes('password') || msg.includes('encrypted'))
-    return 'This document appears to be password protected. Remove the password and re-upload.'
+    return 'Password protected — remove password and re-upload'
   if (msg.includes('token') || msg.includes('rate') || msg.includes('quota'))
-    return 'AI processing limit reached. Please try again in a few minutes.'
+    return 'AI quota reached — try again in a few minutes'
   if (msg.includes('timeout') || msg.includes('ETIMEDOUT'))
-    return 'Processing timed out. Try a smaller document or split it into parts.'
+    return 'Processing timed out — try splitting the document'
   if (msg.includes('corrupt') || msg.includes('invalid') || msg.includes('parse'))
-    return 'The file appears to be corrupted or in an unsupported format.'
-  return 'Processing failed. Please delete and re-upload the document.'
+    return 'File corrupted or unsupported format'
+  return 'Processing failed — delete and re-upload'
 }
 
 interface ExtractedData {
