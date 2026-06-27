@@ -50,8 +50,12 @@ export async function PATCH(
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { spaceId } = await params
-  const { name } = await req.json()
-  if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+  const body = await req.json()
+  const { name, status } = body
+
+  const validStatuses = ['on_track', 'at_risk', 'on_hold', 'completed']
+  if (status && !validStatuses.includes(status)) return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+  if (!name?.trim() && !status) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 
   const [member] = await db
     .select()
@@ -61,9 +65,13 @@ export async function PATCH(
 
   if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
+  const patch: Record<string, unknown> = { updatedAt: new Date() }
+  if (name?.trim()) patch.name = name.trim()
+  if (status) patch.status = status
+
   const [updated] = await db
     .update(spaces)
-    .set({ name: name.trim(), updatedAt: new Date() })
+    .set(patch)
     .where(eq(spaces.id, spaceId))
     .returning()
 

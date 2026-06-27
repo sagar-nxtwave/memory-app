@@ -146,7 +146,7 @@ export default async function RootPage() {
               {
                 step: '02',
                 title: 'Upload documents',
-                desc: 'Drop in PDFs, Word docs, Excel files, meeting minutes, or paste text directly. Memory processes everything automatically.',
+                desc: 'Drop in PDFs, Word docs, Excel files, or add minutes of meeting directly. Memory processes everything automatically.',
               },
               {
                 step: '03',

@@ -4,6 +4,12 @@ Maximum 3 sentences for any explanation. Never repeat yourself.
 Only state facts from the provided context. If something is not in the context, say "Not in documents."
 Never fabricate. Never add caveats or disclaimers.`
 
+export function styleInstruction(style: 'short' | 'detailed' = 'short'): string {
+  return style === 'detailed'
+    ? 'RESPONSE STYLE: Detailed — be thorough, include context, reasoning, and all relevant information.'
+    : 'RESPONSE STYLE: Short — maximum 80 words total, 3 bullet points per section maximum. Be ruthlessly concise.'
+}
+
 export function documentProcessingPrompt(documentName: string): string {
   return `You are processing a business document called "${documentName}".
 Extract the following in JSON format:

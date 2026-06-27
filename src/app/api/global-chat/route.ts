@@ -5,7 +5,7 @@ import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { spaceMembers, spaces, globalMessages } from '@/lib/db/schema'
 import { generateEmbedding, chatStream } from '@/lib/ai/provider'
-import { globalChatPrompt } from '@/lib/ai/prompts'
+import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 
 export const maxDuration = 60
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { content, spaceIds: requestedIds } = await req.json()
+  const { content, spaceIds: requestedIds, responseStyle } = await req.json()
   if (!content?.trim()) return NextResponse.json({ error: 'content required' }, { status: 400 })
 
   // Always fetch from DB — never trust client-supplied IDs without verification
@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
   const systemPrompt = `${globalChatPrompt()}
+${styleInstruction(responseStyle)}
 
 Searching across: ${spaceNames}
 

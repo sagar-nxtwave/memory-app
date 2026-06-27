@@ -6,13 +6,13 @@ import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { documents, spaceMembers, spaces, spaceVisits, messages } from '@/lib/db/schema'
 import { chatStream } from '@/lib/ai/provider'
-import { catchMeUpPrompt } from '@/lib/ai/prompts'
+import { catchMeUpPrompt, styleInstruction } from '@/lib/ai/prompts'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId } = await req.json()
+  const { spaceId, responseStyle } = await req.json()
   if (!spaceId) return NextResponse.json({ error: 'spaceId required' }, { status: 400 })
 
   const [member] = await db
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
             )
             .join('\n\n---\n\n')
 
-          for await (const chunk of chatStream(catchMeUpPrompt(space?.name ?? 'this project', sinceLabel), context)) {
+          for await (const chunk of chatStream(`${catchMeUpPrompt(space?.name ?? 'this project', sinceLabel)}\n${styleInstruction(responseStyle)}`, context)) {
             fullContent += chunk
             send({ type: 'delta', content: chunk })
           }

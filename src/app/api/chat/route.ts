@@ -7,7 +7,7 @@ import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { messages, spaceMembers } from '@/lib/db/schema'
 import { generateEmbedding, chatStream } from '@/lib/ai/provider'
-import { chatPrompt } from '@/lib/ai/prompts'
+import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 
 export async function GET(req: NextRequest) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName } = await req.json()
+  const { spaceId, content, spaceName, responseStyle } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
     .limit(10)
 
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
+${styleInstruction(responseStyle)}
 
 ${context ? `Context from project documents:\n\n${truncateToTokenLimit(context)}` : 'No documents have been uploaded to this space yet.'}`
 

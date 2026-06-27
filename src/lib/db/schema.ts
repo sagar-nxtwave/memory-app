@@ -45,6 +45,13 @@ export const spaceMemberRoleEnum = pgEnum('space_member_role', [
   'member',
 ])
 
+export const spaceStatusEnum = pgEnum('space_status', [
+  'on_track',
+  'at_risk',
+  'on_hold',
+  'completed',
+])
+
 // Users
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -60,6 +67,7 @@ export const spaces = pgTable('spaces', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   description: text('description'),
+  status: spaceStatusEnum('status').notNull().default('on_track'),
   createdBy: uuid('created_by')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),

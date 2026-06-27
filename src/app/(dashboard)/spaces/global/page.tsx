@@ -31,6 +31,7 @@ export default function GlobalChatPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [spacesLoaded, setSpacesLoaded] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [responseStyle, setResponseStyle] = useState<'short' | 'detailed'>('short')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -115,6 +116,7 @@ export default function GlobalChatPage() {
         body: JSON.stringify({
           content,
           spaceIds: Array.from(selectedIds),
+          responseStyle,
         }),
       })
 
@@ -237,7 +239,7 @@ export default function GlobalChatPage() {
                           {/* Checkbox */}
                           <div className={`w-4 h-4 rounded-md flex items-center justify-center border-2 transition-all shrink-0 ${
                             checked
-                              ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                              ? 'bg-gray-900 dark:bg-gray-300 border-gray-900 dark:border-gray-300'
                               : 'border-gray-300 dark:border-gray-600'
                           }`}>
                             {checked && (
@@ -331,11 +333,12 @@ export default function GlobalChatPage() {
               disabled={loading}
               className="flex-1 min-w-0 px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50"
             />
+            <StyleToggle value={responseStyle} onChange={setResponseStyle} />
             <motion.button
               whileTap={{ scale: 0.92 }}
               type="submit"
               disabled={loading || !input.trim()}
-              className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-100 disabled:opacity-30 transition-colors"
+              className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
             >
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
@@ -349,6 +352,27 @@ export default function GlobalChatPage() {
   )
 }
 
+function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChange: (v: 'short' | 'detailed') => void }) {
+  return (
+    <div className="shrink-0 flex items-center h-12 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 gap-0.5">
+      {(['short', 'detailed'] as const).map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          className={`relative px-2.5 py-1.5 text-[11px] font-medium rounded-xl transition-colors capitalize ${
+            value === s
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+          }`}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function GlobalChatMessage({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
@@ -357,7 +381,7 @@ function GlobalChatMessage({ message, isStreaming }: { message: Message; isStrea
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
         isUser
-          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-br-sm'
+          ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
           : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
         {showDots ? (

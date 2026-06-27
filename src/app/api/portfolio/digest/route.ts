@@ -18,14 +18,16 @@ export async function GET() {
         id: spaces.id,
         name: spaces.name,
         description: spaces.description,
+        status: spaces.status,
         documentCount: sql<number>`cast(count(${documents.id}) filter (where ${documents.status} = 'ready') as int)`,
         lastActivityAt: sql<string | null>`max(${documents.createdAt})`,
+        latestDocumentName: sql<string | null>`(select name from documents where space_id = ${spaces.id} order by created_at desc limit 1)`,
       })
       .from(spaces)
       .innerJoin(spaceMembers, eq(spaceMembers.spaceId, spaces.id))
       .leftJoin(documents, eq(documents.spaceId, spaces.id))
       .where(eq(spaceMembers.userId, userId))
-      .groupBy(spaces.id, spaces.name, spaces.description)
+      .groupBy(spaces.id, spaces.name, spaces.description, spaces.status)
       .orderBy(sql`max(${documents.createdAt}) desc nulls last`),
 
     // All documents across all spaces, sorted by most recent

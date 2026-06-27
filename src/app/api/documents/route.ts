@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { documents, spaceMembers } from '@/lib/db/schema'
-import { detectFileType, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from '@/lib/parsers'
+import { detectFileType, MAX_FILE_SIZE } from '@/lib/parsers'
 import { processDocumentFromBuffer } from '@/lib/ai/processing'
 import { uploadFile, generateStorageKey } from '@/lib/storage/minio'
 
@@ -49,17 +49,22 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   const spaceId = formData.get('spaceId') as string | null
+  const customName = (formData.get('customName') as string | null)?.trim() || null
 
   if (!file || !spaceId) {
     return NextResponse.json({ error: 'File and spaceId are required' }, { status: 400 })
   }
 
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: 'Unsupported file type. Use PDF, Word, Excel, or CSV.' }, { status: 400 })
-  }
-
   if (file.size > MAX_FILE_SIZE) {
     return NextResponse.json({ error: 'File too large. Maximum 50MB.' }, { status: 400 })
+  }
+
+  // Validate by extension — browser MIME types vary (Safari sends application/octet-stream for xlsx, etc.)
+  let fileType
+  try {
+    fileType = detectFileType(file.name)
+  } catch {
+    return NextResponse.json({ error: 'Unsupported file type. Use PDF, Word, Excel, or CSV.' }, { status: 400 })
   }
 
   const [member] = await db
@@ -70,13 +75,6 @@ export async function POST(req: NextRequest) {
 
   if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  let fileType
-  try {
-    fileType = detectFileType(file.name)
-  } catch {
-    return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 })
-  }
-
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
@@ -85,7 +83,7 @@ export async function POST(req: NextRequest) {
     .insert(documents)
     .values({
       spaceId,
-      name: file.name,
+      name: customName ?? file.name,
       fileType,
       fileSize: file.size,
       storageKey: 'pending',

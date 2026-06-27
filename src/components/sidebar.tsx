@@ -22,6 +22,7 @@ export function Sidebar() {
   const [editName, setEditName] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
   // Draggable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState(240)
@@ -105,7 +106,25 @@ export function Sidebar() {
         <ThemeToggle />
       </div>
 
-      {/* All Projects */}
+      {/* Portfolio (Home) */}
+      <div className="px-3 mb-1 shrink-0">
+        <button
+          onClick={() => router.push('/spaces')}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
+            pathname === '/spaces'
+              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Portfolio
+        </button>
+      </div>
+
+      {/* Ask All Spaces */}
       <div className="px-3 mb-1 shrink-0">
         <button
           onClick={() => router.push('/spaces/global')}
@@ -119,7 +138,7 @@ export function Sidebar() {
             <circle cx="12" cy="12" r="10" />
             <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
           </svg>
-          All Projects
+          Ask all spaces
         </button>
       </div>
 
@@ -161,7 +180,7 @@ export function Sidebar() {
               <button
                 type="submit"
                 disabled={creating || !newName.trim()}
-                className="flex-1 py-1.5 text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg disabled:opacity-40 transition-opacity"
+                className="flex-1 py-1.5 text-xs font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-lg disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
               >
                 {creating ? '…' : 'Create'}
               </button>
@@ -227,28 +246,56 @@ export function Sidebar() {
                     >
                       <span className="truncate block">{space.name}</span>
                     </button>
-                    <button
-                      onClick={() => { setEditName(space.name); setEditingId(space.id) }}
-                      title="Rename"
-                      className="shrink-0 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(space.id)}
-                      title="Delete"
-                      className="shrink-0 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6M14 11v6" />
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                      </svg>
-                    </button>
+
+                    {/* ⋯ menu */}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === space.id ? null : space.id) }}
+                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+                        </svg>
+                      </button>
+
+                      <AnimatePresence>
+                        {menuOpenId === space.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                              transition={{ duration: 0.1 }}
+                              className="absolute left-full top-0 ml-2 z-20 w-36 bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden py-1"
+                            >
+                              <button
+                                onClick={() => { setEditName(space.name); setEditingId(space.id); setMenuOpenId(null) }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                                Rename
+                              </button>
+                              <button
+                                onClick={() => { setConfirmDeleteId(space.id); setMenuOpenId(null) }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors text-left"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6"/>
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                  <path d="M10 11v6M14 11v6"/>
+                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                </svg>
+                                Delete
+                              </button>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </>
                 )}
               </motion.div>
@@ -358,9 +405,9 @@ export function Sidebar() {
               onClick={(e) => e.stopPropagation()}
               className="relative w-full max-w-sm bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl p-5"
             >
-              <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">Delete project?</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">Delete space?</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-                All documents, chat history, and AI data for{' '}
+                All documents, chat history, and memory for{' '}
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   {spaces.find((s) => s.id === confirmDeleteId)?.name}
                 </span>{' '}

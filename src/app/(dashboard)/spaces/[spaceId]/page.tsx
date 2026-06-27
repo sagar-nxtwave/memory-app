@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -15,11 +15,28 @@ interface DocDetail extends Doc {
   decisions: string[] | null
   importantDates: string[] | null
 }
-interface TimelineEvent { id: string; title: string; subtitle: string; decisions: string[]; date: string; status: string; fileType: string }
-interface Space { id: string; name: string; description: string | null; lastVisit: string | null }
+interface TimelineEvent { id: string; type: 'document' | 'decision' | 'risk' | 'number'; text: string; sourceName: string; sourceFileType: string; date: string; status: string }
+type SpaceStatus = 'on_track' | 'at_risk' | 'on_hold' | 'completed'
+interface Space { id: string; name: string; description: string | null; status: SpaceStatus; lastVisit: string | null }
+
+const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: string }> = {
+  on_track:  { label: 'On Track',  dot: 'bg-emerald-400',              badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
+  at_risk:   { label: 'At Risk',   dot: 'bg-red-400',                  badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
+  on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',                badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
+  completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' },
+}
 type View = 'chat' | 'documents' | 'timeline'
 
+import { parseUtc } from '@/lib/utils/date'
+
 const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️' }
+
+const TIMELINE_EVENT_CONFIG = {
+  document: { label: 'Upload',   icon: '↑', dot: 'bg-gray-200 dark:bg-gray-700',          badge: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' },
+  decision:  { label: 'Decision', icon: '✓', dot: 'bg-blue-500 dark:bg-blue-400',           badge: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
+  risk:      { label: 'Risk',     icon: '!', dot: 'bg-red-400 dark:bg-red-400',             badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
+  number:    { label: 'Figure',   icon: '#', dot: 'bg-emerald-400 dark:bg-emerald-400',     badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
+}
 const STATUS_COLOR: Record<string, string> = {
   ready: 'text-emerald-500',
   processing: 'text-amber-500',
@@ -47,17 +64,23 @@ const cardVariants = {
 
 export default function SpacePage() {
   const { spaceId } = useParams<{ spaceId: string }>()
+  const router = useRouter()
 
   const [space, setSpace] = useState<Space | null>(null)
+  const [statusOpen, setStatusOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [responseStyle, setResponseStyle] = useState<'short' | 'detailed'>('short')
   const [view, setView] = useState<View>('chat')
   const [docs, setDocs] = useState<Doc[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingTitle, setPendingTitle] = useState('')
+  const [pendingDesc, setPendingDesc] = useState('')
   const [docInputMode, setDocInputMode] = useState<'upload' | 'text'>('upload')
   const [pasteTitle, setPasteTitle] = useState('')
   const [pasteContent, setPasteContent] = useState('')
@@ -67,8 +90,10 @@ export default function SpacePage() {
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   useEffect(() => {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
@@ -81,6 +106,17 @@ export default function SpacePage() {
       streamingMessageId ? true : { behavior: 'smooth' }
     )
   }, [messages, view, streamingMessageId])
+
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    function onScroll() {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      setShowScrollBtn(distFromBottom > 120)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Poll for doc status updates while any doc is processing
   useEffect(() => {
@@ -164,7 +200,7 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream('/api/chat', { spaceId, content, spaceName: space?.name }, tempUserId, sid)
+    await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle }, tempUserId, sid)
 
     setStreamingMessageId(null)
     setLoading(false)
@@ -185,7 +221,7 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream(endpoint, { spaceId }, tempUserId, sid)
+    await handleStream(endpoint, { spaceId, responseStyle }, tempUserId, sid)
 
     setStreamingMessageId(null)
     setLoading(false)
@@ -198,11 +234,20 @@ export default function SpacePage() {
     if (Array.isArray(data)) setDocs(data)
   }, [spaceId])
 
-  const uploadFile = useCallback(async (file: File) => {
+  const stagefile = useCallback((file: File) => {
+    setPendingFile(file)
+    setPendingTitle(file.name.replace(/\.[^.]+$/, ''))
+    setPendingDesc('')
+  }, [])
+
+  const uploadFile = useCallback(async (file: File, customTitle: string, customDesc: string) => {
     setUploading(true)
+    setPendingFile(null)
     const fd = new FormData()
     fd.append('file', file)
     fd.append('spaceId', spaceId)
+    if (customTitle.trim()) fd.append('customName', customTitle.trim())
+    if (customDesc.trim()) fd.append('description', customDesc.trim())
     await fetch('/api/documents', { method: 'POST', body: fd })
     await fetchDocs()
     setUploading(false)
@@ -283,13 +328,71 @@ export default function SpacePage() {
         transition={{ duration: 0.25 }}
         className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
       >
-        <div className="flex-1 min-w-0 pl-12 md:pl-0">
-          <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight">
-            {space?.name ?? '…'}
-          </h1>
-          {space?.description && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{space.description}</p>
-          )}
+        <div className="flex-1 min-w-0 pl-12 md:pl-0 flex items-center gap-2">
+          <button
+            onClick={() => router.push('/spaces')}
+            className="shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
+            title="Home"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight">
+                {space?.name ?? '…'}
+              </h1>
+              {/* Status badge — tap to change */}
+              {space && (
+                <div className="relative shrink-0">
+                  <button
+                    onClick={() => setStatusOpen((o) => !o)}
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide transition-opacity hover:opacity-80 ${STATUS_CONFIG[space.status ?? 'on_track'].badge}`}
+                  >
+                    {STATUS_CONFIG[space.status ?? 'on_track'].label}
+                  </button>
+                  <AnimatePresence>
+                    {statusOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                          transition={{ duration: 0.12 }}
+                          className="absolute left-0 top-full mt-1.5 z-20 w-36 bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden py-1"
+                        >
+                          {(Object.entries(STATUS_CONFIG) as [SpaceStatus, typeof STATUS_CONFIG[SpaceStatus]][]).map(([key, cfg]) => (
+                            <button
+                              key={key}
+                              onClick={async () => {
+                                setStatusOpen(false)
+                                setSpace((s) => s ? { ...s, status: key } : s)
+                                await fetch(`/api/spaces/${spaceId}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: key }),
+                                })
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                            >
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                              {cfg.label}
+                            </button>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
+            {space?.description && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{space.description}</p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <NavBtn label="Chat" active={view === 'chat'} onClick={() => setView('chat')} />
@@ -299,7 +402,7 @@ export default function SpacePage() {
       </motion.header>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative">
         <AnimatePresence mode="wait">
 
           {/* CHAT */}
@@ -308,7 +411,7 @@ export default function SpacePage() {
               {isEmpty ? (
                 <EmptyState
                   spaceName={space?.name}
-                  onBriefMe={() => aiAction('Brief me on this project.', '/api/brief')}
+                  onBriefMe={() => aiAction('Brief me on this space.', '/api/brief')}
                   onCatchMeUp={() => aiAction('What changed since my last visit?', '/api/catch-up')}
                   onTimeline={openTimeline}
                   onDocuments={openDocuments}
@@ -331,12 +434,8 @@ export default function SpacePage() {
           {/* DOCUMENTS */}
           {view === 'documents' && (
             <motion.div key="documents" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
-              <div className="flex items-center justify-between mb-5">
+              <div className="mb-5">
                 <h2 className="font-semibold text-gray-900 dark:text-white">Documents</h2>
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => fileInputRef.current?.click()}
-                  className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                  + Upload
-                </motion.button>
               </div>
 
               {/* Tab toggle */}
@@ -351,7 +450,7 @@ export default function SpacePage() {
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                   >
-                    {mode === 'upload' ? 'Upload file' : 'Paste text'}
+                    {mode === 'upload' ? 'Upload file' : 'Minutes of Meeting'}
                   </button>
                 ))}
               </div>
@@ -360,7 +459,7 @@ export default function SpacePage() {
                 {docInputMode === 'upload' ? (
                   <motion.div key="upload-area" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
                     <motion.div
-                      onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
+                      onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) stagefile(f) }}
                       onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                       onDragLeave={() => setDragOver(false)}
                       onClick={() => fileInputRef.current?.click()}
@@ -387,7 +486,52 @@ export default function SpacePage() {
                       </AnimatePresence>
                     </motion.div>
                     <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) stagefile(f); e.target.value = '' }} />
+                    <AnimatePresence>
+                      {pendingFile && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          className="mt-4 space-y-3 p-4 border border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-900"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{FILE_ICONS[pendingFile.name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'}</span>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{pendingFile.name} · {fmt(pendingFile.size)}</p>
+                          </div>
+                          <input
+                            type="text"
+                            value={pendingTitle}
+                            onChange={(e) => setPendingTitle(e.target.value)}
+                            placeholder="Document title"
+                            className="w-full px-3.5 py-2.5 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                          />
+                          <input
+                            type="text"
+                            value={pendingDesc}
+                            onChange={(e) => setPendingDesc(e.target.value)}
+                            placeholder="Short description (optional)"
+                            className="w-full px-3.5 py-2.5 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setPendingFile(null)}
+                              className="flex-1 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <motion.button
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => { const f = pendingFile; if (f) uploadFile(f, pendingTitle, pendingDesc) }}
+                              disabled={!pendingTitle.trim()}
+                              className="flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+                            >
+                              Upload & process
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 ) : (
                   <motion.div key="paste-area" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="mb-5 space-y-3">
@@ -401,7 +545,7 @@ export default function SpacePage() {
                     <textarea
                       value={pasteContent}
                       onChange={(e) => setPasteContent(e.target.value)}
-                      placeholder="Paste meeting minutes, notes, decisions, ideas… Memory will extract insights automatically."
+                      placeholder="Paste minutes of meeting, notes, decisions, ideas… Memory will extract insights automatically."
                       rows={8}
                       className="w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
                     />
@@ -409,7 +553,7 @@ export default function SpacePage() {
                       whileTap={{ scale: 0.97 }}
                       onClick={pasteText}
                       disabled={pasting || !pasteTitle.trim() || !pasteContent.trim()}
-                      className="w-full py-3 text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl hover:bg-gray-700 dark:hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                      className="w-full py-3 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors"
                     >
                       {pasting ? 'Adding to Memory…' : 'Add to Memory'}
                     </motion.button>
@@ -430,7 +574,7 @@ export default function SpacePage() {
                         className={`flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
                           isReady ? 'hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer' : ''
                         }`}
-                        onClick={() => { if (isReady) openDocInsights(doc.id) }}
+                        onClick={() => { if (isReady) setDocSheet(doc) }}
                       >
                         <span className="text-2xl shrink-0 mt-0.5">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                         <div className="flex-1 min-w-0">
@@ -451,17 +595,11 @@ export default function SpacePage() {
                             )}
                             <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
                             <span className="text-xs text-gray-500 dark:text-gray-400">{fmt(doc.fileSize)}</span>
-                            {isReady && (
-                              <>
-                                <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
-                                <span className="text-xs text-gray-400 dark:text-gray-500">Tap for insights</span>
-                              </>
-                            )}
                           </div>
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
                           <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
                           <button
                             onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
@@ -490,42 +628,69 @@ export default function SpacePage() {
                   No events yet. Upload documents to start your timeline.
                 </motion.p>
               ) : (
-                <div className="relative pl-5">
-                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-100 dark:bg-gray-800" />
-                  <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.07 } } }} className="space-y-6">
-                    {timeline.map((ev, i) => (
-                      <motion.div key={ev.id} custom={i} variants={cardVariants} className="relative">
-                        <motion.div
-                          initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.07 + 0.1, type: 'spring' }}
-                          className={`absolute -left-5 top-1 w-3 h-3 rounded-full border-2 z-10 ${
-                            ev.status === 'ready' ? 'bg-emerald-400 border-emerald-400' :
-                            ev.status === 'failed' ? 'bg-red-400 border-red-400' :
-                            'bg-gray-200 dark:bg-gray-700 border-gray-200 dark:border-gray-700'
-                          }`}
-                        />
-                        <div className="flex justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{FILE_ICONS[ev.fileType] ?? '📄'}</span>
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{ev.title}</p>
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{ev.subtitle}</p>
-                            {ev.decisions.slice(0, 3).map((d, j) => (
-                              <p key={j} className="text-xs text-gray-500 dark:text-gray-400 flex gap-1.5 mt-1">
-                                <span className="text-gray-400 dark:text-gray-600 shrink-0">→</span>
-                                <span>{d}</span>
+                <div className="relative pl-6">
+                  <div className="absolute left-[9px] top-2 bottom-2 w-px bg-gray-100 dark:bg-gray-800/80" />
+                  <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="space-y-4">
+                    {timeline.map((ev, i) => {
+                      const cfg = TIMELINE_EVENT_CONFIG[ev.type]
+                      return (
+                        <motion.div key={ev.id} custom={i} variants={cardVariants} className="relative">
+                          {/* Dot */}
+                          <motion.div
+                            initial={{ scale: 0 }} animate={{ scale: 1 }}
+                            transition={{ delay: i * 0.04 + 0.08, type: 'spring', stiffness: 500, damping: 28 }}
+                            className={`absolute -left-6 top-2.5 w-[18px] h-[18px] rounded-full flex items-center justify-center z-10 ${cfg.dot}`}
+                          >
+                            <span className="text-[9px] leading-none">{cfg.icon}</span>
+                          </motion.div>
+
+                          {/* Card */}
+                          <div className="flex justify-between gap-3 pl-1">
+                            <div className="flex-1 min-w-0">
+                              {/* Type badge + source */}
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${cfg.badge}`}>
+                                  {cfg.label}
+                                </span>
+                                <span className="text-[10px] text-gray-400 dark:text-gray-600 truncate">{ev.sourceName}</span>
+                              </div>
+                              {/* Main text */}
+                              <p className={`text-sm leading-snug ${ev.type === 'document' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-800 dark:text-gray-200'}`}>
+                                {ev.text}
                               </p>
-                            ))}
+                            </div>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-600 shrink-0 pt-0.5 whitespace-nowrap">
+                              {parseUtc(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
                           </div>
-                          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 pt-0.5 whitespace-nowrap">
-                            {new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </span>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      )
+                    })}
                   </motion.div>
                 </div>
               )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Scroll to bottom — sticks to bottom of scroll area, above the input bar */}
+        <AnimatePresence>
+          {view === 'chat' && showScrollBtn && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.15 }}
+              className="sticky bottom-4 flex justify-center pointer-events-none"
+            >
+              <button
+                onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-gray-900 dark:bg-gray-700 text-white shadow-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12l7 7 7-7" />
+                </svg>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -543,7 +708,7 @@ export default function SpacePage() {
             {!isEmpty && (
               <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-hide pb-0.5">
                 {[
-                  { label: '✦ Brief Me', action: () => aiAction('Brief me on this project.', '/api/brief') },
+                  { label: '✦ Brief Me', action: () => aiAction('Brief me on this space.', '/api/brief') },
                   { label: '↻ Catch Me Up', action: () => aiAction('What changed since my last visit?', '/api/catch-up') },
                   { label: '◷ Timeline', action: openTimeline },
                   { label: '⊞ Documents', action: openDocuments },
@@ -566,10 +731,11 @@ export default function SpacePage() {
                 disabled={loading}
                 className="flex-1 min-w-0 px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50"
               />
+              <StyleToggle value={responseStyle} onChange={setResponseStyle} />
               <motion.button
                 whileTap={{ scale: 0.92 }}
                 type="submit" disabled={loading || !input.trim()}
-                className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
               >
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
@@ -602,6 +768,11 @@ export default function SpacePage() {
             onDelete={deleteDocument}
             onRename={renameDoc}
             onRetry={retryDoc}
+            onAskAboutDoc={(docName) => {
+              setDocSheet(null)
+              setView('chat')
+              sendMessage(`Tell me about this document: ${docName}`)
+            }}
           />
         )}
       </AnimatePresence>
@@ -611,13 +782,34 @@ export default function SpacePage() {
 
 // ── Sub-components ──
 
+function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChange: (v: 'short' | 'detailed') => void }) {
+  return (
+    <div className="shrink-0 flex items-center h-12 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 gap-0.5">
+      {(['short', 'detailed'] as const).map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          className={`relative px-2.5 py-1.5 text-[11px] font-medium rounded-xl transition-colors capitalize ${
+            value === s
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+          }`}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments }: {
   spaceName?: string; onBriefMe: () => void; onCatchMeUp: () => void; onTimeline: () => void; onDocuments: () => void
 }) {
   const actions = [
     { emoji: '✦', label: 'Brief Me', sub: '2-minute executive summary', onClick: onBriefMe },
     { emoji: '↻', label: 'Catch Me Up', sub: 'Changes since your last visit', onClick: onCatchMeUp },
-    { emoji: '◷', label: 'Timeline', sub: 'Full project history', onClick: onTimeline },
+    { emoji: '◷', label: 'Timeline', sub: 'Full space history', onClick: onTimeline },
     { emoji: '⊞', label: 'Documents', sub: 'Upload & manage files', onClick: onDocuments },
   ]
 
@@ -660,7 +852,7 @@ function ChatMessage({ message, isStreaming }: { message: Message; isStreaming?:
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
         isUser
-          ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-br-sm'
+          ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
           : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
         {showDots ? (
@@ -696,7 +888,7 @@ function NavBtn({ label, active, onClick }: { label: string; active: boolean; on
   return (
     <motion.button whileTap={{ scale: 0.94 }} onClick={onClick}
       className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all min-h-[36px] ${
-        active ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+        active ? 'bg-gray-900 dark:bg-gray-700 text-white shadow-sm'
                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}>
       {label}
@@ -769,7 +961,7 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug break-words">{doc.name}</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {fmt(doc.fileSize)} · {new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  {fmt(doc.fileSize)} · {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               </div>
               <button
@@ -784,9 +976,19 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
 
             {/* Modal body */}
             <div className="p-5 space-y-5">
-              {doc.summary && (
-                <InsightSection label="Summary" icon="📋" items={[doc.summary]} isSummary />
-              )}
+              {doc.summary && (() => {
+                const firstSentMatch = doc.summary.match(/^[^.!?]+[.!?]+\s*/)
+                const short = firstSentMatch && firstSentMatch[0].length < doc.summary.length * 0.75
+                  ? firstSentMatch[0].trim()
+                  : doc.summary
+                const detail = short !== doc.summary ? doc.summary.slice(short.length).trim() : ''
+                return (
+                  <>
+                    <InsightSection label="Short Summary" icon="💡" items={[short]} isSummary />
+                    {detail && <InsightSection label="Detail Summary" icon="📋" items={[detail]} isSummary />}
+                  </>
+                )
+              })()}
               {(doc.keyNumbers?.length ?? 0) > 0 && (
                 <InsightSection label="Key Numbers" icon="🔢" items={doc.keyNumbers!} />
               )}
@@ -841,13 +1043,14 @@ function InsightSection({
   )
 }
 
-function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRetry }: {
+function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRetry, onAskAboutDoc }: {
   doc: Doc
   onClose: () => void
   onViewInsights: (id: string) => void
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, name: string) => Promise<void>
   onRetry: (id: string) => Promise<void>
+  onAskAboutDoc: (docName: string) => void
 }) {
   const [mode, setMode] = useState<'actions' | 'rename' | 'delete'>('actions')
   const [newName, setNewName] = useState(doc.name)
@@ -934,7 +1137,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 420, damping: 36 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg bg-white dark:bg-[#1c1c1e] rounded-t-3xl shadow-2xl"
+        className="relative w-full max-w-lg bg-white dark:bg-[#1c1c1e] rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
       >
         {/* Drag handle */}
@@ -953,13 +1156,19 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                     <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
                     {' · '}{fmt(doc.fileSize)}
-                    {' · '}{new Date(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {' · '}{parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </p>
                   {doc.status === 'failed' && doc.failureReason && (
                     <p className="text-xs text-red-400 mt-1.5 leading-relaxed">{doc.failureReason}</p>
                   )}
                 </div>
               </div>
+              {doc.status === 'ready' && doc.summary && (
+                <div className="mt-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600 mb-1">Short Summary</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{doc.summary}</p>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -985,11 +1194,18 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                 </>
               )}
               {isReady && (
-                <SheetRow
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
-                  label="Insights & details"
-                  onClick={() => onViewInsights(doc.id)}
-                />
+                <>
+                  <SheetRow
+                    icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>}
+                    label="Ask about this document"
+                    onClick={() => onAskAboutDoc(doc.name)}
+                  />
+                  <SheetRow
+                    icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+                    label="Summary & insights"
+                    onClick={() => onViewInsights(doc.id)}
+                  />
+                </>
               )}
               <SheetRow
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
@@ -1040,7 +1256,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
               <button
                 onClick={handleRename}
                 disabled={saving || !newName.trim()}
-                className="flex-1 py-3 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors"
+                className="flex-1 py-3 text-sm font-medium text-white bg-gray-900 dark:bg-gray-700 rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
