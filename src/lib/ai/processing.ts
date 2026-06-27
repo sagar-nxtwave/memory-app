@@ -4,7 +4,7 @@ import { documents, documentChunks } from '@/lib/db/schema'
 import { extractText } from '@/lib/parsers'
 import { chunkText } from '@/lib/utils/chunking'
 import { sanitizeForPrompt } from '@/lib/utils/sanitize'
-import { mistral, CHAT_MODEL, EMBED_MODEL } from './provider'
+import { mistral, EXTRACT_MODEL, EMBED_MODEL } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
 
@@ -183,7 +183,7 @@ async function extractDocumentData(name: string, text: string): Promise<Extracte
   const truncated = text.slice(0, 8000)
 
   const response = await mistral.chat.complete({
-    model: CHAT_MODEL,
+    model: EXTRACT_MODEL,
     messages: [
       { role: 'system', content: documentProcessingPrompt(name) },
       { role: 'user', content: truncated },

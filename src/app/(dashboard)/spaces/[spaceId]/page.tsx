@@ -655,7 +655,6 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
 function ChatMessage({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
-  const showStreamingText = isStreaming && message.content !== ''
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -675,20 +674,17 @@ function ChatMessage({ message, isStreaming }: { message: Message; isStreaming?:
           message.content.split('\n').map((line, i, arr) => (
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))
-        ) : showStreamingText ? (
-          // Plain text while streaming — prevents markdown re-render flicker on every chunk
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-              className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
-            />
-          </p>
         ) : (
-          // Full markdown after streaming completes
+          // Always render markdown — no plain-text intermediate state that causes a flash on completion
           <div className="markdown-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            {isStreaming && (
+              <motion.span
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
+              />
+            )}
           </div>
         )}
       </div>
@@ -858,6 +854,8 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [viewing, setViewing] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
 
   async function handleRetry() {
     setRetrying(true)
@@ -877,6 +875,45 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
     setDeleting(true)
     await onDelete(doc.id)
     setDeleting(false)
+  }
+
+  async function handleViewDocument() {
+    setViewing(true)
+    setViewError(null)
+    // Open the tab synchronously so popup blockers don't interfere,
+    // then navigate it to the blob URL once the file is fetched.
+    const win = window.open('about:blank', '_blank')
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/file`)
+      if (!res.ok) {
+        win?.close()
+        let msg = `Error ${res.status}`
+        try { const body = await res.json(); msg = body.error ?? msg } catch {}
+        throw new Error(msg)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      if (win) {
+        win.location.href = url
+        setTimeout(() => URL.revokeObjectURL(url), 30000)
+        onClose()
+      } else {
+        // Popup was blocked — fall back to a download link
+        const a = document.createElement('a')
+        a.href = url
+        a.download = doc.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 30000)
+        onClose()
+      }
+    } catch (err) {
+      win?.close()
+      setViewError(err instanceof Error ? err.message : 'Failed to load document')
+    } finally {
+      setViewing(false)
+    }
   }
 
   const isReady = doc.status === 'ready'
@@ -935,11 +972,17 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                 />
               )}
               {canViewFile && (
-                <SheetRow
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
-                  label="View document"
-                  onClick={() => { window.open(`/api/documents/${doc.id}/file`, '_blank'); onClose() }}
-                />
+                <>
+                  <SheetRow
+                    icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+                    label={viewing ? 'Loading…' : 'View document'}
+                    onClick={viewing ? undefined : handleViewDocument}
+                    disabled={viewing}
+                  />
+                  {viewError && (
+                    <p className="text-xs text-red-400 px-4 pb-1 leading-relaxed">{viewError}</p>
+                  )}
+                </>
               )}
               {isReady && (
                 <SheetRow
@@ -1037,14 +1080,15 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
   )
 }
 
-function SheetRow({ icon, label, onClick, destructive }: {
-  icon: React.ReactNode; label: string; onClick: () => void; destructive?: boolean
+function SheetRow({ icon, label, onClick, destructive, disabled }: {
+  icon: React.ReactNode; label: string; onClick?: () => void; destructive?: boolean; disabled?: boolean
 }) {
   return (
     <motion.button
-      whileTap={{ scale: 0.98 }}
+      whileTap={disabled ? {} : { scale: 0.98 }}
       onClick={onClick}
-      className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left transition-colors ${
+      disabled={disabled}
+      className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left transition-colors disabled:opacity-50 ${
         destructive
           ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10'
           : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'

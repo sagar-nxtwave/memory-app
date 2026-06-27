@@ -1,19 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
-import { spaces, spaceMembers } from '@/lib/db/schema'
+import { spaces, spaceMembers, documents } from '@/lib/db/schema'
 
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const userSpaces = await db
-    .select({ id: spaces.id, name: spaces.name, description: spaces.description, createdAt: spaces.createdAt })
+    .select({
+      id: spaces.id,
+      name: spaces.name,
+      description: spaces.description,
+      createdAt: spaces.createdAt,
+      documentCount: sql<number>`cast(count(${documents.id}) filter (where ${documents.status} = 'ready') as int)`,
+      lastActivityAt: sql<string | null>`max(${documents.createdAt})`,
+    })
     .from(spaces)
     .innerJoin(spaceMembers, eq(spaceMembers.spaceId, spaces.id))
+    .leftJoin(documents, eq(documents.spaceId, spaces.id))
     .where(eq(spaceMembers.userId, session.user.id))
-    .orderBy(spaces.createdAt)
+    .groupBy(spaces.id, spaces.name, spaces.description, spaces.createdAt)
+    .orderBy(sql`max(${documents.createdAt}) desc nulls last, ${spaces.createdAt} desc`)
 
   return NextResponse.json(userSpaces)
 }

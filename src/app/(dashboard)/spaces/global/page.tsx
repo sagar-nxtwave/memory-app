@@ -352,7 +352,6 @@ export default function GlobalChatPage() {
 function GlobalChatMessage({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
-  const showStreamingText = isStreaming && message.content !== ''
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -372,19 +371,16 @@ function GlobalChatMessage({ message, isStreaming }: { message: Message; isStrea
           message.content.split('\n').map((line, i, arr) => (
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))
-        ) : showStreamingText ? (
-          // Plain text during streaming — no markdown flicker, just smooth typewriter
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-              className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
-            />
-          </p>
         ) : (
           <div className="markdown-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            {isStreaming && (
+              <motion.span
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
+              />
+            )}
           </div>
         )}
       </div>

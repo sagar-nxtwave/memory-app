@@ -1,29 +1,43 @@
 import { Mistral } from '@mistralai/mistralai'
 
-if (!process.env.MISTRAL_API_KEY) {
-  throw new Error('MISTRAL_API_KEY is not set')
-}
+// ── Embeddings: Mistral only ────────────────────────────────────────────────
+// pgvector is fixed at 1024 dimensions (mistral-embed).
+// Changing this model requires re-embedding every document in the DB.
+if (!process.env.MISTRAL_API_KEY) throw new Error('MISTRAL_API_KEY is not set')
 
 export const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY })
-
-export const CHAT_MODEL = 'mistral-small-latest'
 export const EMBED_MODEL = 'mistral-embed'
 export const EMBED_DIMENSIONS = 1024
+// Used only for document extraction (JSON mode) — not for chat
+export const EXTRACT_MODEL = 'mistral-small-latest'
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await mistral.embeddings.create({
-    model: EMBED_MODEL,
-    inputs: [text],
-  })
+  const response = await mistral.embeddings.create({ model: EMBED_MODEL, inputs: [text] })
   return response.data[0].embedding ?? []
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const response = await mistral.embeddings.create({
-    model: EMBED_MODEL,
-    inputs: texts,
-  })
+  const response = await mistral.embeddings.create({ model: EMBED_MODEL, inputs: texts })
   return response.data.map((d) => d.embedding ?? [])
+}
+
+// ── Chat: OpenRouter ────────────────────────────────────────────────────────
+// Switch models by setting OPENROUTER_CHAT_MODEL in .env.local.
+// Recommended: anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)
+//              anthropic/claude-sonnet-4-6 (best quality)
+//              mistralai/mistral-large     (cheaper, good quality)
+if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set')
+
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
+export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-haiku-4-5'
+
+function openRouterHeaders() {
+  return {
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+    'X-Title': 'Memory',
+  }
 }
 
 export async function chat(
@@ -31,15 +45,26 @@ export async function chat(
   userMessage: string,
   history: { role: 'user' | 'assistant'; content: string }[] = []
 ): Promise<string> {
-  const response = await mistral.chat.complete({
-    model: CHAT_MODEL,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...history,
-      { role: 'user', content: userMessage },
-    ],
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: userMessage },
+      ],
+    }),
   })
-  return response.choices?.[0]?.message?.content as string ?? ''
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content ?? ''
 }
 
 export async function* chatStream(
@@ -47,16 +72,46 @@ export async function* chatStream(
   userMessage: string,
   history: { role: 'user' | 'assistant'; content: string }[] = []
 ): AsyncGenerator<string> {
-  const stream = await mistral.chat.stream({
-    model: CHAT_MODEL,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...history,
-      { role: 'user', content: userMessage },
-    ],
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      stream: true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: userMessage },
+      ],
+    }),
   })
-  for await (const event of stream) {
-    const delta = event.data?.choices?.[0]?.delta?.content
-    if (typeof delta === 'string' && delta) yield delta
+
+  if (!res.ok || !res.body) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter stream error ${res.status}: ${err}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (payload === '[DONE]') return
+      try {
+        const event = JSON.parse(payload)
+        const delta = event.choices?.[0]?.delta?.content
+        if (typeof delta === 'string' && delta) yield delta
+      } catch {}
+    }
   }
 }
