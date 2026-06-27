@@ -533,7 +533,7 @@ export default function SpacePage() {
                           <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                             <div className="text-3xl mb-3">📎</div>
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop a file or click to upload</p>
-                            <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 50MB</p>
+                            <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 100MB</p>
                           </motion.div>
                         )}
                       </AnimatePresence>

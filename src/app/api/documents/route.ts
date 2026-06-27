@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: 'File too large. Maximum 50MB.' }, { status: 400 })
+    return NextResponse.json({ error: 'File too large. Maximum 100MB.' }, { status: 400 })
   }
 
   // Validate by extension — browser MIME types vary (Safari sends application/octet-stream for xlsx, etc.)
