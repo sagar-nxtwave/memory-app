@@ -88,6 +88,9 @@ export default function SpacePage() {
   const [docSheet, setDocSheet] = useState<Doc | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
+  const [chatLoading, setChatLoading] = useState(true)
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [timelineLoading, setTimelineLoading] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -97,7 +100,7 @@ export default function SpacePage() {
 
   useEffect(() => {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
-    fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => setMessages(Array.isArray(d) ? d : []))
+    fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
   }, [spaceId])
 
   useEffect(() => {
@@ -233,6 +236,7 @@ export default function SpacePage() {
     if (!res.ok) return
     const data = await res.json()
     if (Array.isArray(data)) setDocs(data)
+    setDocsLoading(false)
   }, [spaceId])
 
   const stagefile = useCallback((file: File) => {
@@ -308,12 +312,15 @@ export default function SpacePage() {
 
   async function openTimeline() {
     setView('timeline')
+    setTimelineLoading(true)
     const res = await fetch(`/api/timeline?spaceId=${spaceId}`)
     setTimeline(await res.json())
+    setTimelineLoading(false)
   }
 
   async function openDocuments() {
     setView('documents')
+    setDocsLoading(true)
     await fetchDocs()
   }
 
@@ -409,7 +416,9 @@ export default function SpacePage() {
           {/* CHAT */}
           {view === 'chat' && (
             <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="px-4 py-6 max-w-2xl mx-auto">
-              {isEmpty ? (
+              {chatLoading ? (
+                <ChatSkeleton />
+              ) : isEmpty ? (
                 <EmptyState
                   spaceName={space?.name}
                   onBriefMe={() => aiAction('Brief me on this space.', '/api/brief')}
@@ -438,6 +447,8 @@ export default function SpacePage() {
               <div className="mb-5">
                 <h2 className="font-semibold text-gray-900 dark:text-white">Documents</h2>
               </div>
+              {docsLoading && <ListSkeleton />}
+              {docsLoading ? null : <>
 
               {/* Tab toggle */}
               <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl mb-4">
@@ -617,6 +628,7 @@ export default function SpacePage() {
                   })}
                 </motion.div>
               )}
+              </>}
             </motion.div>
           )}
 
@@ -624,7 +636,7 @@ export default function SpacePage() {
           {view === 'timeline' && (
             <motion.div key="timeline" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
               <h2 className="font-semibold text-gray-900 dark:text-white mb-6">Timeline</h2>
-              {timeline.length === 0 ? (
+              {timelineLoading ? <ListSkeleton /> : timeline.length === 0 ? (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-500 dark:text-gray-400 text-center py-10">
                   No events yet. Upload documents to start your timeline.
                 </motion.p>
@@ -1294,6 +1306,34 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
         )}
       </motion.div>
     </motion.div>
+  )
+}
+
+function ChatSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      {[80, 60, 90, 50, 75].map((w, i) => (
+        <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+          <div className={`h-10 rounded-2xl bg-gray-100 dark:bg-gray-800`} style={{ width: `${w}%` }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse mt-2">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex items-center gap-3 px-1 py-2">
+          <div className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
+            <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

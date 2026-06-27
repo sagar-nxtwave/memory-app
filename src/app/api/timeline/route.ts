@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
         : 'Processing…',
       sourceName: doc.name,
       sourceFileType: doc.fileType,
-      date: doc.createdAt,
+      date: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
       status: doc.status,
     })
 
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         text: decision,
         sourceName: doc.name,
         sourceFileType: doc.fileType,
-        date: doc.createdAt,
+        date: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
         status: 'ready',
       })
     }
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
         text: risk,
         sourceName: doc.name,
         sourceFileType: doc.fileType,
-        date: doc.createdAt,
+        date: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
         status: 'ready',
       })
     }
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
         text: number,
         sourceName: doc.name,
         sourceFileType: doc.fileType,
-        date: doc.createdAt,
+        date: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
         status: 'ready',
       })
     }
