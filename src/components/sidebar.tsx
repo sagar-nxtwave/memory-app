@@ -23,6 +23,7 @@ export function Sidebar() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   // Draggable sidebar width
   const [sidebarWidth, setSidebarWidth] = useState(240)
@@ -250,7 +251,17 @@ export function Sidebar() {
                     {/* ⋯ menu */}
                     <div className="relative shrink-0">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === space.id ? null : space.id) }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (menuOpenId === space.id) {
+                            setMenuOpenId(null)
+                            setMenuPos(null)
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setMenuPos({ top: rect.bottom + 4, left: rect.right + 8 })
+                            setMenuOpenId(space.id)
+                          }
+                        }}
                         className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -259,18 +270,19 @@ export function Sidebar() {
                       </button>
 
                       <AnimatePresence>
-                        {menuOpenId === space.id && (
+                        {menuOpenId === space.id && menuPos && (
                           <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                            <div className="fixed inset-0 z-[199]" onClick={() => { setMenuOpenId(null); setMenuPos(null) }} />
                             <motion.div
                               initial={{ opacity: 0, scale: 0.95, y: -4 }}
                               animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.95, y: -4 }}
                               transition={{ duration: 0.1 }}
-                              className="absolute left-full top-0 ml-2 z-20 w-36 bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden py-1"
+                              style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+                              className="z-[200] w-36 bg-white dark:bg-[#1c1c1e] border border-gray-100 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden py-1"
                             >
                               <button
-                                onClick={() => { setEditName(space.name); setEditingId(space.id); setMenuOpenId(null) }}
+                                onClick={() => { setEditName(space.name); setEditingId(space.id); setMenuOpenId(null); setMenuPos(null) }}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -280,7 +292,7 @@ export function Sidebar() {
                                 Rename
                               </button>
                               <button
-                                onClick={() => { setConfirmDeleteId(space.id); setMenuOpenId(null) }}
+                                onClick={() => { setConfirmDeleteId(space.id); setMenuOpenId(null); setMenuPos(null) }}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors text-left"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

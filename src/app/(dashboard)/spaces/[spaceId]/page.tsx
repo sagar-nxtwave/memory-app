@@ -96,6 +96,7 @@ export default function SpacePage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pollingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   useEffect(() => {
@@ -129,10 +130,16 @@ export default function SpacePage() {
     if (!hasProcessing) return
 
     const interval = setInterval(async () => {
-      const res = await fetch(`/api/documents?spaceId=${spaceId}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) setDocs(data)
+      if (pollingRef.current) return
+      pollingRef.current = true
+      try {
+        const res = await fetch(`/api/documents?spaceId=${spaceId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data)) setDocs(data)
+        }
+      } finally {
+        pollingRef.current = false
       }
     }, 5000)
 
@@ -225,7 +232,7 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream(endpoint, { spaceId, responseStyle }, tempUserId, sid)
+    await handleStream(endpoint, { spaceId, responseStyle, spaceName: space?.name }, tempUserId, sid)
 
     setStreamingMessageId(null)
     setLoading(false)

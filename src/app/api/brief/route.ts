@@ -4,26 +4,22 @@ import { and, eq, desc } from 'drizzle-orm'
 export const maxDuration = 60
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
-import { documents, spaceMembers, spaces, messages } from '@/lib/db/schema'
+import { documents, messages } from '@/lib/db/schema'
 import { chatStream } from '@/lib/ai/provider'
 import { briefMePrompt, styleInstruction } from '@/lib/ai/prompts'
+import { checkSpaceAccess } from '@/lib/api/checkSpaceAccess'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, responseStyle } = await req.json()
+  const { spaceId, responseStyle, spaceName } = await req.json()
   if (!spaceId) return NextResponse.json({ error: 'spaceId required' }, { status: 400 })
 
-  const [member] = await db
-    .select()
-    .from(spaceMembers)
-    .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, session.user.id)))
-    .limit(1)
+  const allowed = await checkSpaceAccess(spaceId, session.user.id)
+  if (!allowed) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-
-  const [space] = await db.select({ name: spaces.name }).from(spaces).where(eq(spaces.id, spaceId)).limit(1)
+  const space = { name: spaceName as string | undefined }
 
   const readyDocs = await db
     .select({
