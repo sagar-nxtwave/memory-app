@@ -110,12 +110,13 @@ export default function SpacePage() {
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el) return
+    const container = el
     function onScroll() {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
       setShowScrollBtn(distFromBottom > 120)
     }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
   }, [])
 
   // Poll for doc status updates while any doc is processing
