@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -162,18 +162,18 @@ export default function PortfolioDashboard() {
     <div className="min-h-full bg-gray-50 dark:bg-[#0a0a0a] overflow-y-auto">
       <div className="max-w-2xl mx-auto px-4 pb-24 pt-5 pl-16 md:pl-4">
 
-        {/* ── Header ── */}
+        {/* -- Header -- */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">Portfolio</h1>
-            <p className="text-xs text-gray-400 dark:text-gray-600 mt-0.5">{greeting(session?.user?.name)}</p>
+            <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">{greeting(session?.user?.name)}</p>
           </div>
           <div className="flex items-center gap-2">
             {spaces.length > 0 && (
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={() => router.push('/spaces/global')}
-                className="h-8 px-3 text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="h-8 px-3 text-xs font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               >
                 Ask all
               </motion.button>
@@ -197,7 +197,7 @@ export default function PortfolioDashboard() {
           <EmptyState onCreateClick={() => setShowCreate(true)} />
         ) : (
           <>
-            {/* ── Stat strip — clickable filters ── */}
+            {/* -- Stat strip — clickable filters -- */}
             <div className="grid grid-cols-4 gap-2 mb-5">
               <StatCard value={spaces.length} label="Spaces" active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
               <StatCard value={newDocs.length} label="New Docs" accent={newDocs.length > 0 ? 'emerald' : undefined} active={activeFilter === 'newdocs'} onClick={() => setActiveFilter(activeFilter === 'newdocs' ? 'all' : 'newdocs')} />
@@ -205,14 +205,14 @@ export default function PortfolioDashboard() {
               <StatCard value={spacesWithRisks} label="Risks" accent={spacesWithRisks > 0 ? 'red' : undefined} active={activeFilter === 'risks'} onClick={() => setActiveFilter(activeFilter === 'risks' ? 'all' : 'risks')} />
             </div>
 
-            {/* ── Content ── */}
+            {/* -- Content -- */}
             <div className="space-y-5">
               {/* Intelligence feed */}
               {filteredSignals.length > 0 && activeFilter !== 'newdocs' && (
                 <section>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">Intelligence</p>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-600">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-900 dark:text-gray-500">Intelligence</p>
+                    <p className="text-[10px] text-gray-900 dark:text-gray-500">
                       {activeFilter === 'all'
                         ? `${riskSignals.length} risk${riskSignals.length !== 1 ? 's' : ''} · ${decisionSignals.length} decision${decisionSignals.length !== 1 ? 's' : ''}`
                         : `${filteredSignals.length} ${activeFilter}`}
@@ -233,16 +233,16 @@ export default function PortfolioDashboard() {
                         }`}>
                           {sig.type === 'risk' ? 'Risk' : 'Decision'}
                         </span>
-                        <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors leading-snug line-clamp-2">
+                        <span className="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors leading-snug line-clamp-2">
                           {sig.text}
                         </span>
-                        <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-600 pt-0.5">{sig.spaceName}</span>
+                        <span className="shrink-0 text-[11px] text-gray-900 dark:text-gray-500 pt-0.5">{sig.spaceName}</span>
                       </motion.button>
                     ))}
                     {hasMoreSignals && (
                       <button
                         onClick={() => setShowAllSignals((v) => !v)}
-                        className="w-full py-2.5 text-xs text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
+                        className="w-full py-2.5 text-xs text-gray-900 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
                       >
                         {showAllSignals ? 'Show less' : `Show ${filteredSignals.length - 5} more`}
                       </button>
@@ -254,7 +254,7 @@ export default function PortfolioDashboard() {
               {/* New docs */}
               {newDocs.length > 0 && (activeFilter === 'all' || activeFilter === 'newdocs') && (
                 <section>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600 mb-2">New since last visit</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-900 dark:text-gray-500 mb-2">New since last visit</p>
                   <div className="rounded-2xl bg-white dark:bg-[#111] border border-gray-200/60 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800/80 shadow-sm">
                     {newDocs.slice(0, 5).map((doc) => (
                       <motion.button
@@ -266,9 +266,9 @@ export default function PortfolioDashboard() {
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-800 dark:text-gray-200 truncate group-hover:text-gray-900 dark:group-hover:text-white">{doc.name}</p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-600 truncate mt-0.5">{doc.spaceName}</p>
+                          <p className="text-[11px] text-gray-900 dark:text-gray-500 truncate mt-0.5">{doc.spaceName}</p>
                         </div>
-                        <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-600">{timeAgo(doc.createdAt)}</span>
+                        <span className="shrink-0 text-[11px] text-gray-900 dark:text-gray-500">{timeAgo(doc.createdAt)}</span>
                       </motion.button>
                     ))}
                   </div>
@@ -277,11 +277,11 @@ export default function PortfolioDashboard() {
 
               {/* Spaces list */}
               <section>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600 mb-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-900 dark:text-gray-500 mb-2">
                   {activeFilter === 'all' ? 'All spaces' : activeFilter === 'newdocs' ? 'Spaces with new documents' : activeFilter === 'risks' ? 'Spaces with risks' : 'Spaces with decisions'}
                 </p>
                 {filteredSpaces.length === 0
-                  ? <p className="text-sm text-gray-400 dark:text-gray-600 py-8 text-center">No spaces match this filter.</p>
+                  ? <p className="text-sm text-gray-900 dark:text-gray-500 py-8 text-center">No spaces match this filter.</p>
                   : <SpaceList spaces={filteredSpaces} spaceSignalMap={spaceSignalMap} newDocs={newDocs} onNavigate={(id) => router.push(`/spaces/${id}`)} />
                 }
               </section>
@@ -291,7 +291,7 @@ export default function PortfolioDashboard() {
         )}
       </div>
 
-      {/* ── New space sheet ── */}
+      {/* -- New space sheet -- */}
       <AnimatePresence>
         {showCreate && (
           <motion.div
@@ -337,7 +337,7 @@ export default function PortfolioDashboard() {
                   <button
                     type="button"
                     onClick={() => { setShowCreate(false); setNewName(''); setNewDesc('') }}
-                    className="flex-1 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    className="flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                   >
                     Cancel
                   </button>
@@ -358,7 +358,7 @@ export default function PortfolioDashboard() {
   )
 }
 
-// ── Stat card ────────────────────────────────────────────────────────────────
+// -- Stat card ----------------------------------------------------------------
 
 function StatCard({ value, label, accent, active, onClick }: {
   value: number
@@ -383,18 +383,18 @@ function StatCard({ value, label, accent, active, onClick }: {
       }`}
     >
       <span className={`text-2xl font-bold tabular-nums leading-none ${active ? 'text-white' : numCls}`}>{value}</span>
-      <span className={`text-[10px] mt-1 font-medium ${active ? 'text-gray-300 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>{label}</span>
+      <span className={`text-[10px] mt-1 font-medium ${active ? 'text-gray-300 dark:text-gray-400' : 'text-gray-900 dark:text-gray-500'}`}>{label}</span>
     </motion.button>
   )
 }
 
-// ── Space row ────────────────────────────────────────────────────────────────
+// -- Space row ----------------------------------------------------------------
 
 const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: string }> = {
   on_track:  { label: 'On Track',  dot: 'bg-emerald-400',             badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
   at_risk:   { label: 'At Risk',   dot: 'bg-red-400',                 badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
   on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',               badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
-  completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' },
+  completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
 }
 
 function SpaceRow({ space, hasRisk, hasDecision, hasNew, index, onClick }: {
@@ -432,11 +432,11 @@ function SpaceRow({ space, hasRisk, hasDecision, hasNew, index, onClick }: {
         </div>
         {/* Latest doc name or empty state */}
         {isEmpty ? (
-          <p className="text-[11px] text-gray-400 dark:text-gray-600 mt-0.5">No documents yet</p>
+          <p className="text-[11px] text-gray-900 dark:text-gray-500 mt-0.5">No documents yet</p>
         ) : space.latestDocumentName ? (
-          <p className="text-[11px] text-gray-400 dark:text-gray-600 truncate mt-0.5">
+          <p className="text-[11px] text-gray-900 dark:text-gray-500 truncate mt-0.5">
             {space.latestDocumentName}
-            {space.lastActivityAt && <span className="text-gray-300 dark:text-gray-700"> · {timeAgo(space.lastActivityAt)}</span>}
+            {space.lastActivityAt && <span className="text-gray-900 dark:text-gray-500"> · {timeAgo(space.lastActivityAt)}</span>}
           </p>
         ) : null}
       </div>
@@ -454,14 +454,14 @@ function SpaceRow({ space, hasRisk, hasDecision, hasNew, index, onClick }: {
         )}
       </div>
 
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 dark:text-gray-700 shrink-0">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600 dark:text-gray-700 shrink-0">
         <path d="M5 12h14M12 5l7 7-7 7" />
       </svg>
     </motion.button>
   )
 }
 
-// ── Space list (shared across tabs) ─────────────────────────────────────────
+// -- Space list (shared across tabs) -----------------------------------------
 
 function SpaceList({ spaces, spaceSignalMap, newDocs, onNavigate }: {
   spaces: SpaceSignal[]
@@ -489,7 +489,7 @@ function SpaceList({ spaces, spaceSignalMap, newDocs, onNavigate }: {
   )
 }
 
-// ── Loading skeleton ─────────────────────────────────────────────────────────
+// -- Loading skeleton ---------------------------------------------------------
 
 function LoadingSkeleton() {
   return (
@@ -513,7 +513,7 @@ function LoadingSkeleton() {
   )
 }
 
-// ── Empty state ──────────────────────────────────────────────────────────────
+// -- Empty state --------------------------------------------------------------
 
 function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   return (
@@ -522,9 +522,9 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-24 text-center"
     >
-      <div className="text-4xl mb-4 select-none">💭</div>
+      <div className="text-4xl mb-4 select-none">??</div>
       <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Create your first space</h2>
-      <p className="text-sm text-gray-400 dark:text-gray-500 mb-6 max-w-xs leading-relaxed">
+      <p className="text-sm text-gray-900 dark:text-gray-500 mb-6 max-w-xs leading-relaxed">
         A space holds all documents, decisions, and memory for one investment.
       </p>
       <motion.button
@@ -537,3 +537,4 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
     </motion.div>
   )
 }
+

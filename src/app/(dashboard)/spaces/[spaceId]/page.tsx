@@ -23,7 +23,7 @@ const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: st
   on_track:  { label: 'On Track',  dot: 'bg-emerald-400',              badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
   at_risk:   { label: 'At Risk',   dot: 'bg-red-400',                  badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
   on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',                badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
-  completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' },
+  completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
 }
 type View = 'chat' | 'documents' | 'timeline'
 
@@ -32,7 +32,7 @@ import { parseUtc } from '@/lib/utils/date'
 const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️' }
 
 const TIMELINE_EVENT_CONFIG = {
-  document: { label: 'Upload',   icon: '↑', dot: 'bg-gray-200 dark:bg-gray-700',          badge: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' },
+  document: { label: 'Upload',   icon: '↑', dot: 'bg-gray-200 dark:bg-gray-700',          badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
   decision:  { label: 'Decision', icon: '✓', dot: 'bg-blue-500 dark:bg-blue-400',           badge: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
   risk:      { label: 'Risk',     icon: '!', dot: 'bg-red-400 dark:bg-red-400',             badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
   number:    { label: 'Figure',   icon: '#', dot: 'bg-emerald-400 dark:bg-emerald-400',     badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
@@ -40,7 +40,7 @@ const TIMELINE_EVENT_CONFIG = {
 const STATUS_COLOR: Record<string, string> = {
   ready: 'text-emerald-500',
   processing: 'text-amber-500',
-  pending: 'text-gray-400 dark:text-gray-500',
+  pending: 'text-gray-900 dark:text-gray-500',
   failed: 'text-red-400',
 }
 
@@ -77,6 +77,8 @@ export default function SpacePage() {
   const [docs, setDocs] = useState<Doc[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingTitle, setPendingTitle] = useState('')
@@ -254,15 +256,39 @@ export default function SpacePage() {
 
   const uploadFile = useCallback(async (file: File, customTitle: string, customDesc: string) => {
     setUploading(true)
+    setUploadProgress(0)
+    setUploadError(null)
     setPendingFile(null)
     const fd = new FormData()
     fd.append('file', file)
     fd.append('spaceId', spaceId)
     if (customTitle.trim()) fd.append('customName', customTitle.trim())
     if (customDesc.trim()) fd.append('description', customDesc.trim())
-    await fetch('/api/documents', { method: 'POST', body: fd })
-    await fetchDocs()
-    setUploading(false)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/api/documents')
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => {
+          if (xhr.status === 201) { resolve() } else {
+            let msg = 'Upload failed'
+            try { msg = JSON.parse(xhr.responseText).error ?? msg } catch {}
+            reject(new Error(msg))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Network error — check your connection and try again.'))
+        xhr.send(fd)
+      })
+      await fetchDocs()
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+      setPendingFile(file)
+    } finally {
+      setUploading(false)
+      setUploadProgress(0)
+    }
   }, [spaceId, fetchDocs])
 
   async function pasteText() {
@@ -355,8 +381,8 @@ export default function SpacePage() {
             </svg>
           </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight">
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight min-w-0 shrink">
                 {space?.name ?? '…'}
               </h1>
               {/* Status badge — tap to change */}
@@ -391,7 +417,7 @@ export default function SpacePage() {
                                   body: JSON.stringify({ status: key }),
                                 })
                               }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-900 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
                             >
                               <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
                               {cfg.label}
@@ -405,7 +431,7 @@ export default function SpacePage() {
               )}
             </div>
             {space?.description && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{space.description}</p>
+              <p className="text-xs text-gray-900 dark:text-gray-500 truncate">{space.description}</p>
             )}
           </div>
         </div>
@@ -466,7 +492,7 @@ export default function SpacePage() {
                     className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
                       docInputMode === mode
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        : 'text-gray-900 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                   >
                     {mode === 'upload' ? 'Upload file' : 'Minutes of Meeting'}
@@ -492,14 +518,22 @@ export default function SpacePage() {
                         {uploading ? (
                           <motion.div key="uploading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }} className="text-2xl inline-block mb-2">⏳</motion.div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Uploading…</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">AI will process your document</p>
+                            <p className="text-sm text-gray-900 dark:text-gray-400 font-medium">
+                              {uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Processing…'}
+                            </p>
+                            <div className="w-32 mx-auto mt-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <motion.div
+                                className="h-full bg-gray-900 dark:bg-gray-300 rounded-full"
+                                animate={{ width: `${uploadProgress < 100 ? uploadProgress : 100}%` }}
+                                transition={{ duration: 0.3 }}
+                              />
+                            </div>
                           </motion.div>
                         ) : (
                           <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                             <div className="text-3xl mb-3">📎</div>
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Drop a file or click to upload</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 50MB</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop a file or click to upload</p>
+                            <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 50MB</p>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -516,7 +550,7 @@ export default function SpacePage() {
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-lg">{FILE_ICONS[pendingFile.name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'}</span>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{pendingFile.name} · {fmt(pendingFile.size)}</p>
+                            <p className="text-xs text-gray-900 dark:text-gray-400 truncate">{pendingFile.name} · {fmt(pendingFile.size)}</p>
                           </div>
                           <input
                             type="text"
@@ -532,20 +566,26 @@ export default function SpacePage() {
                             placeholder="Short description (optional)"
                             className="w-full px-3.5 py-2.5 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
                           />
+                          {uploadError && (
+                            <div className="px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                              <p className="text-xs text-red-600 dark:text-red-400 font-medium">Upload failed</p>
+                              <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{uploadError}</p>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <button
-                              onClick={() => setPendingFile(null)}
-                              className="flex-1 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              onClick={() => { setPendingFile(null); setUploadError(null) }}
+                              className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                             >
                               Cancel
                             </button>
                             <motion.button
                               whileTap={{ scale: 0.97 }}
-                              onClick={() => { const f = pendingFile; if (f) uploadFile(f, pendingTitle, pendingDesc) }}
+                              onClick={() => { setUploadError(null); const f = pendingFile; if (f) uploadFile(f, pendingTitle, pendingDesc) }}
                               disabled={!pendingTitle.trim()}
                               className="flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
                             >
-                              Upload & process
+                              {uploadError ? 'Retry' : 'Upload & process'}
                             </motion.button>
                           </div>
                         </motion.div>
@@ -581,7 +621,7 @@ export default function SpacePage() {
               </AnimatePresence>
 
               {docs.length === 0 ? (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-500 dark:text-gray-400 text-center py-10">
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-900 dark:text-gray-400 text-center py-10">
                   No documents yet. Upload one to get started.
                 </motion.p>
               ) : (
@@ -599,7 +639,7 @@ export default function SpacePage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{doc.name}</p>
                           {doc.status === 'ready' && doc.summary && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
+                            <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
                           )}
                           {doc.status === 'failed' && doc.failureReason && (
                             <p className="text-xs text-red-400 dark:text-red-400 mt-0.5 line-clamp-2">{doc.failureReason}</p>
@@ -613,16 +653,16 @@ export default function SpacePage() {
                               </span>
                             )}
                             <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">{fmt(doc.fileSize)}</span>
+                            <span className="text-xs text-gray-900 dark:text-gray-400">{fmt(doc.fileSize)}</span>
                           </div>
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                          <span className="text-xs text-gray-900 dark:text-gray-500">
                             {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
                           <button
                             onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
-                            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
+                            className="p-1.5 text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
                             title="More options"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -644,7 +684,7 @@ export default function SpacePage() {
             <motion.div key="timeline" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
               <h2 className="font-semibold text-gray-900 dark:text-white mb-6">Timeline</h2>
               {timelineLoading ? <ListSkeleton /> : timeline.length === 0 ? (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-500 dark:text-gray-400 text-center py-10">
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-900 dark:text-gray-400 text-center py-10">
                   No events yet. Upload documents to start your timeline.
                 </motion.p>
               ) : (
@@ -672,14 +712,14 @@ export default function SpacePage() {
                                 <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${cfg.badge}`}>
                                   {cfg.label}
                                 </span>
-                                <span className="text-[10px] text-gray-400 dark:text-gray-600 truncate">{ev.sourceName}</span>
+                                <span className="text-[10px] text-gray-900 dark:text-gray-500 truncate">{ev.sourceName}</span>
                               </div>
                               {/* Main text */}
-                              <p className={`text-sm leading-snug ${ev.type === 'document' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-800 dark:text-gray-200'}`}>
+                              <p className={`text-sm leading-snug ${ev.type === 'document' ? 'text-gray-900 dark:text-gray-400 italic' : 'text-gray-800 dark:text-gray-200'}`}>
                                 {ev.text}
                               </p>
                             </div>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-600 shrink-0 pt-0.5 whitespace-nowrap">
+                            <span className="text-[10px] text-gray-900 dark:text-gray-500 shrink-0 pt-0.5 whitespace-nowrap">
                               {parseUtc(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                           </div>
@@ -813,7 +853,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
           className={`relative px-2.5 py-1.5 text-[11px] font-medium rounded-xl transition-colors capitalize ${
             value === s
               ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+              : 'text-gray-900 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
           }`}
         >
           {s}
@@ -835,10 +875,10 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="flex flex-col items-center min-h-[55vh] pt-8">
-      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-gray-500 dark:text-gray-400 text-sm mb-1">
+      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-gray-900 dark:text-gray-400 text-sm mb-1">
         What would you like to know?
       </motion.p>
-      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="text-gray-400 dark:text-gray-500 text-xs mb-10">
+      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="text-gray-900 dark:text-gray-500 text-xs mb-10">
         {spaceName ? `Ask anything about ${spaceName}` : 'Ask a question or choose an action'}
       </motion.p>
       <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
@@ -854,9 +894,9 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
             onClick={a.onClick}
             className="text-left p-4 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all group shadow-sm hover:shadow-md dark:shadow-none"
           >
-            <div className="text-xl mb-2.5 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{a.emoji}</div>
+            <div className="text-xl mb-2.5 text-gray-900 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{a.emoji}</div>
             <p className="text-sm font-semibold text-gray-900 dark:text-white">{a.label}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{a.sub}</p>
+            <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 leading-relaxed">{a.sub}</p>
           </motion.button>
         ))}
       </div>
@@ -909,7 +949,7 @@ function NavBtn({ label, active, onClick }: { label: string; active: boolean; on
     <motion.button whileTap={{ scale: 0.94 }} onClick={onClick}
       className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all min-h-[36px] ${
         active ? 'bg-gray-900 dark:bg-gray-700 text-white shadow-sm'
-               : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+               : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}>
       {label}
     </motion.button>
@@ -927,7 +967,7 @@ function ProcessingStatusBadge({ status }: { status: string }) {
 
   if (status === 'pending') {
     return (
-      <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+      <span className="text-xs text-gray-900 dark:text-gray-500 flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full" />
         Queued
       </span>
@@ -980,7 +1020,7 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
               <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug break-words">{doc.name}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                   {fmt(doc.fileSize)} · {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               </div>
@@ -1022,7 +1062,7 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
                 <InsightSection label="Important Dates" icon="📅" items={doc.importantDates!} />
               )}
               {!doc.summary && !doc.keyNumbers?.length && !doc.risks?.length && !doc.decisions?.length && !doc.importantDates?.length && (
-                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">No insights extracted from this document.</p>
+                <p className="text-sm text-gray-900 dark:text-gray-500 text-center py-4">No insights extracted from this document.</p>
               )}
             </div>
           </>
@@ -1041,19 +1081,19 @@ function InsightSection({
     <div>
       <div className="flex items-center gap-2 mb-2.5">
         <span className="text-sm">{icon}</span>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500">{label}</p>
       </div>
       {isSummary ? (
-        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{items[0]}</p>
+        <p className="text-sm text-gray-900 dark:text-gray-300 leading-relaxed">{items[0]}</p>
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => (
             <div key={i} className={`flex gap-2.5 text-sm px-3 py-2.5 rounded-xl ${
               accent === 'amber'
                 ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-800 dark:text-amber-300'
-                : 'bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
+                : 'bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-300'
             }`}>
-              <span className="shrink-0 text-gray-400 dark:text-gray-600 mt-0.5">—</span>
+              <span className="shrink-0 text-gray-900 dark:text-gray-500 mt-0.5">—</span>
               <span className="leading-relaxed">{item}</span>
             </div>
           ))}
@@ -1173,7 +1213,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                 <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate">{doc.name}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                     <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
                     {' · '}{fmt(doc.fileSize)}
                     {' · '}{parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1185,7 +1225,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
               </div>
               {doc.status === 'ready' && doc.summary && (
                 <div className="mt-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600 mb-1">Short Summary</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500 mb-1">Short Summary</p>
                   <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{doc.summary}</p>
                 </div>
               )}
@@ -1243,7 +1283,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
             <div className="px-4 pt-1 pb-5">
               <button
                 onClick={onClose}
-                className="w-full py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="w-full py-3.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -1253,7 +1293,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
 
         {mode === 'rename' && (
           <div className="px-5 pt-3 pb-5">
-            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Back
             </button>
@@ -1269,7 +1309,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
             <div className="flex gap-3">
               <button
                 onClick={() => setMode('actions')}
-                className="flex-1 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -1286,18 +1326,18 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
 
         {mode === 'delete' && (
           <div className="px-5 pt-3 pb-5">
-            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Back
             </button>
             <p className="text-base font-semibold text-gray-900 dark:text-white mb-2">Delete document?</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+            <p className="text-sm text-gray-900 dark:text-gray-400 mb-6 leading-relaxed">
               This removes the file and all memory associated with it. This cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setMode('actions')}
-                className="flex-1 py-3 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -1355,7 +1395,7 @@ function SheetRow({ icon, label, onClick, destructive, disabled }: {
       className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left transition-colors disabled:opacity-50 ${
         destructive
           ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10'
-          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+          : 'text-gray-900 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}
     >
       <span className="shrink-0">{icon}</span>
@@ -1363,3 +1403,5 @@ function SheetRow({ icon, label, onClick, destructive, disabled }: {
     </motion.button>
   )
 }
+
+

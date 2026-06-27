@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -114,7 +114,7 @@ export function Sidebar() {
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
             pathname === '/spaces'
               ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+              : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -132,7 +132,7 @@ export function Sidebar() {
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
             pathname === '/spaces/global'
               ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+              : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -148,7 +148,7 @@ export function Sidebar() {
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => { setShowCreate(true); setMobileOpen(true) }}
-          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
@@ -183,12 +183,12 @@ export function Sidebar() {
                 disabled={creating || !newName.trim()}
                 className="flex-1 py-1.5 text-xs font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-lg disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
               >
-                {creating ? '…' : 'Create'}
+                {creating ? 'Creating…' : 'Create'}
               </button>
               <button
                 type="button"
                 onClick={() => { setShowCreate(false); setNewName('') }}
-                className="py-1.5 px-3 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                className="py-1.5 px-3 text-xs text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
               >
                 Cancel
               </button>
@@ -198,14 +198,14 @@ export function Sidebar() {
       </AnimatePresence>
 
       {/* Section label */}
-      <p className="px-4 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600 mb-1.5 shrink-0">
+      <p className="px-4 text-[10px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500 mb-1.5 shrink-0">
         Spaces
       </p>
 
       {/* Spaces list */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5 scrollbar-hide">
         {spaces.length === 0 && !showCreate && (
-          <p className="text-xs text-gray-500 dark:text-gray-500 px-3 py-2">
+          <p className="text-xs text-gray-900 dark:text-gray-500 px-3 py-2">
             No spaces yet
           </p>
         )}
@@ -248,7 +248,7 @@ export function Sidebar() {
                       <span className="truncate block">{space.name}</span>
                     </button>
 
-                    {/* ⋯ menu */}
+                    {/* ? menu */}
                     <div className="relative shrink-0">
                       <button
                         onClick={(e) => {
@@ -283,7 +283,7 @@ export function Sidebar() {
                             >
                               <button
                                 onClick={() => { setEditName(space.name); setEditingId(space.id); setMenuOpenId(null); setMenuPos(null) }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-900 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -328,7 +328,7 @@ export function Sidebar() {
             <p className="text-xs font-medium text-gray-900 dark:text-white truncate leading-tight">
               {user?.name ?? 'Account'}
             </p>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate leading-tight">
+            <p className="text-[11px] text-gray-900 dark:text-gray-400 truncate leading-tight">
               {user?.email}
             </p>
           </div>
@@ -351,7 +351,7 @@ export function Sidebar() {
 
   return (
     <>
-      {/* ── Desktop sidebar (draggable width) ── */}
+      {/* -- Desktop sidebar (draggable width) -- */}
       <motion.aside
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
@@ -386,7 +386,7 @@ export function Sidebar() {
         </div>
       </motion.aside>
 
-      {/* ── Mobile: hamburger button ── */}
+      {/* -- Mobile: hamburger button -- */}
       <button
         onClick={() => setMobileOpen(true)}
         className="md:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl shadow-sm text-gray-600 dark:text-gray-300"
@@ -398,7 +398,7 @@ export function Sidebar() {
         </svg>
       </button>
 
-      {/* ── Delete confirmation modal ── */}
+      {/* -- Delete confirmation modal -- */}
       <AnimatePresence>
         {confirmDeleteId && (
           <motion.div
@@ -418,9 +418,9 @@ export function Sidebar() {
               className="relative w-full max-w-sm bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl p-5"
             >
               <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">Delete space?</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+              <p className="text-sm text-gray-900 dark:text-gray-400 mb-5">
                 All documents, chat history, and memory for{' '}
-                <span className="font-medium text-gray-700 dark:text-gray-300">
+                <span className="font-medium text-gray-900 dark:text-gray-300">
                   {spaces.find((s) => s.id === confirmDeleteId)?.name}
                 </span>{' '}
                 will be permanently deleted.
@@ -429,7 +429,7 @@ export function Sidebar() {
                 <button
                   onClick={() => setConfirmDeleteId(null)}
                   disabled={deleting}
-                  className="flex-1 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+                  className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
                 >
                   Cancel
                 </button>
@@ -446,7 +446,7 @@ export function Sidebar() {
         )}
       </AnimatePresence>
 
-      {/* ── Mobile: drawer overlay ── */}
+      {/* -- Mobile: drawer overlay -- */}
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -474,3 +474,4 @@ export function Sidebar() {
     </>
   )
 }
+

@@ -1,4 +1,4 @@
-'use client'
+﻿﻿﻿'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -182,7 +182,7 @@ export default function GlobalChatPage() {
       >
         <div className="pl-12 md:pl-0 flex-1 min-w-0">
           <h1 className="font-semibold text-gray-900 dark:text-white text-sm">All Projects</h1>
-          <p className="text-xs text-gray-400 dark:text-gray-500">Ask questions across your portfolio</p>
+          <p className="text-xs text-gray-900 dark:text-gray-500">Ask questions across your portfolio</p>
         </div>
 
         {/* Project filter — compact dropdown, only shown when 2+ spaces */}
@@ -194,7 +194,7 @@ export default function GlobalChatPage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-xl transition-all ${
                 filterOpen
                   ? 'border-gray-400 dark:border-gray-500 text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900'
-                  : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -217,10 +217,10 @@ export default function GlobalChatPage() {
                 >
                   {/* Header row */}
                   <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-100 dark:border-gray-800">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Projects</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500">Projects</span>
                     <button
                       onClick={() => setSelectedIds(new Set(spaces.map((s) => s.id)))}
-                      className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                      className="text-[11px] text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                     >
                       Select all
                     </button>
@@ -249,7 +249,7 @@ export default function GlobalChatPage() {
                             )}
                           </div>
                           <span className={`text-sm truncate ${
-                            checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'
+                            checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-900 dark:text-gray-400'
                           }`}>
                             {space.name}
                           </span>
@@ -279,13 +279,13 @@ export default function GlobalChatPage() {
           ) : isEmpty ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center pt-6">
               <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-5">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 dark:text-gray-400">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-900 dark:text-gray-400">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                 </svg>
               </div>
               <p className="text-gray-900 dark:text-white font-semibold text-sm mb-1">Ask across your projects</p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs mb-8 text-center max-w-xs">
+              <p className="text-gray-900 dark:text-gray-400 text-xs mb-8 text-center max-w-xs">
                 Memory searches documents from all selected projects and answers with context from each.
               </p>
               <div className="w-full max-w-sm space-y-2">
@@ -329,7 +329,7 @@ export default function GlobalChatPage() {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Ask anything across ${selectionLabel.toLowerCase()}…`}
+              placeholder={`Ask anything across ${selectionLabel.toLowerCase()}`}
               disabled={loading}
               className="flex-1 min-w-0 px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50"
             />
@@ -363,7 +363,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
           className={`relative px-2.5 py-1.5 text-[11px] font-medium rounded-xl transition-colors capitalize ${
             value === s
               ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
+              : 'text-gray-900 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
           }`}
         >
           {s}
@@ -411,3 +411,4 @@ function GlobalChatMessage({ message, isStreaming }: { message: Message; isStrea
     </div>
   )
 }
+
