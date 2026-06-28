@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string }
+interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean }
 interface Space { id: string; name: string }
 
 const msgVariants = {
@@ -141,12 +141,12 @@ export default function GlobalChatPage() {
               setMessages((p) => p.map((m) => (m.id === tempUserId ? { ...m, id: event.userMessageId } : m)))
             } else if (event.type === 'delta') {
               accumulated += event.content
-              const snap = accumulated
-              setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: snap } : m)))
             } else if (event.type === 'done') {
-              if (event.assistantMessageId) {
-                setMessages((p) => p.map((m) => (m.id === sid ? { ...m, id: event.assistantMessageId } : m)))
-              }
+              const finalContent = accumulated
+              setMessages((p) => p.map((m) => {
+                if (m.id !== sid) return m
+                return { ...m, content: finalContent, isTyping: true, ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+              }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
             }
@@ -163,6 +163,10 @@ export default function GlobalChatPage() {
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [loading, selectedIds])
+
+  const handleTypingDone = useCallback((id: string) => {
+    setMessages((p) => p.map((m) => (m.id === id ? { ...m, isTyping: false } : m)))
+  }, [])
 
   const isEmpty = messages.length === 0
   const selectedCount = selectedIds.size
@@ -307,7 +311,7 @@ export default function GlobalChatPage() {
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
                   <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show" layout>
-                    <GlobalChatMessage message={msg} isStreaming={streamingId === msg.id} />
+                    <GlobalChatMessage message={msg} isStreaming={streamingId === msg.id} onTypingDone={handleTypingDone} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -373,9 +377,42 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
   )
 }
 
-function GlobalChatMessage({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
+function normalizeMarkdown(text: string): string {
+  return text
+    .split('\n')
+    .map(line => line.replace(/^(\s*)•\s+/, '$1- '))
+    .join('\n')
+}
+
+function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
+  message: Message
+  isStreaming?: boolean
+  onTypingDone?: (id: string) => void
+}) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
+  const [displayed, setDisplayed] = useState(message.isTyping ? '' : message.content)
+
+  useEffect(() => {
+    if (!message.isTyping) {
+      setDisplayed(message.content)
+      return
+    }
+    const full = message.content
+    if (!full) return
+    const speed = Math.max(2, Math.min(20, 2000 / full.length))
+    let i = 0
+    setDisplayed('')
+    const iv = setInterval(() => {
+      i++
+      setDisplayed(full.slice(0, i))
+      if (i >= full.length) {
+        clearInterval(iv)
+        onTypingDone?.(message.id)
+      }
+    }, speed)
+    return () => clearInterval(iv)
+  }, [message.id, message.isTyping]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -397,8 +434,8 @@ function GlobalChatMessage({ message, isStreaming }: { message: Message; isStrea
           ))
         ) : (
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            {isStreaming && (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeMarkdown(displayed)}</ReactMarkdown>
+            {message.isTyping && (
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
                 transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}

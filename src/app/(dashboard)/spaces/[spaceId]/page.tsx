@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
-interface Message { id: string; role: MessageRole; content: string; createdAt: string }
+interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number }
 interface DocDetail extends Doc {
   keyNumbers: string[] | null
@@ -182,12 +182,12 @@ export default function SpacePage() {
               setMessages((p) => p.map((m) => (m.id === tempUserId ? { ...m, id: event.userMessageId } : m)))
             } else if (event.type === 'delta') {
               accumulated += event.content
-              const snap = accumulated
-              setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: snap } : m)))
             } else if (event.type === 'done') {
-              if (event.assistantMessageId) {
-                setMessages((p) => p.map((m) => (m.id === sid ? { ...m, id: event.assistantMessageId } : m)))
-              }
+              const finalContent = accumulated
+              setMessages((p) => p.map((m) => {
+                if (m.id !== sid) return m
+                return { ...m, content: finalContent, isTyping: true, ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+              }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
             }
@@ -242,6 +242,10 @@ export default function SpacePage() {
     setStreamingMessageId(null)
     setLoading(false)
   }
+
+  const handleTypingDone = useCallback((id: string) => {
+    setMessages((p) => p.map((m) => (m.id === id ? { ...m, isTyping: false } : m)))
+  }, [])
 
   const fetchDocs = useCallback(async () => {
     const res = await fetch(`/api/documents?spaceId=${spaceId}`)
@@ -483,7 +487,7 @@ export default function SpacePage() {
                   <AnimatePresence initial={false}>
                     {messages.map((msg) => (
                       <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show" layout>
-                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} />
+                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onTypingDone={handleTypingDone} />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -936,9 +940,42 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
   )
 }
 
-function ChatMessage({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
+function normalizeMarkdown(text: string): string {
+  return text
+    .split('\n')
+    .map(line => line.replace(/^(\s*)•\s+/, '$1- '))
+    .join('\n')
+}
+
+function ChatMessage({ message, isStreaming, onTypingDone }: {
+  message: Message
+  isStreaming?: boolean
+  onTypingDone?: (id: string) => void
+}) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
+  const [displayed, setDisplayed] = useState(message.isTyping ? '' : message.content)
+
+  useEffect(() => {
+    if (!message.isTyping) {
+      setDisplayed(message.content)
+      return
+    }
+    const full = message.content
+    if (!full) return
+    const speed = Math.max(2, Math.min(20, 2000 / full.length))
+    let i = 0
+    setDisplayed('')
+    const iv = setInterval(() => {
+      i++
+      setDisplayed(full.slice(0, i))
+      if (i >= full.length) {
+        clearInterval(iv)
+        onTypingDone?.(message.id)
+      }
+    }, speed)
+    return () => clearInterval(iv)
+  }, [message.id, message.isTyping]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -959,10 +996,9 @@ function ChatMessage({ message, isStreaming }: { message: Message; isStreaming?:
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))
         ) : (
-          // Always render markdown — no plain-text intermediate state that causes a flash on completion
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            {isStreaming && (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeMarkdown(displayed)}</ReactMarkdown>
+            {message.isTyping && (
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
                 transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
