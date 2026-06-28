@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { documents, documentChunks } from '@/lib/db/schema'
-import { extractText } from '@/lib/parsers'
-import { chunkText } from '@/lib/utils/chunking'
+import { parseDocument, extractText } from '@/lib/parsers'
+import { chunkText, chunkTable } from '@/lib/utils/chunking'
 import { sanitizeForPrompt } from '@/lib/utils/sanitize'
 import { mistral, EXTRACT_MODEL, EMBED_MODEL } from './provider'
 import { documentProcessingPrompt } from './prompts'
@@ -31,6 +31,16 @@ interface ExtractedData {
   importantDates: string[]
 }
 
+// Detect if a prose chunk is financially dense (numbers/currency)
+function isFinancialChunk(text: string): boolean {
+  const matches = text.match(/[\d,.]+\s*(%|AED|USD|EUR|GBP|SAR|\$|€|£)/g) ?? []
+  return matches.length >= 3
+}
+
+function containsAnyNumbers(text: string): boolean {
+  return /\d{2,}/.test(text)
+}
+
 export async function processDocumentFromBuffer(
   documentId: string,
   buffer: Buffer,
@@ -50,44 +60,74 @@ export async function processDocumentFromBuffer(
 
     if (!doc) throw new Error('Document not found')
 
-    // 1. Extract text from buffer
-    const rawText = await extractText(buffer, fileType)
-    const safeText = sanitizeForPrompt(rawText)
+    // 1. Parse document — structured for xlsx/csv, prose for pdf/docx
+    const parsed = await parseDocument(buffer, fileType)
 
-    if (!safeText.trim()) throw new Error('No text could be extracted from document')
+    // 2. AI extraction always uses flat text (needs prose for JSON summary)
+    const flatText = await extractText(buffer, fileType)
+    const safeFlat = sanitizeForPrompt(flatText)
+    if (!safeFlat.trim()) throw new Error('No text could be extracted from document')
+    const extracted = await extractDocumentData(doc.name, safeFlat)
 
-    // 2. AI extraction (summary, risks, decisions, numbers)
-    const extracted = await extractDocumentData(doc.name, safeText)
+    // 3. Build chunks — table path or prose path
+    interface ChunkRecord {
+      content: string
+      chunkType: 'prose' | 'table' | 'financial'
+      containsNumbers: boolean
+    }
 
-    // 3. Chunk text
-    const chunks = chunkText(safeText)
+    let allChunks: ChunkRecord[] = []
 
-    // 4. Embed chunks in batches of 50 — prevents Mistral rate limits on large documents
-    if (chunks.length > 0) {
+    if (parsed.tables.length > 0) {
+      // Excel / CSV — use table chunker for each sheet
+      for (const sheet of parsed.tables) {
+        const tableChunks = chunkTable(doc.name, sheet.sheetName, sheet.headers, sheet.rows)
+        for (const tc of tableChunks) {
+          allChunks.push({ content: tc.content, chunkType: 'table', containsNumbers: tc.containsNumbers })
+        }
+      }
+    } else {
+      // PDF / DOCX / text — use prose chunker
+      const safeText = sanitizeForPrompt(parsed.text || flatText)
+      const proseChunks = chunkText(safeText)
+      for (const content of proseChunks) {
+        const financial = isFinancialChunk(content)
+        allChunks.push({
+          content,
+          chunkType: financial ? 'financial' : 'prose',
+          containsNumbers: financial || containsAnyNumbers(content),
+        })
+      }
+    }
+
+    // 4. Embed in batches of 50
+    if (allChunks.length > 0) {
       const BATCH_SIZE = 50
       const embeddings: number[][] = []
 
-      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-        const batch = chunks.slice(i, i + BATCH_SIZE)
+      for (let i = 0; i < allChunks.length; i += BATCH_SIZE) {
+        const batch = allChunks.slice(i, i + BATCH_SIZE)
         const response = await mistral.embeddings.create({
           model: EMBED_MODEL,
-          inputs: batch,
+          inputs: batch.map(c => c.content),
         })
         embeddings.push(...response.data.map((d) => d.embedding ?? []))
       }
 
       // 5. Store chunks + embeddings
       await db.insert(documentChunks).values(
-        chunks.map((content, index) => ({
+        allChunks.map((chunk, index) => ({
           documentId,
-          content,
+          content: chunk.content,
           chunkIndex: index,
+          chunkType: chunk.chunkType,
+          containsNumbers: chunk.containsNumbers,
           embedding: embeddings[index] ?? [],
         }))
       )
     }
 
-    // 6. Update document with extracted data and mark ready
+    // 6. Mark ready with extracted metadata
     await db
       .update(documents)
       .set({
@@ -132,14 +172,14 @@ export async function processDocumentFromText(
     if (!safeText.trim()) throw new Error('No text provided')
 
     const extracted = await extractDocumentData(doc.name, safeText)
-    const chunks = chunkText(safeText)
+    const proseChunks = chunkText(safeText)
 
-    if (chunks.length > 0) {
+    if (proseChunks.length > 0) {
       const BATCH_SIZE = 50
       const embeddings: number[][] = []
 
-      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-        const batch = chunks.slice(i, i + BATCH_SIZE)
+      for (let i = 0; i < proseChunks.length; i += BATCH_SIZE) {
+        const batch = proseChunks.slice(i, i + BATCH_SIZE)
         const response = await mistral.embeddings.create({
           model: EMBED_MODEL,
           inputs: batch,
@@ -148,12 +188,17 @@ export async function processDocumentFromText(
       }
 
       await db.insert(documentChunks).values(
-        chunks.map((content, index) => ({
-          documentId,
-          content,
-          chunkIndex: index,
-          embedding: embeddings[index] ?? [],
-        }))
+        proseChunks.map((content, index) => {
+          const financial = isFinancialChunk(content)
+          return {
+            documentId,
+            content,
+            chunkIndex: index,
+            chunkType: (financial ? 'financial' : 'prose') as 'financial' | 'prose',
+            containsNumbers: financial || containsAnyNumbers(content),
+            embedding: embeddings[index] ?? [],
+          }
+        })
       )
     }
 

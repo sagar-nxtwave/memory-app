@@ -92,6 +92,7 @@ export default function SpacePage() {
   const [docSheet, setDocSheet] = useState<Doc | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
   const [chatLoading, setChatLoading] = useState(true)
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -334,6 +335,22 @@ export default function SpacePage() {
     }
   }
 
+  async function reprocessAll() {
+    setReprocessing(true)
+    try {
+      const res = await fetch(`/api/spaces/${spaceId}/reprocess`, { method: 'POST' })
+      if (res.ok) {
+        const { queued } = await res.json()
+        if (queued > 0) {
+          // Poll docs list — they'll flip to 'processing' then 'ready' as background jobs complete
+          setTimeout(() => fetchDocs(), 1500)
+        }
+      }
+    } finally {
+      setReprocessing(false)
+    }
+  }
+
   async function openDocInsights(docId: string) {
     setLoadingDocDetail(true)
     setSelectedDoc(null)
@@ -479,8 +496,21 @@ export default function SpacePage() {
           {/* DOCUMENTS */}
           {view === 'documents' && (
             <motion.div key="documents" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
-              <div className="mb-5">
+              <div className="mb-5 flex items-center justify-between">
                 <h2 className="font-semibold text-gray-900 dark:text-white">Documents</h2>
+                {docs.length > 0 && (
+                  <button
+                    onClick={reprocessAll}
+                    disabled={reprocessing}
+                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 transition-colors flex items-center gap-1"
+                    title="Re-chunk all documents with latest AI settings"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    {reprocessing ? 'Queuing…' : 'Reprocess all'}
+                  </button>
+                )}
               </div>
               {docsLoading && <ListSkeleton />}
               {docsLoading ? null : <>

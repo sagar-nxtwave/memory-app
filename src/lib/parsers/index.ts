@@ -1,20 +1,43 @@
 import type { DocumentType } from '@/types'
 
-export async function extractText(
+export interface TableSheet {
+  sheetName: string
+  headers: string[]
+  rows: string[][]
+}
+
+export interface ParsedDocument {
+  text: string          // prose content (pdf, docx, text paste)
+  tables: TableSheet[]  // structured sheets (xlsx, csv)
+  fileType: DocumentType
+}
+
+export async function parseDocument(
   buffer: Buffer,
   fileType: DocumentType
-): Promise<string> {
+): Promise<ParsedDocument> {
   switch (fileType) {
     case 'pdf':
-      return extractPdf(buffer)
+      return { text: await extractPdf(buffer), tables: [], fileType }
     case 'docx':
-      return extractDocx(buffer)
+      return { text: await extractDocx(buffer), tables: [], fileType }
     case 'xlsx':
-      return extractExcel(buffer)
+      return { text: '', tables: await extractExcelStructured(buffer), fileType }
     case 'csv':
-      return extractCsv(buffer)
+      return { text: '', tables: [await extractCsvStructured(buffer)], fileType }
     default:
       throw new Error(`Unsupported file type: ${fileType}`)
+  }
+}
+
+// Legacy flat-text extraction — still used by extractDocumentData() for AI summarisation
+export async function extractText(buffer: Buffer, fileType: DocumentType): Promise<string> {
+  switch (fileType) {
+    case 'pdf':   return extractPdf(buffer)
+    case 'docx':  return extractDocx(buffer)
+    case 'xlsx':  return extractExcelFlat(buffer)
+    case 'csv':   return buffer.toString('utf-8')
+    default:      throw new Error(`Unsupported file type: ${fileType}`)
   }
 }
 
@@ -30,22 +53,63 @@ async function extractDocx(buffer: Buffer): Promise<string> {
   return result.value
 }
 
-async function extractExcel(buffer: Buffer): Promise<string> {
+// Used only for AI extraction summary (needs flat string)
+async function extractExcelFlat(buffer: Buffer): Promise<string> {
   const XLSX = await import('xlsx')
   const workbook = XLSX.read(buffer, { type: 'buffer' })
   const lines: string[] = []
-
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName]
     const csv = XLSX.utils.sheet_to_csv(sheet)
     lines.push(`[Sheet: ${sheetName}]\n${csv}`)
   }
-
   return lines.join('\n\n')
 }
 
-async function extractCsv(buffer: Buffer): Promise<string> {
-  return buffer.toString('utf-8')
+// Structured extraction — returns typed rows per sheet
+async function extractExcelStructured(buffer: Buffer): Promise<TableSheet[]> {
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const sheets: TableSheet[] = []
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName]
+    // sheet_to_json with header:1 gives string[][] where row[0] is headers
+    const rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' })
+
+    // Skip completely empty sheets
+    if (rawRows.length === 0) continue
+
+    // First non-empty row is treated as headers
+    const headers = rawRows[0].map(h => String(h ?? '').trim())
+    if (headers.every(h => h === '')) continue
+
+    const dataRows = rawRows
+      .slice(1)
+      .filter(row => row.some(cell => String(cell ?? '').trim() !== ''))
+      .map(row => row.map(cell => String(cell ?? '').trim()))
+
+    if (dataRows.length === 0) continue
+
+    sheets.push({ sheetName, headers, rows: dataRows })
+  }
+
+  return sheets
+}
+
+async function extractCsvStructured(buffer: Buffer): Promise<TableSheet> {
+  const text = buffer.toString('utf-8')
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+
+  if (lines.length === 0) return { sheetName: 'Sheet1', headers: [], rows: [] }
+
+  const parseRow = (line: string): string[] =>
+    line.split(',').map(cell => cell.replace(/^"|"$/g, '').trim())
+
+  const headers = parseRow(lines[0])
+  const rows = lines.slice(1).map(parseRow).filter(row => row.some(c => c !== ''))
+
+  return { sheetName: 'Sheet1', headers, rows }
 }
 
 export function detectFileType(filename: string): DocumentType {

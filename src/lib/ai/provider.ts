@@ -21,6 +21,51 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   return response.data.map((d) => d.embedding ?? [])
 }
 
+export const RERANK_MODEL = 'mistral-rerank-latest'
+
+/**
+ * Rerank chunks by relevance to the query using Mistral's cross-encoder.
+ * Returns chunks sorted by rerank score descending, limited to topN.
+ * Falls back to original order silently if rerank API fails.
+ */
+export async function rerankChunks<T extends { content: string }>(
+  query: string,
+  chunks: T[],
+  topN: number
+): Promise<T[]> {
+  if (chunks.length === 0) return []
+  if (chunks.length <= 1) return chunks.slice(0, topN)
+
+  try {
+    const response = await fetch('https://api.mistral.ai/v1/rerank', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: RERANK_MODEL,
+        query,
+        documents: chunks.map(c => c.content),
+        top_n: topN,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('[rerank] API error:', response.status, await response.text().catch(() => ''))
+      return chunks.slice(0, topN)
+    }
+
+    const data = await response.json()
+    const results: { index: number; relevance_score: number }[] = data.results ?? []
+
+    return results.map(r => chunks[r.index]).filter(Boolean)
+  } catch (err) {
+    console.error('[rerank] Failed, falling back to vector order:', err)
+    return chunks.slice(0, topN)
+  }
+}
+
 // ── Chat: OpenRouter ────────────────────────────────────────────────────────
 // Switch models by setting OPENROUTER_CHAT_MODEL in .env.local.
 // Recommended: anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)

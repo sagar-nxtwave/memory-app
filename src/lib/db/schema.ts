@@ -6,6 +6,7 @@ import {
   integer,
   bigint,
   jsonb,
+  boolean,
   pgEnum,
   index,
   customType,
@@ -112,6 +113,9 @@ export const documents = pgTable('documents', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
+// chunk_type: 'prose' = normal text, 'table' = structured rows from xlsx/csv
+export const chunkTypeEnum = pgEnum('chunk_type', ['prose', 'table', 'financial'])
+
 // Document chunks (RAG)
 export const documentChunks = pgTable(
   'document_chunks',
@@ -122,6 +126,8 @@ export const documentChunks = pgTable(
       .references(() => documents.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
     chunkIndex: integer('chunk_index').notNull(),
+    chunkType: chunkTypeEnum('chunk_type').notNull().default('prose'),
+    containsNumbers: boolean('contains_numbers').notNull().default(false),
     embedding: vector('embedding', { dimensions: 1024 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },

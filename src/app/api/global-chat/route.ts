@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { spaceMembers, spaces, globalMessages } from '@/lib/db/schema'
-import { generateEmbedding, chatStream } from '@/lib/ai/provider'
+import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 
@@ -82,17 +82,22 @@ export async function POST(req: NextRequest) {
     const embeddingStr = `[${queryEmbedding.join(',')}]`
     const spaceIdsSQL = sql.join(spaceIds.map((id) => sql`${id}::uuid`), sql`, `)
     const chunks = await db.execute(sql`
-      SELECT dc.content, d.name as document_name, s.name as space_name
+      SELECT dc.content, d.name as document_name, s.name as space_name,
+             1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
       FROM document_chunks dc
       INNER JOIN documents d ON d.id = dc.document_id
       INNER JOIN spaces s ON s.id = d.space_id
       WHERE d.space_id IN (${spaceIdsSQL})
         AND d.status = 'ready'
         AND dc.embedding IS NOT NULL
+        AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.45
       ORDER BY dc.embedding <=> ${embeddingStr}::vector
-      LIMIT 10
+      LIMIT 12
     `)
-    contextText = (chunks as unknown as { content: string; document_name: string; space_name: string }[])
+    const rawChunks = chunks as unknown as { content: string; document_name: string; space_name: string }[]
+    const reranked = await rerankChunks(content, rawChunks, 8)
+
+    contextText = reranked
       .map((c) => `[${c.space_name} › ${c.document_name}]\n${c.content}`)
       .join('\n\n---\n\n')
   }
