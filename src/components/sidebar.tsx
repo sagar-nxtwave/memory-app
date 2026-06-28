@@ -316,6 +316,14 @@ export function Sidebar() {
         </AnimatePresence>
       </nav>
 
+      {/* OCR coming soon notice */}
+      <div className="shrink-0 mx-3 mb-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 flex items-start gap-2">
+        <span className="text-amber-500 dark:text-amber-400 shrink-0 mt-px text-xs">⚠</span>
+        <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+          Image &amp; scanned PDF support (OCR) coming soon
+        </p>
+      </div>
+
       {/* User footer */}
       <div className="shrink-0 border-t border-gray-100 dark:border-white/5 p-3 mt-1">
         <div className="flex items-center gap-2.5 px-1">

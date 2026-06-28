@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm'
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean }
 interface Space { id: string; name: string }
+interface SpaceDoc { id: string; name: string; fileType: string }
+interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
 
 const msgVariants = {
   hidden: { opacity: 0, y: 10, scale: 0.98 },
@@ -33,8 +35,15 @@ export default function GlobalChatPage() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [responseStyle, setResponseStyle] = useState<'short' | 'detailed'>('short')
 
+  const [mentionChips, setMentionChips] = useState<MentionChip[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStage, setMentionStage] = useState<'space' | 'doc'>('space')
+  const [mentionSpaceCtx, setMentionSpaceCtx] = useState<{ id: string; name: string } | null>(null)
+  const [mentionActiveIdx, setMentionActiveIdx] = useState(0)
+  const [spaceDocs, setSpaceDocs] = useState<Record<string, SpaceDoc[]>>({})
+
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
 
   // Load persisted history + spaces in parallel
@@ -79,6 +88,16 @@ export default function GlobalChatPage() {
     }
   }, [messages, streamingId, historyLoaded])
 
+  function loadSpaceDocs(spaceId: string) {
+    if (spaceDocs[spaceId]) return
+    fetch(`/api/documents?spaceId=${spaceId}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: SpaceDoc[]) => {
+        if (Array.isArray(data))
+          setSpaceDocs((p) => ({ ...p, [spaceId]: data.filter((d) => (d as SpaceDoc & { status: string }).status === 'ready') }))
+      })
+  }
+
   function toggleSpace(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -97,6 +116,9 @@ export default function GlobalChatPage() {
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || loading) return
     setInput('')
+    const chips = mentionChips
+    setMentionChips([])
+    setMentionQuery(null)
     setLoading(true)
 
     const tempUserId = `u-${Date.now()}`
@@ -115,7 +137,8 @@ export default function GlobalChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content,
-          spaceIds: Array.from(selectedIds),
+          spaceIds: chips.length > 0 ? [...new Set(chips.map((c) => c.spaceId))] : Array.from(selectedIds),
+          mentionedDocIds: chips.filter((c) => c.docId).map((c) => c.docId!),
           responseStyle,
         }),
       })
@@ -162,7 +185,7 @@ export default function GlobalChatPage() {
       setLoading(false)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [loading, selectedIds])
+  }, [loading, selectedIds, mentionChips])
 
   const handleTypingDone = useCallback((id: string) => {
     setMessages((p) => p.map((m) => (m.id === id ? { ...m, isTyping: false } : m)))
@@ -328,28 +351,211 @@ export default function GlobalChatPage() {
         className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
       >
         <div className="w-full max-w-2xl mx-auto px-4 pb-5 pt-3">
-          <form onSubmit={(e) => { e.preventDefault(); sendMessage(input) }} className="flex items-center gap-2 w-full">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={`Ask anything across ${selectionLabel.toLowerCase()}`}
-              disabled={loading}
-              className="flex-1 min-w-0 px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50"
-            />
-            <StyleToggle value={responseStyle} onChange={setResponseStyle} />
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+          {/* mention chips */}
+          {mentionChips.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {mentionChips.map((chip, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                  <span>@{chip.spaceName}{chip.docName ? `/${chip.docName}` : ''}</span>
+                  <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="relative">
+            {/* @ mention dropdown */}
+            <AnimatePresence>
+              {mentionQuery !== null && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg overflow-hidden z-50"
+                >
+                  {/* stage label */}
+                  <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                      {mentionStage === 'space' ? 'Select project' : `${mentionSpaceCtx?.name} › Select document`}
+                    </span>
+                    {mentionStage === 'doc' && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery(''); setMentionActiveIdx(0) }}
+                        className="ml-auto text-[11px] text-blue-500 hover:text-blue-600"
+                      >← back</button>
+                    )}
+                  </div>
+                  {(() => {
+                    if (mentionStage === 'space') {
+                      const filtered = spaces.filter((s) =>
+                        s.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                      ).slice(0, 6)
+                      if (filtered.length === 0) return <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">No projects found</div>
+                      return filtered.map((space, idx) => (
+                        <button
+                          key={space.id}
+                          type="button"
+                          onMouseEnter={() => setMentionActiveIdx(idx)}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            // transition to doc stage
+                            const atIdx = input.lastIndexOf('@')
+                            setInput(input.slice(0, atIdx))
+                            setMentionStage('doc')
+                            setMentionSpaceCtx({ id: space.id, name: space.name })
+                            setMentionQuery('')
+                            setMentionActiveIdx(0)
+                            loadSpaceDocs(space.id)
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                        >
+                          <span className="text-sm text-gray-900 dark:text-white truncate font-medium">{space.name}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto shrink-0 text-gray-400"><path d="M9 18l6-6-6-6"/></svg>
+                        </button>
+                      ))
+                    } else {
+                      const docs = mentionSpaceCtx ? (spaceDocs[mentionSpaceCtx.id] ?? []) : []
+                      const filtered = docs.filter((d) => d.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+                      const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', doc: '📝', xlsx: '📊', xls: '📊', csv: '📊', text: '✏️' }
+                      // option to pin just the space (no specific doc)
+                      const spaceOnlyIdx = 0
+                      const items = [{ id: '__space__', name: `All docs in ${mentionSpaceCtx?.name}`, fileType: '' }, ...filtered]
+                      if (items.length === 1 && docs.length === 0) return <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">Loading…</div>
+                      return items.map((item, idx) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onMouseEnter={() => setMentionActiveIdx(idx)}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            if (!mentionSpaceCtx) return
+                            if (item.id === '__space__') {
+                              setMentionChips((p) => [...p, { spaceId: mentionSpaceCtx.id, spaceName: mentionSpaceCtx.name }])
+                            } else {
+                              setMentionChips((p) => [...p, { spaceId: mentionSpaceCtx.id, spaceName: mentionSpaceCtx.name, docId: item.id, docName: item.name }])
+                            }
+                            setMentionQuery(null)
+                            setMentionStage('space')
+                            setMentionSpaceCtx(null)
+                            setMentionActiveIdx(0)
+                            setTimeout(() => inputRef.current?.focus(), 0)
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                        >
+                          <span className="text-base shrink-0">{item.id === '__space__' ? '🗂️' : (FILE_ICONS[item.fileType] ?? '📄')}</span>
+                          <span className={`text-sm truncate ${item.id === '__space__' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>{item.name}</span>
+                        </button>
+                      ))
+                    }
+                  })()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form
+              onSubmit={(e) => { e.preventDefault(); sendMessage(input) }}
+              className="flex items-center gap-2 w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
             >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
-              <span className="hidden sm:inline text-sm font-medium">Send</span>
-            </motion.button>
-          </form>
+              <button
+                type="button"
+                onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionStage('space'); setMentionQuery(''); setMentionActiveIdx(0) }}
+                disabled={loading}
+                title="Reference a project or document"
+                className="shrink-0 h-7 w-7 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
+              >@</button>
+              <textarea
+                ref={inputRef}
+                value={input}
+                rows={1}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setInput(val)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                  const atIdx = val.lastIndexOf('@')
+                  if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === ' ' || val[atIdx - 1] === '\n')) {
+                    const afterAt = val.slice(atIdx + 1)
+                    const slashIdx = afterAt.indexOf('/')
+                    if (slashIdx === -1) {
+                      setMentionStage('space')
+                      setMentionSpaceCtx(null)
+                      setMentionQuery(afterAt)
+                      setMentionActiveIdx(0)
+                    } else {
+                      const spaceName = afterAt.slice(0, slashIdx)
+                      const match = spaces.find((s) => s.name.toLowerCase() === spaceName.toLowerCase())
+                      if (match) {
+                        setMentionStage('doc')
+                        setMentionSpaceCtx({ id: match.id, name: match.name })
+                        setMentionQuery(afterAt.slice(slashIdx + 1))
+                        setMentionActiveIdx(0)
+                        loadSpaceDocs(match.id)
+                      } else {
+                        setMentionStage('space')
+                        setMentionQuery(afterAt)
+                        setMentionActiveIdx(0)
+                      }
+                    }
+                  } else {
+                    setMentionQuery(null)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (mentionQuery !== null) {
+                    const list = mentionStage === 'space'
+                      ? spaces.filter((s) => s.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+                      : [{ id: '__space__', name: '' }, ...(mentionSpaceCtx ? (spaceDocs[mentionSpaceCtx.id] ?? []) : []).filter((d) => d.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)]
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActiveIdx((i) => Math.min(i + 1, list.length - 1)); return }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActiveIdx((i) => Math.max(i - 1, 0)); return }
+                    if (e.key === 'Enter' && list.length > 0) {
+                      e.preventDefault()
+                      const item = list[mentionActiveIdx] ?? list[0]
+                      if (mentionStage === 'space') {
+                        const atIdx = input.lastIndexOf('@')
+                        setInput(input.slice(0, atIdx))
+                        setMentionStage('doc')
+                        setMentionSpaceCtx({ id: item.id, name: item.name })
+                        setMentionQuery('')
+                        setMentionActiveIdx(0)
+                        loadSpaceDocs(item.id)
+                      } else if (mentionSpaceCtx) {
+                        if (item.id === '__space__') {
+                          setMentionChips((p) => [...p, { spaceId: mentionSpaceCtx.id, spaceName: mentionSpaceCtx.name }])
+                        } else {
+                          setMentionChips((p) => [...p, { spaceId: mentionSpaceCtx.id, spaceName: mentionSpaceCtx.name, docId: item.id, docName: item.name }])
+                        }
+                        setMentionQuery(null); setMentionStage('space'); setMentionSpaceCtx(null); setMentionActiveIdx(0)
+                      }
+                      return
+                    }
+                    if (e.key === 'Escape') { setMentionQuery(null); return }
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
+                }}
+                placeholder={`Ask anything across ${selectionLabel.toLowerCase()}… or @ a project`}
+                disabled={loading}
+                className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
+              />
+              <div className="shrink-0 flex items-center gap-1.5">
+                <StyleToggle value={responseStyle} onChange={setResponseStyle} />
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="h-8 w-8 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                  <span className="hidden sm:inline text-xs font-medium">Send</span>
+                </motion.button>
+              </div>
+            </form>
+          </div>
         </div>
       </motion.div>
     </div>

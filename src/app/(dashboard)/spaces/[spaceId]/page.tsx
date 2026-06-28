@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm'
 type MessageRole = 'user' | 'assistant'
 interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number }
+interface PendingUpload { id: string; file: File; title: string; description: string; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; error?: string }
 interface DocDetail extends Doc {
   keyNumbers: string[] | null
   risks: string[] | null
@@ -27,7 +28,7 @@ const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: st
 }
 type View = 'chat' | 'documents' | 'timeline'
 
-import { parseUtc } from '@/lib/utils/date'
+import { parseUtc, formatDateTime } from '@/lib/utils/date'
 
 const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️' }
 
@@ -78,13 +79,9 @@ export default function SpacePage() {
   const [view, setView] = useState<View>('chat')
   const [docs, setDocs] = useState<Doc[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadingAll, setUploadingAll] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
-  const [pendingTitle, setPendingTitle] = useState('')
-  const [pendingDesc, setPendingDesc] = useState('')
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [docInputMode, setDocInputMode] = useState<'upload' | 'text'>('upload')
   const [pasteTitle, setPasteTitle] = useState('')
   const [pasteContent, setPasteContent] = useState('')
@@ -93,20 +90,29 @@ export default function SpacePage() {
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set())
+  const [deletingSelected, setDeletingSelected] = useState(false)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [chatLoading, setChatLoading] = useState(true)
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
+  const [readyDocs, setReadyDocs] = useState<{ id: string; name: string; fileType: string }[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionedDocIds, setMentionedDocIds] = useState<string[]>([])
+  const [mentionActiveIdx, setMentionActiveIdx] = useState(0)
+  const mentionRef = useRef<HTMLDivElement>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollingRef = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   useEffect(() => {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
     fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
+    fetch(`/api/documents?spaceId=${spaceId}`).then((r) => r.ok ? r.json() : []).then((d: Doc[]) => { if (Array.isArray(d)) setReadyDocs(d.filter((doc) => doc.status === 'ready').map((doc) => ({ id: doc.id, name: doc.name, fileType: doc.fileType }))) })
   }, [spaceId])
 
   useEffect(() => {
@@ -204,6 +210,9 @@ export default function SpacePage() {
   async function sendMessage(content: string) {
     if (!content.trim() || loading) return
     setInput('')
+    const docIds = mentionedDocIds
+    setMentionedDocIds([])
+    setMentionQuery(null)
     setLoading(true)
 
     const tempUserId = `u-${Date.now()}`
@@ -216,7 +225,7 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle }, tempUserId, sid)
+    await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined }, tempUserId, sid)
 
     setStreamingMessageId(null)
     setLoading(false)
@@ -255,48 +264,68 @@ export default function SpacePage() {
     setDocsLoading(false)
   }, [spaceId])
 
-  const stagefile = useCallback((file: File) => {
-    setPendingFile(file)
-    setPendingTitle(file.name.replace(/\.[^.]+$/, ''))
-    setPendingDesc('')
+  const stageFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files)
+    const newItems: PendingUpload[] = arr.map((file) => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file,
+      title: file.name.replace(/\.[^.]+$/, ''),
+      description: '',
+      progress: 0,
+      status: 'queued',
+    }))
+    setPendingUploads((prev) => [...prev, ...newItems])
   }, [])
 
-  const uploadFile = useCallback(async (file: File, customTitle: string, customDesc: string) => {
-    setUploading(true)
-    setUploadProgress(0)
-    setUploadError(null)
-    setPendingFile(null)
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('spaceId', spaceId)
-    if (customTitle.trim()) fd.append('customName', customTitle.trim())
-    if (customDesc.trim()) fd.append('description', customDesc.trim())
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.open('POST', '/api/documents')
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+  const uploadSingleFile = useCallback(async (item: PendingUpload): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const fd = new FormData()
+      fd.append('file', item.file)
+      fd.append('spaceId', spaceId)
+      if (item.title.trim()) fd.append('customName', item.title.trim())
+      if (item.description.trim()) fd.append('description', item.description.trim())
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/documents')
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100)
+          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: pct } : p))
         }
-        xhr.onload = () => {
-          if (xhr.status === 201) { resolve() } else {
-            let msg = 'Upload failed'
-            try { msg = JSON.parse(xhr.responseText).error ?? msg } catch {}
-            reject(new Error(msg))
-          }
+      }
+      xhr.onload = () => {
+        if (xhr.status === 201) {
+          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'done', progress: 100 } : p))
+          resolve(true)
+        } else {
+          let msg = 'Upload failed'
+          try { msg = JSON.parse(xhr.responseText).error ?? msg } catch {}
+          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'error', error: msg } : p))
+          resolve(false)
         }
-        xhr.onerror = () => reject(new Error('Network error — check your connection and try again.'))
-        xhr.send(fd)
-      })
-      await fetchDocs()
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Upload failed')
-      setPendingFile(file)
-    } finally {
-      setUploading(false)
-      setUploadProgress(0)
+      }
+      xhr.onerror = () => {
+        setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'error', error: 'Network error' } : p))
+        resolve(false)
+      }
+      setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'uploading' } : p))
+      xhr.send(fd)
+    })
+  }, [spaceId])
+
+  const uploadAll = useCallback(async () => {
+    const queued = pendingUploads.filter((p) => p.status === 'queued' || p.status === 'error')
+    if (queued.length === 0) return
+    setUploadingAll(true)
+    for (const item of queued) {
+      await uploadSingleFile(item)
     }
-  }, [spaceId, fetchDocs])
+    await fetchDocs()
+    // Remove successfully uploaded items after a short delay
+    setTimeout(() => {
+      setPendingUploads((prev) => prev.filter((p) => p.status !== 'done'))
+    }, 1500)
+    setUploadingAll(false)
+  }, [pendingUploads, uploadSingleFile, fetchDocs])
 
   async function pasteText() {
     if (!pasteTitle.trim() || !pasteContent.trim()) return
@@ -317,6 +346,14 @@ export default function SpacePage() {
     await fetch(`/api/documents/${docId}`, { method: 'DELETE' })
     setDocs((prev) => prev.filter((d) => d.id !== docId))
     setDocSheet(null)
+  }
+
+  async function deleteSelected() {
+    setDeletingSelected(true)
+    await Promise.allSettled([...selectedDocIds].map((id) => fetch(`/api/documents/${id}`, { method: 'DELETE' })))
+    setDocs((prev) => prev.filter((d) => !selectedDocIds.has(d.id)))
+    setSelectedDocIds(new Set())
+    setDeletingSelected(false)
   }
 
   async function retryDoc(docId: string) {
@@ -539,91 +576,116 @@ export default function SpacePage() {
               <AnimatePresence mode="wait">
                 {docInputMode === 'upload' ? (
                   <motion.div key="upload-area" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                    {/* Drop zone */}
                     <motion.div
-                      onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) stagefile(f) }}
+                      onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length > 0) stageFiles(e.dataTransfer.files) }}
                       onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                       onDragLeave={() => setDragOver(false)}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-5 ${
+                      className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-4 ${
                         dragOver
                           ? 'border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-800/50 scale-[1.01]'
                           : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-900/50'
                       }`}
                     >
-                      <AnimatePresence mode="wait">
-                        {uploading ? (
-                          <motion.div key="uploading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }} className="text-2xl inline-block mb-2">⏳</motion.div>
-                            <p className="text-sm text-gray-900 dark:text-gray-400 font-medium">
-                              {uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Processing…'}
-                            </p>
-                            <div className="w-32 mx-auto mt-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <motion.div
-                                className="h-full bg-gray-900 dark:bg-gray-300 rounded-full"
-                                animate={{ width: `${uploadProgress < 100 ? uploadProgress : 100}%` }}
-                                transition={{ duration: 0.3 }}
-                              />
-                            </div>
-                          </motion.div>
-                        ) : (
-                          <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <div className="text-3xl mb-3">📎</div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop a file or click to upload</p>
-                            <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 100MB</p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      <div className="text-3xl mb-3">📎</div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop files or click to upload</p>
+                      <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 500MB each</p>
                     </motion.div>
-                    <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) stagefile(f); e.target.value = '' }} />
+                    <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
+                      onChange={(e) => { if (e.target.files && e.target.files.length > 0) stageFiles(e.target.files); e.target.value = '' }} />
+
+                    {/* Upload queue */}
                     <AnimatePresence>
-                      {pendingFile && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 8 }}
-                          className="mt-4 space-y-3 p-4 border border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-900"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{FILE_ICONS[pendingFile.name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'}</span>
-                            <p className="text-xs text-gray-900 dark:text-gray-400 truncate">{pendingFile.name} · {fmt(pendingFile.size)}</p>
-                          </div>
-                          <input
-                            type="text"
-                            value={pendingTitle}
-                            onChange={(e) => setPendingTitle(e.target.value)}
-                            placeholder="Document title"
-                            className="w-full px-3.5 py-2.5 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
-                          />
-                          <input
-                            type="text"
-                            value={pendingDesc}
-                            onChange={(e) => setPendingDesc(e.target.value)}
-                            placeholder="Short description (optional)"
-                            className="w-full px-3.5 py-2.5 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
-                          />
-                          {uploadError && (
-                            <div className="px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                              <p className="text-xs text-red-600 dark:text-red-400 font-medium">Upload failed</p>
-                              <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{uploadError}</p>
+                      {pendingUploads.length > 0 && (
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} className="space-y-2 mb-4">
+                          {pendingUploads.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-900">
+                              <span className="text-xl shrink-0">{FILE_ICONS[item.file.name.split('.').pop()?.toLowerCase() ?? ''] ?? '📄'}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 group/title">
+                                  <input
+                                    type="text"
+                                    value={item.title}
+                                    onChange={(e) => setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, title: e.target.value } : p))}
+                                    disabled={item.status === 'uploading' || item.status === 'done'}
+                                    placeholder="Document title"
+                                    className="flex-1 min-w-0 text-sm font-medium text-gray-900 dark:text-white bg-transparent outline-none border-b border-gray-200 dark:border-gray-700 focus:border-gray-400 dark:focus:border-gray-500 transition-colors pb-0.5 disabled:opacity-60"
+                                  />
+                                  {item.status === 'queued' && (
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-400 dark:text-gray-600 group-focus-within/title:text-gray-500 transition-colors">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    </svg>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 group/desc mt-1">
+                                  <input
+                                    type="text"
+                                    value={item.description}
+                                    onChange={(e) => setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, description: e.target.value } : p))}
+                                    disabled={item.status === 'uploading' || item.status === 'done'}
+                                    placeholder="Add a description (optional)"
+                                    className="flex-1 min-w-0 text-xs text-gray-500 dark:text-gray-400 bg-transparent outline-none border-b border-gray-100 dark:border-gray-800 focus:border-gray-300 dark:focus:border-gray-600 transition-colors pb-0.5 disabled:opacity-60 placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                                  />
+                                  {item.status === 'queued' && (
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-300 dark:text-gray-700 group-focus-within/desc:text-gray-400 transition-colors">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    </svg>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">{fmt(item.file.size)}</p>
+                                {item.status === 'uploading' && (
+                                  <div className="mt-1.5 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <motion.div className="h-full bg-gray-900 dark:bg-gray-300 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.3 }} />
+                                  </div>
+                                )}
+                                {item.status === 'error' && (
+                                  <p className="text-xs text-red-400 mt-0.5">{item.error}</p>
+                                )}
+                              </div>
+                              <div className="shrink-0">
+                                {item.status === 'done' && <span className="text-emerald-500 text-sm">✓</span>}
+                                {item.status === 'uploading' && (
+                                  <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="text-xs text-amber-500">{item.progress}%</motion.span>
+                                )}
+                                {(item.status === 'queued' || item.status === 'error') && !uploadingAll && (
+                                  <button
+                                    onClick={() => setPendingUploads((prev) => prev.filter((p) => p.id !== item.id))}
+                                    className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          )}
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => { setPendingFile(null); setUploadError(null) }}
-                              className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <motion.button
-                              whileTap={{ scale: 0.97 }}
-                              onClick={() => { setUploadError(null); const f = pendingFile; if (f) uploadFile(f, pendingTitle, pendingDesc) }}
-                              disabled={!pendingTitle.trim()}
-                              className="flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
-                            >
-                              {uploadError ? 'Retry' : 'Upload & process'}
-                            </motion.button>
-                          </div>
+                          ))}
+
+                          {/* Upload all / clear done */}
+                          {(() => {
+                            const queued = pendingUploads.filter((p) => p.status === 'queued' || p.status === 'error')
+                            const allDone = pendingUploads.every((p) => p.status === 'done')
+                            if (allDone) return null
+                            return (
+                              <div className="flex gap-2 pt-1">
+                                {!uploadingAll && (
+                                  <button
+                                    onClick={() => setPendingUploads([])}
+                                    className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                                <motion.button
+                                  whileTap={{ scale: 0.97 }}
+                                  onClick={uploadAll}
+                                  disabled={uploadingAll || queued.length === 0}
+                                  className="flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+                                >
+                                  {uploadingAll ? 'Uploading…' : queued.length === 1 ? 'Upload & process' : `Upload ${queued.length} files`}
+                                </motion.button>
+                              </div>
+                            )
+                          })()}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -661,55 +723,99 @@ export default function SpacePage() {
                   No documents yet. Upload one to get started.
                 </motion.p>
               ) : (
-                <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-1">
-                  {docs.map((doc, i) => {
-                    const isReady = doc.status === 'ready'
-                    return (
-                      <motion.div key={doc.id} custom={i} variants={cardVariants}
-                        className={`flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
-                          isReady ? 'hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer' : ''
-                        }`}
-                        onClick={() => { if (isReady) setDocSheet(doc) }}
-                      >
-                        <span className="text-2xl shrink-0 mt-0.5">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{doc.name}</p>
-                          {doc.status === 'ready' && doc.summary && (
-                            <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
-                          )}
-                          {doc.status === 'failed' && doc.failureReason && (
-                            <p className="text-xs text-red-400 dark:text-red-400 mt-0.5 line-clamp-2">{doc.failureReason}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            {doc.status === 'processing' || doc.status === 'pending' ? (
-                              <ProcessingStatusBadge status={doc.status} />
-                            ) : (
-                              <span className={`text-xs font-medium ${STATUS_COLOR[doc.status]}`}>
-                                {doc.status === 'ready' ? 'Ready' : 'Failed'}
-                              </span>
-                            )}
-                            <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
-                            <span className="text-xs text-gray-900 dark:text-gray-400">{fmt(doc.fileSize)}</span>
-                          </div>
-                        </div>
-                        <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-xs text-gray-900 dark:text-gray-500">
-                            {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
+                <>
+                  <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-1">
+                    {docs.map((doc, i) => {
+                      const isReady = doc.status === 'ready'
+                      const isChecked = selectedDocIds.has(doc.id)
+                      return (
+                        <motion.div key={doc.id} custom={i} variants={cardVariants}
+                          className={`flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
+                            isChecked ? 'bg-red-50 dark:bg-red-900/10' : isReady ? 'hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer' : ''
+                          }`}
+                          onClick={() => { if (!selectedDocIds.size && isReady) setDocSheet(doc) }}
+                        >
+                          {/* Checkbox — always visible */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
-                            className="p-1.5 text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
-                            title="More options"
+                            onClick={(e) => { e.stopPropagation(); setSelectedDocIds((prev) => { const next = new Set(prev); next.has(doc.id) ? next.delete(doc.id) : next.add(doc.id); return next }) }}
+                            className={`shrink-0 mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-red-500 border-red-500' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-400'}`}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                              <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
-                            </svg>
+                            {isChecked && (
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"/>
+                              </svg>
+                            )}
                           </button>
-                        </div>
+
+                          <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={() => { if (selectedDocIds.size > 0) { setSelectedDocIds((prev) => { const next = new Set(prev); next.has(doc.id) ? next.delete(doc.id) : next.add(doc.id); return next }) } else if (isReady) setDocSheet(doc) }}
+                          >
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{doc.name}</p>
+                            {doc.status === 'ready' && doc.summary && (
+                              <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
+                            )}
+                            {doc.status === 'failed' && doc.failureReason && (
+                              <p className="text-xs text-red-400 mt-0.5 line-clamp-2">{doc.failureReason}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              {doc.status === 'processing' || doc.status === 'pending' ? (
+                                <ProcessingStatusBadge status={doc.status} />
+                              ) : (
+                                <span className={`text-xs font-medium ${STATUS_COLOR[doc.status]}`}>
+                                  {doc.status === 'ready' ? 'Ready' : 'Failed'}
+                                </span>
+                              )}
+                              <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
+                              <span className="text-xs text-gray-900 dark:text-gray-400">{fmt(doc.fileSize)}</span>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-xs text-gray-900 dark:text-gray-500">{formatDateTime(doc.createdAt)}</span>
+                            {!isChecked && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
+                                className="p-1.5 text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
+                                title="More options"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                  <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </motion.div>
+
+                  {/* Delete bar — appears when anything is selected */}
+                  <AnimatePresence>
+                    {selectedDocIds.size > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 12 }}
+                        className="sticky bottom-4 mt-4 flex gap-2"
+                      >
+                        <button
+                          onClick={() => setSelectedDocIds(new Set())}
+                          className="flex-1 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                        >
+                          Cancel
+                        </button>
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setConfirmBulkDelete(true)}
+                          className="flex-[2] py-3 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-2xl transition-colors shadow-sm"
+                        >
+                          Delete ({selectedDocIds.size})
+                        </motion.button>
                       </motion.div>
-                    )
-                  })}
-                </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
               )}
               </>}
             </motion.div>
@@ -756,7 +862,7 @@ export default function SpacePage() {
                               </p>
                             </div>
                             <span className="text-[10px] text-gray-900 dark:text-gray-500 shrink-0 pt-0.5 whitespace-nowrap">
-                              {parseUtc(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {formatDateTime(ev.date)}
                             </span>
                           </div>
                         </motion.div>
@@ -811,37 +917,201 @@ export default function SpacePage() {
                 ].map(({ label, action }) => (
                   <motion.button key={label} whileTap={{ scale: 0.94 }} onClick={action}
                     disabled={loading}
-                    className="shrink-0 px-3.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white rounded-xl transition-colors whitespace-nowrap disabled:opacity-40">
+                    className="shrink-0 px-3.5 py-2 text-xs font-medium text-gray-700 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-transparent rounded-xl transition-colors whitespace-nowrap disabled:opacity-40">
                     {label}
                   </motion.button>
                 ))}
               </div>
             )}
 
-            <form onSubmit={(e) => { e.preventDefault(); sendMessage(input) }} className="flex items-center gap-2 w-full">
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask anything…"
-                disabled={loading}
-                className="flex-1 min-w-0 px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50"
-              />
-              <StyleToggle value={responseStyle} onChange={setResponseStyle} />
-              <motion.button
-                whileTap={{ scale: 0.92 }}
-                type="submit" disabled={loading || !input.trim()}
-                className="shrink-0 h-12 w-12 sm:h-auto sm:w-auto sm:px-5 sm:py-3 flex items-center justify-center gap-2 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+            {/* @ mention chips */}
+            {mentionedDocIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {mentionedDocIds.map((id) => {
+                  const doc = readyDocs.find((d) => d.id === id)
+                  if (!doc) return null
+                  return (
+                    <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                      <span>@{doc.name}</span>
+                      <button onClick={() => setMentionedDocIds((p) => p.filter((x) => x !== id))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* @ mention dropdown */}
+            <div className="relative">
+              <AnimatePresence>
+                {mentionQuery !== null && (
+                  <motion.div
+                    ref={mentionRef}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg overflow-hidden z-50"
+                  >
+                    {(() => {
+                      const filtered = readyDocs.filter((d) =>
+                        !mentionedDocIds.includes(d.id) &&
+                        d.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                      )
+                      if (filtered.length === 0) return (
+                        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">No documents found</div>
+                      )
+                      return filtered.slice(0, 6).map((doc, idx) => (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onMouseEnter={() => setMentionActiveIdx(idx)}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            const atIdx = input.lastIndexOf('@')
+                            setInput(input.slice(0, atIdx))
+                            setMentionedDocIds((p) => p.includes(doc.id) ? p : [...p, doc.id])
+                            setMentionQuery(null)
+                            setMentionActiveIdx(0)
+                            setTimeout(() => inputRef.current?.focus(), 0)
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                        >
+                          <span className="text-base shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
+                          <span className="text-sm text-gray-900 dark:text-white truncate">{doc.name}</span>
+                        </button>
+                      ))
+                    })()}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form
+                onSubmit={(e) => { e.preventDefault(); sendMessage(input) }}
+                className="flex items-center gap-2 w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                </svg>
-                <span className="hidden sm:inline text-sm font-medium">Send</span>
-              </motion.button>
-            </form>
+                <button
+                  type="button"
+                  onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionQuery('') }}
+                  disabled={loading || readyDocs.length === 0}
+                  title="Reference a document"
+                  className="shrink-0 h-7 w-7 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
+                >@</button>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  rows={1}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setInput(val)
+                    e.target.style.height = 'auto'
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                    const atIdx = val.lastIndexOf('@')
+                    if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === ' ' || val[atIdx - 1] === '\n')) {
+                      setMentionQuery(val.slice(atIdx + 1)); setMentionActiveIdx(0)
+                    } else {
+                      setMentionQuery(null)
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (mentionQuery !== null) {
+                      const filtered = readyDocs.filter((d) =>
+                        !mentionedDocIds.includes(d.id) &&
+                        d.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                      ).slice(0, 6)
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setMentionActiveIdx((i) => Math.min(i + 1, filtered.length - 1))
+                        return
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setMentionActiveIdx((i) => Math.max(i - 1, 0))
+                        return
+                      }
+                      if (e.key === 'Enter' && filtered.length > 0) {
+                        e.preventDefault()
+                        const doc = filtered[mentionActiveIdx] ?? filtered[0]
+                        const atIdx = input.lastIndexOf('@')
+                        setInput(input.slice(0, atIdx))
+                        setMentionedDocIds((p) => p.includes(doc.id) ? p : [...p, doc.id])
+                        setMentionQuery(null)
+                        setMentionActiveIdx(0)
+                        return
+                      }
+                      if (e.key === 'Escape') { setMentionQuery(null); return }
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
+                  }}
+                  placeholder={readyDocs.length > 0 ? 'Ask anything… or @ a doc' : 'Ask anything…'}
+                  disabled={loading}
+                  className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
+                />
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <StyleToggle value={responseStyle} onChange={setResponseStyle} />
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    type="submit" disabled={loading || !input.trim()}
+                    className="h-8 w-8 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                    </svg>
+                    <span className="hidden sm:inline text-xs font-medium">Send</span>
+                  </motion.button>
+                </div>
+              </form>
+            </div>
           </div>
         </motion.div>
       )}
+
+      {/* ── Bulk Delete Confirmation ── */}
+      <AnimatePresence>
+        {confirmBulkDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-5"
+            onClick={() => !deletingSelected && setConfirmBulkDelete(false)}
+          >
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl p-5"
+            >
+              <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                Delete {selectedDocIds.size} document{selectedDocIds.size !== 1 ? 's' : ''}?
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
+                This will permanently remove {selectedDocIds.size === 1 ? 'this document' : `all ${selectedDocIds.size} selected documents`} and all associated memory and chat context. This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmBulkDelete(false)}
+                  disabled={deletingSelected}
+                  className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => { await deleteSelected(); setConfirmBulkDelete(false) }}
+                  disabled={deletingSelected}
+                  className="flex-1 py-2.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {deletingSelected ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Document Insights Modal ── */}
       <AnimatePresence>
@@ -1089,7 +1359,7 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug break-words">{doc.name}</p>
                 <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
-                  {fmt(doc.fileSize)} · {parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  {fmt(doc.fileSize)} · {formatDateTime(doc.createdAt, { long: true })}
                 </p>
               </div>
               <button
@@ -1284,7 +1554,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                   <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                     <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
                     {' · '}{fmt(doc.fileSize)}
-                    {' · '}{parseUtc(doc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {' · '}{formatDateTime(doc.createdAt)}
                   </p>
                   {doc.status === 'failed' && doc.failureReason && (
                     <p className="text-xs text-red-400 mt-1.5 leading-relaxed">{doc.failureReason}</p>

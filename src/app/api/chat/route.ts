@@ -5,10 +5,11 @@ export const maxDuration = 60
 import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
-import { messages, spaceMembers } from '@/lib/db/schema'
+import { messages, spaceMembers, documents } from '@/lib/db/schema'
 import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
+import { formatDateTime } from '@/lib/utils/date'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName, responseStyle } = await req.json()
+  const { spaceId, content, spaceName, responseStyle, mentionedDocIds } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -59,18 +60,34 @@ export async function POST(req: NextRequest) {
 
   const embeddingStr = `[${queryEmbedding.join(',')}]`
 
-  const relevantChunks = queryEmbedding.length === 0 ? [] : await db.execute(sql`
-    SELECT dc.content, d.name as document_name,
-           1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
-    FROM document_chunks dc
-    INNER JOIN documents d ON d.id = dc.document_id
-    WHERE d.space_id = ${spaceId}
-      AND d.status = 'ready'
-      AND dc.embedding IS NOT NULL
-      AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.45
-    ORDER BY dc.embedding <=> ${embeddingStr}::vector
-    LIMIT 8
-  `)
+  const hasMentions = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
+
+  const relevantChunks = queryEmbedding.length === 0 ? [] : hasMentions
+    ? await db.execute(sql`
+        SELECT dc.content, d.name as document_name,
+               1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+        FROM document_chunks dc
+        INNER JOIN documents d ON d.id = dc.document_id
+        WHERE d.space_id = ${spaceId}
+          AND d.id = ANY(${mentionedDocIds}::uuid[])
+          AND d.status = 'ready'
+          AND dc.embedding IS NOT NULL
+          AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.35
+        ORDER BY dc.embedding <=> ${embeddingStr}::vector
+        LIMIT 12
+      `)
+    : await db.execute(sql`
+        SELECT dc.content, d.name as document_name,
+               1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+        FROM document_chunks dc
+        INNER JOIN documents d ON d.id = dc.document_id
+        WHERE d.space_id = ${spaceId}
+          AND d.status = 'ready'
+          AND dc.embedding IS NOT NULL
+          AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.45
+        ORDER BY dc.embedding <=> ${embeddingStr}::vector
+        LIMIT 8
+      `)
 
   const rawChunks = relevantChunks as unknown as { content: string; document_name: string }[]
   const reranked = await rerankChunks(content, rawChunks, 5)
@@ -79,6 +96,16 @@ export async function POST(req: NextRequest) {
     .map((c) => `[From: ${c.document_name}]\n${c.content}`)
     .join('\n\n---\n\n')
 
+  const spaceDocs = await db
+    .select({ id: documents.id, name: documents.name, createdAt: documents.createdAt, fileType: documents.fileType })
+    .from(documents)
+    .where(and(eq(documents.spaceId, spaceId), eq(documents.status, 'ready')))
+    .orderBy(desc(documents.createdAt))
+
+  const docManifest = spaceDocs.length > 0
+    ? `Documents in this space (${spaceDocs.length} total):\n${spaceDocs.map((d, i) => `${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`
+    : 'No documents have been uploaded to this space yet.'
+
   const recentHistory = await db
     .select({ role: messages.role, content: messages.content })
     .from(messages)
@@ -86,10 +113,16 @@ export async function POST(req: NextRequest) {
     .orderBy(desc(messages.createdAt))
     .limit(10)
 
-  const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
-${styleInstruction(responseStyle)}
+  const focusNote = hasMentions
+    ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocs.find((x) => x.id === id); return d ? d.name : id }).join(', ')}. Answer exclusively from those documents.`
+    : ''
 
-${context ? `Context from project documents:\n\n${truncateToTokenLimit(context)}` : 'No documents have been uploaded to this space yet.'}`
+  const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
+${styleInstruction(responseStyle)}${focusNote}
+
+${docManifest}
+
+${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)}` : 'No relevant document content found for this query.'}`
 
   const history = recentHistory
     .reverse()

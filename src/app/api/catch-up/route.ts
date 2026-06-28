@@ -7,6 +7,7 @@ import { db } from '@/lib/db'
 import { documents, spaceVisits, messages } from '@/lib/db/schema'
 import { chatStream } from '@/lib/ai/provider'
 import { catchMeUpPrompt, styleInstruction } from '@/lib/ai/prompts'
+import { formatDateTime } from '@/lib/utils/date'
 import { checkSpaceAccess } from '@/lib/api/checkSpaceAccess'
 
 export async function POST(req: NextRequest) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     : []
 
   const sinceLabel = lastVisit
-    ? new Date(lastVisit).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    ? formatDateTime(lastVisit, { long: true })
     : 'the beginning'
 
   const userContent = 'What changed since my last visit?'
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
           const context = newDocs
             .map(
               (d) =>
-                `Document uploaded: ${d.name} (${new Date(d.createdAt).toLocaleDateString()})\nSummary: ${d.summary ?? 'N/A'}\nKey Numbers: ${(d.keyNumbers ?? []).join(', ') || 'None'}\nDecisions: ${(d.decisions ?? []).join('; ') || 'None'}\nRisks: ${(d.risks ?? []).join('; ') || 'None'}`
+                `Document uploaded: ${d.name} (${formatDateTime(d.createdAt)})\nSummary: ${d.summary ?? 'N/A'}\nKey Numbers: ${(d.keyNumbers ?? []).join(', ') || 'None'}\nDecisions: ${(d.decisions ?? []).join('; ') || 'None'}\nRisks: ${(d.risks ?? []).join('; ') || 'None'}`
             )
             .join('\n\n---\n\n')
 

@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { parseUtc } from '@/lib/utils/date'
 
-type SpaceStatus = 'on_track' | 'at_risk' | 'on_hold' | 'completed'
+type SpaceStatus = 'new' | 'on_track' | 'at_risk' | 'on_hold' | 'completed'
 
 interface SpaceSignal {
   id: string
@@ -391,6 +391,7 @@ function StatCard({ value, label, accent, active, onClick }: {
 // -- Space row ----------------------------------------------------------------
 
 const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: string }> = {
+  new:       { label: 'New',       dot: 'bg-blue-400',                badge: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' },
   on_track:  { label: 'On Track',  dot: 'bg-emerald-400',             badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
   at_risk:   { label: 'At Risk',   dot: 'bg-red-400',                 badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
   on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',               badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
@@ -405,7 +406,7 @@ function SpaceRow({ space, hasRisk, hasDecision, hasNew, index, onClick }: {
   index: number
   onClick: () => void
 }) {
-  const status = STATUS_CONFIG[space.status ?? 'on_track']
+  const status = STATUS_CONFIG[space.status ?? 'new']
   const isEmpty = space.documentCount === 0
 
   return (
