@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -65,6 +65,8 @@ const cardVariants = {
 export default function SpacePage() {
   const { spaceId } = useParams<{ spaceId: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nameHint = searchParams.get('name')
 
   const [space, setSpace] = useState<Space | null>(null)
   const [statusOpen, setStatusOpen] = useState(false)
@@ -383,7 +385,7 @@ export default function SpacePage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight min-w-0 shrink">
-                {space?.name ?? '…'}
+                {space?.name ?? nameHint ?? '…'}
               </h1>
               {/* Status badge — tap to change */}
               {space && (

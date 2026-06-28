@@ -238,7 +238,7 @@ export function Sidebar() {
                 ) : (
                   <>
                     <button
-                      onClick={() => router.push(`/spaces/${space.id}`)}
+                      onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)}
                       className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-xl text-sm transition-colors ${
                         isActive
                           ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
