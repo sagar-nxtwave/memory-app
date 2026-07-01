@@ -110,3 +110,38 @@ body {
   border-left-color: #4b5563;
   color: #9ca3af;
 }
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin: 0.9em 0;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.markdown-body thead tr {
+  background: #f3f4f6;
+}
+.dark .markdown-body thead tr {
+  background: #1f2937;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e5e7eb;
+  padding: 0.4em 0.75em;
+  text-align: left;
+  white-space: nowrap;
+}
+.dark .markdown-body th,
+.dark .markdown-body td {
+  border-color: #374151;
+}
+.markdown-body th {
+  font-weight: 600;
+}
+.markdown-body tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+.dark .markdown-body tbody tr:nth-child(even) {
+  background: #111827;
+}
