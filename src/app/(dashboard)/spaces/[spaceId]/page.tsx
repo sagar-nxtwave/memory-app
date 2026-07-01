@@ -17,10 +17,11 @@ interface DocDetail extends Doc {
   importantDates: string[] | null
 }
 interface TimelineEvent { id: string; type: 'document' | 'decision' | 'risk' | 'number'; text: string; sourceName: string; sourceFileType: string; date: string; status: string }
-type SpaceStatus = 'on_track' | 'at_risk' | 'on_hold' | 'completed'
+type SpaceStatus = 'new' | 'on_track' | 'at_risk' | 'on_hold' | 'completed'
 interface Space { id: string; name: string; description: string | null; status: SpaceStatus; lastVisit: string | null }
 
 const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: string }> = {
+  new:       { label: 'New',       dot: 'bg-blue-400',                 badge: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' },
   on_track:  { label: 'On Track',  dot: 'bg-emerald-400',              badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
   at_risk:   { label: 'At Risk',   dot: 'bg-red-400',                  badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
   on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',                badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
