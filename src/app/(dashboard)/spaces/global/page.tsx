@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean }
+interface Citation { documentName: string; spaceName?: string }
+interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[] }
 interface Space { id: string; name: string }
 interface SpaceDoc { id: string; name: string; fileType: string }
 interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
@@ -168,7 +169,7 @@ export default function GlobalChatPage() {
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -598,6 +599,17 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
   const [displayed, setDisplayed] = useState(message.isTyping ? '' : message.content)
+  const [vote, setVote] = useState<'up' | 'down' | null>(null)
+
+  const handleVote = async (v: 'up' | 'down') => {
+    const next = vote === v ? null : v
+    setVote(next)
+    await fetch('/api/messages/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: message.id, vote: v }),
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     if (!message.isTyping) {
@@ -647,6 +659,22 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
                 transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
                 className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
               />
+            )}
+            {!message.isTyping && message.citations && message.citations.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
+                {message.citations.map((c, i) => (
+                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]" title={`${c.spaceName ? c.spaceName + ' › ' : ''}${c.documentName}`}>
+                    {c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName}
+                  </span>
+                ))}
+              </div>
+            )}
+            {!message.isTyping && !isStreaming && (
+              <div className="mt-1.5 flex gap-1">
+                <button onClick={() => handleVote('up')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Helpful">👍</button>
+                <button onClick={() => handleVote('down')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'down' ? 'text-red-500 dark:text-red-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Not helpful">👎</button>
+              </div>
             )}
           </div>
         )}

@@ -81,13 +81,15 @@ export async function POST(req: NextRequest) {
   const hasMentionedDocs = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
 
   let contextText = ''
+  let citations: { documentName: string; spaceName?: string }[] = []
   if (queryEmbedding.length > 0) {
     const embeddingStr = `[${queryEmbedding.join(',')}]`
     const spaceIdsSQL = sql.join(spaceIds.map((id) => sql`${id}::uuid`), sql`, `)
     const chunks = hasMentionedDocs
       ? await db.execute(sql`
           SELECT dc.content, d.name as document_name, s.name as space_name,
-                 1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+                 (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
+                  0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
@@ -95,25 +97,36 @@ export async function POST(req: NextRequest) {
             AND d.id = ANY(${mentionedDocIds}::uuid[])
             AND d.status = 'ready'
             AND dc.embedding IS NOT NULL
-            AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.35
-          ORDER BY dc.embedding <=> ${embeddingStr}::vector
+            AND (
+              1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.30
+              OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+            )
+          ORDER BY hybrid_score DESC
           LIMIT 12
         `)
       : await db.execute(sql`
           SELECT dc.content, d.name as document_name, s.name as space_name,
-                 1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+                 (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
+                  0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
           WHERE d.space_id IN (${spaceIdsSQL})
             AND d.status = 'ready'
             AND dc.embedding IS NOT NULL
-            AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.45
-          ORDER BY dc.embedding <=> ${embeddingStr}::vector
+            AND (
+              1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.40
+              OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+            )
+          ORDER BY hybrid_score DESC
           LIMIT 12
         `)
     const rawChunks = chunks as unknown as { content: string; document_name: string; space_name: string }[]
     const reranked = await rerankChunks(content, rawChunks, 8)
+
+    citations = reranked
+      .map((c) => ({ documentName: c.document_name, spaceName: c.space_name }))
+      .filter((v, i, a) => a.findIndex((x) => x.documentName === v.documentName && x.spaceName === v.spaceName) === i)
 
     contextText = reranked
       .map((c) => `[${c.space_name} › ${c.document_name}]\n${c.content}`)
@@ -189,7 +202,7 @@ ${contextText ? `Relevant content from documents:\n\n${truncateToTokenLimit(cont
           .values({ userId, role: 'assistant', content: fullContent || 'No response generated.' })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id })
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations })
       } catch (err) {
         console.error('[global-chat] Error:', err)
         try {

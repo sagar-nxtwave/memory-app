@@ -1,4 +1,5 @@
 import type { DocumentType } from '@/types'
+import { Mistral } from '@mistralai/mistralai'
 
 export interface TableSheet {
   sheetName: string
@@ -44,7 +45,36 @@ export async function extractText(buffer: Buffer, fileType: DocumentType): Promi
 async function extractPdf(buffer: Buffer): Promise<string> {
   const pdfParse = (await import('pdf-parse')).default
   const result = await pdfParse(buffer)
-  return result.text
+  const text = result.text?.trim() ?? ''
+  // Fall back to OCR if text extraction yields nothing meaningful
+  if (text.length < 100 && process.env.MISTRAL_API_KEY) {
+    return extractPdfOcr(buffer)
+  }
+  return text
+}
+
+async function extractPdfOcr(buffer: Buffer): Promise<string> {
+  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
+
+  // Upload the PDF file
+  const blob = new Blob([buffer], { type: 'application/pdf' })
+  const file = new File([blob], 'document.pdf', { type: 'application/pdf' })
+  const uploaded = await mistral.files.upload({ file, purpose: 'ocr' })
+
+  // Get signed URL and run OCR
+  const signedUrl = await mistral.files.getSignedUrl({ fileId: uploaded.id })
+  const result = await mistral.ocr.process({
+    model: 'mistral-ocr-latest',
+    document: { type: 'url', url: signedUrl.url },
+  })
+
+  // Concatenate all pages
+  const text = result.pages?.map((p: { markdown?: string }) => p.markdown ?? '').join('\n\n') ?? ''
+
+  // Clean up uploaded file
+  await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})
+
+  return text
 }
 
 async function extractDocx(buffer: Buffer): Promise<string> {

@@ -11,7 +11,7 @@ import type { DocumentType } from '@/types'
 function toUserFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   if (msg.includes('No text could be extracted') || msg.includes('no extractable text'))
-    return 'Scanned or image-based PDF — no extractable text'
+    return 'Scanned PDF — OCR failed, try a clearer scan'
   if (msg.includes('password') || msg.includes('encrypted'))
     return 'Password protected — remove password and re-upload'
   if (msg.includes('token') || msg.includes('rate') || msg.includes('quota'))

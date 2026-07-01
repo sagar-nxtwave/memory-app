@@ -150,6 +150,15 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
+// Message feedback (thumbs up/down on assistant messages)
+export const messageFeedback = pgTable('message_feedback', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  messageId: uuid('message_id').notNull(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  vote: text('vote').notNull(), // 'up' | 'down'
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // Global chat messages (cross-space — no spaceId)
 export const globalMessages = pgTable('global_messages', {
   id: uuid('id').primaryKey().defaultRandom(),

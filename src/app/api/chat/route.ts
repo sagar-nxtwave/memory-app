@@ -65,32 +65,42 @@ export async function POST(req: NextRequest) {
   const relevantChunks = queryEmbedding.length === 0 ? [] : hasMentions
     ? await db.execute(sql`
         SELECT dc.content, d.name as document_name,
-               1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+               (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
+                0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
         WHERE d.space_id = ${spaceId}
           AND d.id = ANY(${mentionedDocIds}::uuid[])
           AND d.status = 'ready'
           AND dc.embedding IS NOT NULL
-          AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.35
-        ORDER BY dc.embedding <=> ${embeddingStr}::vector
+          AND (
+            1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.30
+            OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+          )
+        ORDER BY hybrid_score DESC
         LIMIT 12
       `)
     : await db.execute(sql`
         SELECT dc.content, d.name as document_name,
-               1 - (dc.embedding <=> ${embeddingStr}::vector) AS similarity
+               (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
+                0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
         WHERE d.space_id = ${spaceId}
           AND d.status = 'ready'
           AND dc.embedding IS NOT NULL
-          AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.45
-        ORDER BY dc.embedding <=> ${embeddingStr}::vector
-        LIMIT 8
+          AND (
+            1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.40
+            OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+          )
+        ORDER BY hybrid_score DESC
+        LIMIT 12
       `)
 
   const rawChunks = relevantChunks as unknown as { content: string; document_name: string }[]
   const reranked = await rerankChunks(content, rawChunks, 5)
+
+  const citations = [...new Set(reranked.map((c) => c.document_name))].map((name) => ({ documentName: name }))
 
   const context = reranked
     .map((c) => `[From: ${c.document_name}]\n${c.content}`)
@@ -151,7 +161,7 @@ ${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)
           .values({ spaceId, userId, role: 'assistant', content: fullContent || 'No response generated.' })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id })
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations })
       } catch (err) {
         console.error('[chat] Stream error:', err)
         try {
