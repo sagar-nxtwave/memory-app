@@ -1339,16 +1339,19 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                img: ({ src, alt }) => (
-                  <a href={src} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={src}
-                      alt={alt ?? ''}
-                      className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
-                      loading="lazy"
-                    />
-                  </a>
-                ),
+                img: ({ src, alt }) => {
+                  const url = typeof src === 'string' ? src : undefined
+                  return (
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={url}
+                        alt={alt ?? ''}
+                        className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
+                        loading="lazy"
+                      />
+                    </a>
+                  )
+                },
               }}
             >{normalizeMarkdown(displayed)}</ReactMarkdown>
             {message.isTyping && (
