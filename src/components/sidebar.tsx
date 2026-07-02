@@ -82,10 +82,10 @@ export function Sidebar() {
     })
     if (res.ok) {
       const space = await res.json()
-      setSpaces((prev) => [...prev, space])
+      setSpaces((prev) => [space, ...prev])
       setNewName('')
       setShowCreate(false)
-      router.push(`/spaces/${space.id}`)
+      router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)
     }
     setCreating(false)
   }

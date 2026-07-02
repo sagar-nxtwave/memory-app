@@ -22,6 +22,9 @@ export const s3Client = new S3Client({
   // Required for MinIO — path-style URLs (localhost:9000/bucket/key)
   // Set to false for Backblaze B2 / Cloudflare R2 / AWS S3
   forcePathStyle: process.env.MINIO_FORCE_PATH_STYLE !== 'false',
+  // Disable automatic checksums — B2 doesn't support x-amz-checksum-crc32
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
 export async function ensureBucketExists(): Promise<void> {

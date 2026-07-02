@@ -60,10 +60,11 @@ export async function POST(req: NextRequest) {
   const storageKey = generateStorageKey(spaceId, doc.id, fileName)
 
   // Generate presigned PUT URL — browser uploads directly to B2/MinIO
+  // ContentLength intentionally excluded — browsers can't set that header manually,
+  // and including it in SignedHeaders causes signature mismatch on upload
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: storageKey,
-    ContentLength: fileSize,
   })
   const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
 
