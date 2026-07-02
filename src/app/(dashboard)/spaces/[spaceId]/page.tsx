@@ -285,38 +285,51 @@ export default function SpacePage() {
   }, [])
 
   const uploadSingleFile = useCallback(async (item: PendingUpload): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const fd = new FormData()
-      fd.append('file', item.file)
-      fd.append('spaceId', spaceId)
-      if (item.title.trim()) fd.append('customName', item.title.trim())
-      if (item.description.trim()) fd.append('description', item.description.trim())
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', '/api/documents')
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100)
-          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: pct } : p))
+    try {
+      setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'uploading', progress: 0 } : p))
+
+      // Step 1: Get presigned URL + create DB record
+      const presignRes = await fetch('/api/documents/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId, fileName: item.file.name, fileSize: item.file.size, customName: item.title.trim() || undefined }),
+      })
+      if (!presignRes.ok) {
+        const body = await presignRes.json().catch(() => ({}))
+        throw new Error(body.error ?? 'Failed to prepare upload')
+      }
+      const { documentId, uploadUrl } = await presignRes.json()
+
+      // Step 2: Upload directly to B2/MinIO via XHR (for progress tracking)
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', uploadUrl)
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100)
+            setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: pct } : p))
+          }
         }
-      }
-      xhr.onload = () => {
-        if (xhr.status === 201) {
-          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'done', progress: 100 } : p))
-          resolve(true)
-        } else {
-          let msg = 'Upload failed'
-          try { msg = JSON.parse(xhr.responseText).error ?? msg } catch {}
-          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'error', error: msg } : p))
-          resolve(false)
-        }
-      }
-      xhr.onerror = () => {
-        setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'error', error: 'Network error' } : p))
-        resolve(false)
-      }
-      setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'uploading' } : p))
-      xhr.send(fd)
-    })
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Storage upload failed: ${xhr.status}`))
+        xhr.onerror = () => reject(new Error('Network error during upload'))
+        xhr.send(item.file)
+      })
+
+      // Step 3: Notify server to start processing
+      const confirmRes = await fetch('/api/documents/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId }),
+      })
+      if (!confirmRes.ok) throw new Error('Failed to start processing')
+
+      setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'done', progress: 100 } : p))
+      return true
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed'
+      setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, status: 'error', error: msg } : p))
+      return false
+    }
   }, [spaceId])
 
   const uploadAll = useCallback(async () => {
