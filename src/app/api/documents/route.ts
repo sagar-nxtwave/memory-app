@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, desc } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { documents, spaceMembers } from '@/lib/db/schema'
@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
       fileType: documents.fileType,
       fileSize: documents.fileSize,
       status: documents.status,
+      failureReason: documents.failureReason,
       summary: documents.summary,
+      version: documents.version,
       createdAt: documents.createdAt,
     })
     .from(documents)
@@ -78,17 +80,28 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
+  // Check if a doc with the same name already exists in this space → auto-increment version
+  const docName = customName ?? file.name
+  const [existingDoc] = await db
+    .select({ version: documents.version })
+    .from(documents)
+    .where(and(eq(documents.spaceId, spaceId), eq(documents.name, docName)))
+    .orderBy(desc(documents.version))
+    .limit(1)
+  const nextVersion = existingDoc ? existingDoc.version + 1 : 1
+
   // Create document record
   const [doc] = await db
     .insert(documents)
     .values({
       spaceId,
-      name: customName ?? file.name,
+      name: docName,
       fileType,
       fileSize: file.size,
       storageKey: 'pending',
       status: 'pending',
       uploadedBy: session.user.id,
+      version: nextVersion,
     })
     .returning()
 

@@ -49,6 +49,12 @@ export async function POST(
       await processDocumentFromBuffer(documentId, buffer, doc.fileType as DocumentType)
     } catch (err) {
       console.error('Retry processing error:', err)
+      // Mark as failed so user sees it instead of staying stuck at pending
+      await db
+        .update(documents)
+        .set({ status: 'failed', failureReason: 'Could not read file from storage — delete and re-upload.', updatedAt: new Date() })
+        .where(eq(documents.id, documentId))
+        .catch(() => {})
     }
   })
 

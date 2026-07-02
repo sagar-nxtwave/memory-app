@@ -351,7 +351,7 @@ export default function GlobalChatPage() {
         animate={{ opacity: 1, y: 0 }}
         className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
       >
-        <div className="w-full max-w-2xl mx-auto px-4 pb-5 pt-3">
+        <div className="w-full max-w-2xl mx-auto px-4 pt-3" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
           {/* mention chips */}
           {mentionChips.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -652,7 +652,21 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
           ))
         ) : (
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeMarkdown(displayed)}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                img: ({ src, alt }) => (
+                  <a href={src} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={src}
+                      alt={alt ?? ''}
+                      className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
+                      loading="lazy"
+                    />
+                  </a>
+                ),
+              }}
+            >{normalizeMarkdown(displayed)}</ReactMarkdown>
             {message.isTyping && (
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}

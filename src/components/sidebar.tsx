@@ -473,6 +473,7 @@ export function Sidebar() {
               exit={{ x: -280 }}
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}
               className="md:hidden fixed left-0 top-0 bottom-0 z-50 w-64 max-w-[85vw] flex flex-col bg-gray-50 dark:bg-[#111111] border-r border-gray-100 dark:border-white/5"
+              style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
             >
               {sidebarContent}
             </motion.aside>

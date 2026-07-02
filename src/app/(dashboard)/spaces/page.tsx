@@ -78,6 +78,8 @@ export default function PortfolioDashboard() {
   const [creating, setCreating] = useState(false)
   const [showAllSignals, setShowAllSignals] = useState(false)
   const [activeFilter, setActiveFilter] = useState<'all' | 'risks' | 'decisions' | 'newdocs'>('all')
+  const [reprocessingAll, setReprocessingAll] = useState(false)
+  const [reprocessMsg, setReprocessMsg] = useState<string | null>(null)
 
   const loadDigest = useCallback(async () => {
     const res = await fetch('/api/portfolio/digest')
@@ -170,13 +172,40 @@ export default function PortfolioDashboard() {
           </div>
           <div className="flex items-center gap-2">
             {spaces.length > 0 && (
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                onClick={() => router.push('/spaces/global')}
-                className="h-8 px-3 text-xs font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                Ask all
-              </motion.button>
+              <>
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => router.push('/spaces/global')}
+                  className="h-8 px-3 text-xs font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  Ask all
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  disabled={reprocessingAll}
+                  onClick={async () => {
+                    setReprocessingAll(true)
+                    setReprocessMsg(null)
+                    try {
+                      const res = await fetch('/api/admin/reprocess-all', { method: 'POST' })
+                      const data = await res.json()
+                      setReprocessMsg(`Queued ${data.queued} document${data.queued !== 1 ? 's' : ''} for reprocessing`)
+                    } catch {
+                      setReprocessMsg('Failed to start reprocessing')
+                    } finally {
+                      setReprocessingAll(false)
+                      setTimeout(() => setReprocessMsg(null), 5000)
+                    }
+                  }}
+                  title="Re-extract all documents with latest AI settings"
+                  className="h-8 px-3 text-xs font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                  </svg>
+                  {reprocessingAll ? 'Queuing…' : 'Reprocess all'}
+                </motion.button>
+              </>
             )}
             <motion.button
               whileTap={{ scale: 0.96 }}
@@ -190,6 +219,12 @@ export default function PortfolioDashboard() {
             </motion.button>
           </div>
         </div>
+
+        {reprocessMsg && (
+          <div className="mb-4 px-4 py-2.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl text-xs text-green-700 dark:text-green-400">
+            {reprocessMsg}
+          </div>
+        )}
 
         {loading ? (
           <LoadingSkeleton />
@@ -523,7 +558,11 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-24 text-center"
     >
-      <div className="text-4xl mb-4 select-none">??</div>
+      <div className="mb-4 text-gray-300 dark:text-gray-600">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+      </div>
       <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Create your first space</h2>
       <p className="text-sm text-gray-900 dark:text-gray-500 mb-6 max-w-xs leading-relaxed">
         A space holds all documents, decisions, and memory for one investment.

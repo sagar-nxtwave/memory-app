@@ -6,6 +6,7 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const BUCKET = process.env.MINIO_BUCKET ?? 'memory-docs'
 
@@ -60,6 +61,11 @@ export async function getFileBuffer(key: string): Promise<Buffer> {
 
 export async function deleteFile(key: string): Promise<void> {
   await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
+}
+
+export async function getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+  return getSignedUrl(s3Client, command, { expiresIn: expiresInSeconds })
 }
 
 export function generateStorageKey(

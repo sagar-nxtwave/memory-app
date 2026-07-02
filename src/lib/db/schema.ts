@@ -110,6 +110,7 @@ export const documents = pgTable('documents', {
   uploadedBy: uuid('uploaded_by')
     .notNull()
     .references(() => users.id),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

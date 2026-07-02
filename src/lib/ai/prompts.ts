@@ -84,7 +84,8 @@ Lead with the direct answer. Use bullets for any list of 3+ items.
 For comparisons or multi-column data, always use a markdown table (| Col | Col |).
 For financial figures, bold the numbers: **AED 42.85M**.
 If the answer is not in context: "Not in documents."
-Maximum response: 150 words unless a longer list or table is required.`
+Maximum response: 150 words unless a longer list or table is required.
+Only include images (markdown image syntax) when the user explicitly asks to see a layout, floor plan, diagram, chart, or visual. Never include images in regular text answers.`
 }
 
 export function globalChatPrompt(): string {
@@ -94,7 +95,8 @@ You are answering questions that span multiple business projects.
 The context provided includes documents from different projects — each labeled with [ProjectName › DocumentName].
 Always cite which project your information comes from.
 For comparisons or multi-column data, use a markdown table (| Col | Col |). Bold key financial figures.
-Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.`
+Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.
+Only include images (markdown image syntax) when the user explicitly asks to see a layout, floor plan, diagram, chart, or visual.`
 }
 
 export function timelinePrompt(spaceName: string): string {

@@ -145,3 +145,20 @@ body {
 .dark .markdown-body tbody tr:nth-child(even) {
   background: #111827;
 }
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  display: block;
+  margin: 12px 0;
+}
+
+.markdown-body img + em {
+  display: block;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: -8px;
+  margin-bottom: 12px;
+}

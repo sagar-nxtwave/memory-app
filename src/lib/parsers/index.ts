@@ -1,5 +1,6 @@
 import type { DocumentType } from '@/types'
 import { Mistral } from '@mistralai/mistralai'
+import { uploadFile } from '@/lib/storage/minio'
 
 export interface TableSheet {
   sheetName: string
@@ -15,11 +16,12 @@ export interface ParsedDocument {
 
 export async function parseDocument(
   buffer: Buffer,
-  fileType: DocumentType
+  fileType: DocumentType,
+  documentId?: string
 ): Promise<ParsedDocument> {
   switch (fileType) {
     case 'pdf':
-      return { text: await extractPdf(buffer), tables: [], fileType }
+      return { text: await extractPdf(buffer, documentId), tables: [], fileType }
     case 'docx':
       return { text: await extractDocx(buffer), tables: [], fileType }
     case 'xlsx':
@@ -42,18 +44,18 @@ export async function extractText(buffer: Buffer, fileType: DocumentType): Promi
   }
 }
 
-async function extractPdf(buffer: Buffer): Promise<string> {
+async function extractPdf(buffer: Buffer, documentId?: string): Promise<string> {
   const pdfParse = (await import('pdf-parse')).default
   const result = await pdfParse(buffer)
   const text = result.text?.trim() ?? ''
   // Fall back to OCR if text extraction yields nothing meaningful
   if (text.length < 100 && process.env.MISTRAL_API_KEY) {
-    return extractPdfOcr(buffer)
+    return extractPdfOcr(buffer, documentId)
   }
   return text
 }
 
-async function extractPdfOcr(buffer: Buffer): Promise<string> {
+async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<string> {
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
 
   // Upload the PDF file
@@ -61,15 +63,45 @@ async function extractPdfOcr(buffer: Buffer): Promise<string> {
   const file = new File([blob], 'document.pdf', { type: 'application/pdf' })
   const uploaded = await mistral.files.upload({ file, purpose: 'ocr' })
 
-  // Get signed URL and run OCR
+  // Get signed URL and run OCR with image extraction enabled
   const signedUrl = await mistral.files.getSignedUrl({ fileId: uploaded.id })
   const result = await mistral.ocr.process({
     model: 'mistral-ocr-latest',
-    document: { type: 'url', url: signedUrl.url },
+    document: { type: 'document_url', documentUrl: signedUrl.url },
+    includeImageBase64: true,
   })
 
-  // Concatenate all pages
-  const text = result.pages?.map((p: { markdown?: string }) => p.markdown ?? '').join('\n\n') ?? ''
+  // Build a map of image id → MinIO URL (upload each page image)
+  const imageUrlMap = new Map<string, string>()
+  if (documentId) {
+    for (const page of result.pages ?? []) {
+      for (const img of (page as { images?: { id: string; imageBase64?: string }[] }).images ?? []) {
+        if (!img.imageBase64) continue
+        try {
+          const imgBuffer = Buffer.from(img.imageBase64, 'base64')
+          const ext = img.id.split('.').pop() ?? 'jpeg'
+          const key = `documents/${documentId}/images/${img.id}`
+          await uploadFile(key, imgBuffer, `image/${ext}`)
+          // Build a public-ish path — served via /api/documents/[id]/images/[imgId]
+          imageUrlMap.set(img.id, `/api/documents/${documentId}/images/${encodeURIComponent(img.id)}`)
+        } catch {
+          // Non-fatal — image won't render but text still works
+        }
+      }
+    }
+  }
+
+  // Concatenate all pages, replacing local image refs with real URLs
+  const pages = result.pages ?? []
+  const text = pages.map((p: { markdown?: string }) => {
+    let md = p.markdown ?? ''
+    // Replace ![alt](img-0.jpeg) style refs with actual served URLs
+    md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+      const url = imageUrlMap.get(src)
+      return url ? `![${alt}](${url})` : `![${alt}](${src})`
+    })
+    return md
+  }).join('\n\n')
 
   // Clean up uploaded file
   await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})

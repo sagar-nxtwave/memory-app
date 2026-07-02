@@ -62,9 +62,9 @@ function extractTables(text: string): { text: string; tables: Map<string, string
  * Preserves sentence endings (.!?) and handles abbreviations tolerably.
  */
 function splitSentences(text: string): string[] {
-  // Split on sentence-ending punctuation followed by whitespace + capital letter (or end of string)
+  // Handles English (.!?), Arabic (۔ ۔), Devanagari/Hindi (। ।), and Urdu punctuation
   return text
-    .split(/(?<=[.!?])\s+(?=[A-Z\d"'\[(])/)
+    .split(/(?<=[.!?۔।॥])\s+(?=[A-Z\d؀-ۿऀ-ॿ"'\[(])|(?<=[.!?۔।॥])\s*\n/)
     .map(s => s.trim())
     .filter(s => s.length > 0)
 }
@@ -82,12 +82,43 @@ function splitIntoParagraphs(text: string): string[] {
     .filter(p => p.length > 0)
 }
 
+/**
+ * Returns true if the paragraph contains 2+ financial/numeric patterns.
+ * Used to tag chunks with [FINANCIAL DATA] so the LLM prioritises them for number queries.
+ */
+function isFinancialBlock(text: string): boolean {
+  const patterns = [
+    /\b(AED|USD|EUR|GBP|SAR|INR|PKR)\s?[\d,.]+/i,  // currency codes
+    /[$€£₹]\s?[\d,.]+/,                               // currency symbols
+    /[\d,.]+\s?%/,                                     // percentages
+    /\b(revenue|profit|loss|cost|budget|EBITDA|ARR|MRR|burn|valuation|equity|debt|margin|ROI|IRR|NPV)\b/i,
+    /\b\d{1,3}(,\d{3})+(\.\d+)?\b/,                  // large numbers like 1,000,000
+    /\bQ[1-4]\s?\d{4}\b/i,                            // Q1 2024 style
+    /\b(FY|H[12])\s?\d{2,4}\b/i,                     // FY2024 / H1 2024
+  ]
+  const matches = patterns.filter(p => p.test(text)).length
+  return matches >= 2
+}
+
+/**
+ * Expand a financial paragraph outward to include neighbouring label lines
+ * so numbers never get separated from their context.
+ */
+function anchorFinancialBlocks(paragraphs: string[]): string[] {
+  return paragraphs.map((para, i) => {
+    if (!isFinancialBlock(para)) return para
+    // Prepend previous paragraph if it's short (likely a heading/label)
+    const prev = i > 0 && paragraphs[i - 1].length < 120 ? paragraphs[i - 1] + '\n' : ''
+    return `[FINANCIAL DATA]\n${prev}${para}\n[/FINANCIAL DATA]`
+  })
+}
+
 export function chunkText(rawText: string): string[] {
   // 1. Extract tables so they aren't destroyed by whitespace normalisation
   const { text: textWithPlaceholders, tables } = extractTables(rawText)
 
-  // 2. Split into paragraphs first
-  const paragraphs = splitIntoParagraphs(textWithPlaceholders)
+  // 2. Split into paragraphs, then anchor financial blocks
+  const paragraphs = anchorFinancialBlocks(splitIntoParagraphs(textWithPlaceholders))
 
   // 3. Build chunks by merging paragraphs up to TARGET_CHUNK_SIZE
   const chunks: string[] = []

@@ -8,6 +8,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
+import { parseQueryFilters } from '@/lib/utils/queryFilters'
 
 export const maxDuration = 60
 
@@ -80,6 +81,17 @@ export async function POST(req: NextRequest) {
 
   const hasMentionedDocs = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
 
+  const filters = parseQueryFilters(content)
+  const fileTypeFilter = filters.fileTypes.length > 0
+    ? sql` AND d.file_type = ANY(${filters.fileTypes}::text[])`
+    : sql``
+  const afterFilter = filters.afterDate
+    ? sql` AND d.created_at >= ${filters.afterDate.toISOString()}`
+    : sql``
+  const beforeFilter = filters.beforeDate
+    ? sql` AND d.created_at <= ${filters.beforeDate.toISOString()}`
+    : sql``
+
   let contextText = ''
   let citations: { documentName: string; spaceName?: string }[] = []
   if (queryEmbedding.length > 0) {
@@ -89,7 +101,7 @@ export async function POST(req: NextRequest) {
       ? await db.execute(sql`
           SELECT dc.content, d.name as document_name, s.name as space_name,
                  (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                  0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
+                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
@@ -99,15 +111,16 @@ export async function POST(req: NextRequest) {
             AND dc.embedding IS NOT NULL
             AND (
               1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.30
-              OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+              OR to_tsvector('simple', dc.content) @@ websearch_to_tsquery('simple', ${content})
             )
+            ${fileTypeFilter}${afterFilter}${beforeFilter}
           ORDER BY hybrid_score DESC
           LIMIT 12
         `)
       : await db.execute(sql`
           SELECT dc.content, d.name as document_name, s.name as space_name,
                  (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                  0.4 * ts_rank(to_tsvector('english', dc.content), websearch_to_tsquery('english', ${content}))) AS hybrid_score
+                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
@@ -116,8 +129,9 @@ export async function POST(req: NextRequest) {
             AND dc.embedding IS NOT NULL
             AND (
               1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.40
-              OR to_tsvector('english', dc.content) @@ websearch_to_tsquery('english', ${content})
+              OR to_tsvector('simple', dc.content) @@ websearch_to_tsquery('simple', ${content})
             )
+            ${fileTypeFilter}${afterFilter}${beforeFilter}
           ORDER BY hybrid_score DESC
           LIMIT 12
         `)

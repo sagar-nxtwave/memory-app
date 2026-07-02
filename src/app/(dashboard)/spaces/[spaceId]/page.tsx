@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm'
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentName: string; spaceName?: string }
 interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[] }
-interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number }
+interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number; version: number }
 interface PendingUpload { id: string; file: File; title: string; description: string; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; error?: string }
 interface DocDetail extends Doc {
   keyNumbers: string[] | null
@@ -99,6 +99,8 @@ export default function SpacePage() {
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [readyDocs, setReadyDocs] = useState<{ id: string; name: string; fileType: string }[]>([])
+  const [docSearch, setDocSearch] = useState('')
+  const [docTypeFilter, setDocTypeFilter] = useState<string>('all')
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionedDocIds, setMentionedDocIds] = useState<string[]>([])
   const [mentionActiveIdx, setMentionActiveIdx] = useState(0)
@@ -262,7 +264,10 @@ export default function SpacePage() {
     const res = await fetch(`/api/documents?spaceId=${spaceId}`)
     if (!res.ok) return
     const data = await res.json()
-    if (Array.isArray(data)) setDocs(data)
+    if (Array.isArray(data)) {
+      setDocs(data)
+      setReadyDocs(data.filter((doc: Doc) => doc.status === 'ready').map((doc: Doc) => ({ id: doc.id, name: doc.name, fileType: doc.fileType })))
+    }
     setDocsLoading(false)
   }, [spaceId])
 
@@ -363,6 +368,13 @@ export default function SpacePage() {
     if (res.ok) {
       setDocs((prev) => prev.map((d) => d.id === docId ? { ...d, status: 'processing', failureReason: null } : d))
       setDocSheet(null)
+    } else if (res.status === 404) {
+      // Document no longer exists — remove from UI
+      setDocs((prev) => prev.filter((d) => d.id !== docId))
+      setDocSheet(null)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? 'Retry failed. Please delete and re-upload.')
     }
   }
 
@@ -720,6 +732,43 @@ export default function SpacePage() {
                 )}
               </AnimatePresence>
 
+              {docs.length > 0 && (
+                <div className="mb-4 flex flex-col gap-2">
+                  {/* Search */}
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input
+                      type="text"
+                      value={docSearch}
+                      onChange={e => setDocSearch(e.target.value)}
+                      placeholder="Search documents…"
+                      className="w-full pl-8 pr-3 py-2 text-base bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                    />
+                    {docSearch && (
+                      <button onClick={() => setDocSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    )}
+                  </div>
+                  {/* Type filter pills */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['all', 'pdf', 'docx', 'xlsx', 'csv', 'text'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setDocTypeFilter(type)}
+                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                          docTypeFilter === type
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
+                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                        }`}
+                      >
+                        {type === 'all' ? 'All' : type.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {docs.length === 0 ? (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-900 dark:text-gray-400 text-center py-10">
                   No documents yet. Upload one to get started.
@@ -727,7 +776,11 @@ export default function SpacePage() {
               ) : (
                 <>
                   <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-1">
-                    {docs.map((doc, i) => {
+                    {docs.filter(doc => {
+                      const matchesSearch = docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())
+                      const matchesType = docTypeFilter === 'all' || doc.fileType === docTypeFilter
+                      return matchesSearch && matchesType
+                    }).map((doc, i) => {
                       const isReady = doc.status === 'ready'
                       const isChecked = selectedDocIds.has(doc.id)
                       return (
@@ -791,6 +844,9 @@ export default function SpacePage() {
                       )
                     })}
                   </motion.div>
+                  {docs.filter(doc => (docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())) && (docTypeFilter === 'all' || doc.fileType === docTypeFilter)).length === 0 && (
+                    <p className="text-sm text-gray-400 dark:text-gray-600 text-center py-8">No documents match your filter.</p>
+                  )}
 
                   {/* Delete bar — appears when anything is selected */}
                   <AnimatePresence>
@@ -908,7 +964,7 @@ export default function SpacePage() {
           transition={{ delay: 0.1 }}
           className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
         >
-          <div className="w-full max-w-2xl mx-auto px-4 pb-5 pt-3">
+          <div className="w-full max-w-2xl mx-auto px-4 pt-3" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
             {!isEmpty && (
               <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-hide pb-0.5">
                 {[
@@ -1280,7 +1336,21 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
           ))
         ) : (
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeMarkdown(displayed)}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                img: ({ src, alt }) => (
+                  <a href={src} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={src}
+                      alt={alt ?? ''}
+                      className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
+                      loading="lazy"
+                    />
+                  </a>
+                ),
+              }}
+            >{normalizeMarkdown(displayed)}</ReactMarkdown>
             {message.isTyping && (
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
@@ -1314,7 +1384,7 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
 function NavBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <motion.button whileTap={{ scale: 0.94 }} onClick={onClick}
-      className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all min-h-[36px] ${
+      className={`px-3.5 py-2.5 text-xs font-medium rounded-xl transition-all min-h-[44px] ${
         active ? 'bg-gray-900 dark:bg-gray-700 text-white shadow-sm'
                : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}>
@@ -1510,32 +1580,27 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
   async function handleViewDocument() {
     setViewing(true)
     setViewError(null)
-    // Open the tab synchronously so popup blockers don't interfere,
-    // then navigate it to the blob URL once the file is fetched.
     const win = window.open('about:blank', '_blank')
     try {
-      const res = await fetch(`/api/documents/${doc.id}/file`)
+      const res = await fetch(`/api/documents/${doc.id}/view`)
       if (!res.ok) {
         win?.close()
         let msg = `Error ${res.status}`
         try { const body = await res.json(); msg = body.error ?? msg } catch {}
         throw new Error(msg)
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const { url } = await res.json()
       if (win) {
         win.location.href = url
-        setTimeout(() => URL.revokeObjectURL(url), 30000)
         onClose()
       } else {
-        // Popup was blocked — fall back to a download link
+        // Popup blocked — fall back to direct link
         const a = document.createElement('a')
         a.href = url
-        a.download = doc.name
+        a.target = '_blank'
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(url), 30000)
         onClose()
       }
     } catch (err) {
@@ -1579,7 +1644,10 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
               <div className="flex items-center gap-3">
                 <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate">{doc.name}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate flex items-center gap-2">
+                    {doc.name}
+                    {doc.version > 1 && <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">v{doc.version}</span>}
+                  </p>
                   <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                     <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
                     {' · '}{fmt(doc.fileSize)}

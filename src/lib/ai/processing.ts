@@ -61,7 +61,7 @@ export async function processDocumentFromBuffer(
     if (!doc) throw new Error('Document not found')
 
     // 1. Parse document — structured for xlsx/csv, prose for pdf/docx
-    const parsed = await parseDocument(buffer, fileType)
+    const parsed = await parseDocument(buffer, fileType, documentId)
 
     // 2. AI extraction always uses flat text (needs prose for JSON summary)
     const flatText = await extractText(buffer, fileType)
