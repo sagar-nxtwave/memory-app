@@ -352,6 +352,7 @@ export default function SpacePage() {
   async function deleteDocument(docId: string) {
     await fetch(`/api/documents/${docId}`, { method: 'DELETE' })
     setDocs((prev) => prev.filter((d) => d.id !== docId))
+    setReadyDocs((prev) => prev.filter((d) => d.id !== docId))
     setDocSheet(null)
   }
 
@@ -359,6 +360,7 @@ export default function SpacePage() {
     setDeletingSelected(true)
     await Promise.allSettled([...selectedDocIds].map((id) => fetch(`/api/documents/${id}`, { method: 'DELETE' })))
     setDocs((prev) => prev.filter((d) => !selectedDocIds.has(d.id)))
+    setReadyDocs((prev) => prev.filter((d) => !selectedDocIds.has(d.id)))
     setSelectedDocIds(new Set())
     setDeletingSelected(false)
   }
