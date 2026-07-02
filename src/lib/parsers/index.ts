@@ -59,7 +59,7 @@ async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<strin
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
 
   // Upload the PDF file
-  const blob = new Blob([buffer], { type: 'application/pdf' })
+  const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
   const file = new File([blob], 'document.pdf', { type: 'application/pdf' })
   const uploaded = await mistral.files.upload({ file, purpose: 'ocr' })
 
