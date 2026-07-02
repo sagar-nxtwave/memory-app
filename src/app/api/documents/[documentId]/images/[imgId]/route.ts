@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { documents, spaceMembers } from '@/lib/db/schema'
-import { getFileBuffer } from '@/lib/storage/minio'
+import { getSignedDownloadUrl } from '@/lib/storage/minio'
 
 export async function GET(
   _req: NextRequest,
@@ -27,15 +27,8 @@ export async function GET(
   const key = `documents/${documentId}/images/${decodeURIComponent(imgId)}`
 
   try {
-    const buffer = await getFileBuffer(key)
-    const ext = imgId.split('.').pop()?.toLowerCase() ?? 'jpeg'
-    const contentType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
-      },
-    })
+    const url = await getSignedDownloadUrl(key, 3600)
+    return NextResponse.redirect(url)
   } catch {
     return new NextResponse('Image not found', { status: 404 })
   }
