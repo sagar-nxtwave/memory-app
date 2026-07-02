@@ -151,7 +151,13 @@ export default function SpacePage() {
         const res = await fetch(`/api/documents?spaceId=${spaceId}`)
         if (res.ok) {
           const data = await res.json()
-          if (Array.isArray(data)) setDocs(data)
+          if (Array.isArray(data)) setDocs((prev) => {
+            // Don't show docs that are currently mid-upload (pendingUploads tracks those)
+            const uploadingNames = new Set(
+              pendingUploads.filter(p => p.status === 'uploading' || p.status === 'queued').map(p => p.title.trim() || p.file.name)
+            )
+            return data.filter((d: Doc) => !(d.status === 'pending' && uploadingNames.has(d.name)))
+          })
         }
       } finally {
         pollingRef.current = false
@@ -301,7 +307,7 @@ export default function SpacePage() {
       const { documentId, uploadUrl } = await presignRes.json()
 
       // Step 2: Upload directly to B2/MinIO via XHR (for progress tracking)
-      await new Promise<void>((resolve, reject) => {
+      const uploadOk = await new Promise<boolean>((resolve) => {
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', uploadUrl)
         xhr.upload.onprogress = (e) => {
@@ -310,10 +316,16 @@ export default function SpacePage() {
             setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: pct } : p))
           }
         }
-        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Storage upload failed: ${xhr.status}`))
-        xhr.onerror = () => reject(new Error('Network error during upload'))
+        xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300)
+        xhr.onerror = () => resolve(false)
         xhr.send(item.file)
       })
+
+      if (!uploadOk) {
+        // Clean up ghost DB record
+        await fetch(`/api/documents/${documentId}`, { method: 'DELETE' }).catch(() => {})
+        throw new Error('Upload to storage failed — check B2 CORS settings')
+      }
 
       // Step 3: Notify server to start processing
       const confirmRes = await fetch('/api/documents/confirm', {
