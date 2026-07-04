@@ -43,6 +43,11 @@ export function Sidebar() {
 
   useEffect(() => { loadSpaces() }, [loadSpaces])
 
+  useEffect(() => {
+    window.addEventListener('space-created', loadSpaces)
+    return () => window.removeEventListener('space-created', loadSpaces)
+  }, [loadSpaces])
+
   // Close mobile drawer on navigation
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
@@ -65,7 +70,7 @@ export function Sidebar() {
     const res = await fetch(`/api/spaces/${spaceId}`, { method: 'DELETE' })
     if (res.ok) {
       setSpaces((prev) => prev.filter((s) => s.id !== spaceId))
-      if (pathname.startsWith(`/spaces/${spaceId}`)) router.push('/spaces')
+      if (pathname.startsWith(`/spaces/${spaceId}`)) router.push('/')
     }
     setConfirmDeleteId(null)
     setDeleting(false)
@@ -99,10 +104,11 @@ export function Sidebar() {
       {/* Logo + Theme */}
       <div className="flex items-center justify-between px-4 pt-5 pb-3 shrink-0">
         <button
-          onClick={() => router.push('/spaces')}
-          className="text-[15px] font-semibold text-gray-900 dark:text-white tracking-tight hover:opacity-70 transition-opacity"
+          onClick={() => router.push('/')}
+          className="flex items-center gap-2 hover:opacity-70 transition-opacity"
         >
-          Memory
+          <span className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-200 via-orange-100 to-amber-200" />
+          <span className="font-serif text-[18px] font-semibold text-[#1E293B] dark:text-white tracking-tight">Memory</span>
         </button>
         <ThemeToggle />
       </div>
@@ -110,10 +116,10 @@ export function Sidebar() {
       {/* Portfolio (Home) */}
       <div className="px-3 mb-1 shrink-0">
         <button
-          onClick={() => router.push('/spaces')}
+          onClick={() => router.push('/')}
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
-            pathname === '/spaces'
-              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+            pathname === '/'
+              ? 'bg-white dark:bg-white/10 text-[#0F172A] dark:text-white font-medium shadow-[0_1px_4px_rgba(0,0,0,0.05)]'
               : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         >
@@ -121,7 +127,7 @@ export function Sidebar() {
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
             <polyline points="9 22 9 12 15 12 15 22"/>
           </svg>
-          Portfolio
+          Home
         </button>
       </div>
 
@@ -131,7 +137,7 @@ export function Sidebar() {
           onClick={() => router.push('/spaces/global')}
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
             pathname === '/spaces/global'
-              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+              ? 'bg-white dark:bg-white/10 text-[#0F172A] dark:text-white font-medium shadow-[0_1px_4px_rgba(0,0,0,0.05)]'
               : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         >
@@ -198,7 +204,7 @@ export function Sidebar() {
       </AnimatePresence>
 
       {/* Section label */}
-      <p className="px-4 text-[10px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500 mb-1.5 shrink-0">
+      <p className="font-sf px-4 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8] dark:text-gray-500 mb-1.5 shrink-0">
         Spaces
       </p>
 
@@ -241,7 +247,7 @@ export function Sidebar() {
                       onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)}
                       className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-xl text-sm transition-colors ${
                         isActive
-                          ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+                          ? 'bg-white dark:bg-white/10 text-[#0F172A] dark:text-white font-medium shadow-[0_1px_4px_rgba(0,0,0,0.05)]'
                           : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                       }`}
                     >
@@ -364,7 +370,7 @@ export function Sidebar() {
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28 }}
-        className="hidden md:flex shrink-0 flex-col border-r border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111111] h-full relative"
+        className="hidden md:flex shrink-0 flex-col border-r border-slate-200/70 dark:border-white/5 bg-[#faf9f9] dark:bg-[#0f0f0f] h-full relative"
         style={{ width: sidebarWidth }}
       >
         {sidebarContent}
@@ -394,10 +400,10 @@ export function Sidebar() {
         </div>
       </motion.aside>
 
-      {/* -- Mobile: hamburger button -- */}
+      {/* -- Mobile: hamburger button (hidden on home — bottom nav handles it there) -- */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl shadow-sm text-gray-600 dark:text-gray-300"
+        className={`${(pathname === '/' || pathname === '/spaces' || pathname === '/account') ? 'hidden' : 'md:hidden'} fixed top-4 left-4 z-40 p-2 bg-white dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl shadow-sm text-gray-600 dark:text-gray-300`}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <line x1="3" y1="6" x2="21" y2="6" />
@@ -472,7 +478,7 @@ export function Sidebar() {
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-              className="md:hidden fixed left-0 top-0 bottom-0 z-50 w-64 max-w-[85vw] flex flex-col bg-gray-50 dark:bg-[#111111] border-r border-gray-100 dark:border-white/5"
+              className="md:hidden fixed left-0 top-0 bottom-0 z-50 w-64 max-w-[85vw] flex flex-col bg-[#faf9f9] dark:bg-[#0f0f0f] border-r border-slate-200/70 dark:border-white/5"
               style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
             >
               {sidebarContent}

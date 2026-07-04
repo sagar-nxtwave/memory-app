@@ -8,19 +8,37 @@ import { mistral, EXTRACT_MODEL, EMBED_MODEL } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
 
-function toUserFriendlyError(err: unknown): string {
+// Mistral embed limit is ~16k tokens per batch. 1 token ≈ 4 chars.
+function tokenBatches<T extends { content: string } | string>(items: T[], maxTokens = 14000): T[][] {
+  const batches: T[][] = []
+  let batch: T[] = []
+  let batchTokens = 0
+  for (const item of items) {
+    const text = typeof item === 'string' ? item : item.content
+    const tokens = Math.ceil(text.length / 4)
+    if (batch.length > 0 && batchTokens + tokens > maxTokens) {
+      batches.push(batch)
+      batch = []
+      batchTokens = 0
+    }
+    batch.push(item)
+    batchTokens += tokens
+  }
+  if (batch.length > 0) batches.push(batch)
+  return batches
+}
+
+function extractErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
-  if (msg.includes('No text could be extracted') || msg.includes('no extractable text'))
-    return 'Scanned PDF — OCR failed, try a clearer scan'
-  if (msg.includes('password') || msg.includes('encrypted'))
-    return 'Password protected — remove password and re-upload'
-  if (msg.includes('token') || msg.includes('rate') || msg.includes('quota'))
-    return 'AI quota reached — try again in a few minutes'
-  if (msg.includes('timeout') || msg.includes('ETIMEDOUT'))
-    return 'Processing timed out — try splitting the document'
-  if (msg.includes('corrupt') || msg.includes('invalid') || msg.includes('parse'))
-    return 'File corrupted or unsupported format'
-  return 'Processing failed — delete and re-upload'
+  // Mistral SDK errors look like: "API error occurred: Status 400 Body: {...json...}"
+  const bodyMatch = msg.match(/Body:\s*(\{[\s\S]+\})/)
+  if (bodyMatch) {
+    try {
+      const parsed = JSON.parse(bodyMatch[1])
+      if (parsed.message) return parsed.message
+    } catch {}
+  }
+  return msg.slice(0, 500)
 }
 
 interface ExtractedData {
@@ -100,13 +118,11 @@ export async function processDocumentFromBuffer(
       }
     }
 
-    // 4. Embed in batches of 50
+    // 4. Embed in token-aware batches (stays under Mistral's 16k token/batch limit)
     if (allChunks.length > 0) {
-      const BATCH_SIZE = 50
       const embeddings: number[][] = []
 
-      for (let i = 0; i < allChunks.length; i += BATCH_SIZE) {
-        const batch = allChunks.slice(i, i + BATCH_SIZE)
+      for (const batch of tokenBatches(allChunks)) {
         const response = await mistral.embeddings.create({
           model: EMBED_MODEL,
           inputs: batch.map(c => c.content),
@@ -144,7 +160,7 @@ export async function processDocumentFromBuffer(
     console.error(`Failed to process document ${documentId}:`, error)
     await db
       .update(documents)
-      .set({ status: 'failed', failureReason: toUserFriendlyError(error), updatedAt: new Date() })
+      .set({ status: 'failed', failureReason: extractErrorMessage(error), updatedAt: new Date() })
       .where(eq(documents.id, documentId))
     throw error
   }
@@ -175,14 +191,12 @@ export async function processDocumentFromText(
     const proseChunks = chunkText(safeText)
 
     if (proseChunks.length > 0) {
-      const BATCH_SIZE = 50
       const embeddings: number[][] = []
 
-      for (let i = 0; i < proseChunks.length; i += BATCH_SIZE) {
-        const batch = proseChunks.slice(i, i + BATCH_SIZE)
+      for (const batch of tokenBatches(proseChunks.map(c => ({ content: c })))) {
         const response = await mistral.embeddings.create({
           model: EMBED_MODEL,
-          inputs: batch,
+          inputs: batch.map(c => c.content),
         })
         embeddings.push(...response.data.map((d) => d.embedding ?? []))
       }
@@ -218,7 +232,7 @@ export async function processDocumentFromText(
     console.error(`Failed to process text document ${documentId}:`, error)
     await db
       .update(documents)
-      .set({ status: 'failed', failureReason: toUserFriendlyError(error), updatedAt: new Date() })
+      .set({ status: 'failed', failureReason: extractErrorMessage(error), updatedAt: new Date() })
       .where(eq(documents.id, documentId))
     throw error
   }

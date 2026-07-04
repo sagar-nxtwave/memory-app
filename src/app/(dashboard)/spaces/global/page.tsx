@@ -1,12 +1,13 @@
 ﻿﻿﻿'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 interface Citation { documentName: string; spaceName?: string }
-interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[] }
+interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
+interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
 interface Space { id: string; name: string }
 interface SpaceDoc { id: string; name: string; fileType: string }
 interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
@@ -169,7 +170,7 @@ export default function GlobalChatPage() {
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -591,6 +592,30 @@ function normalizeMarkdown(text: string): string {
     .join('\n')
 }
 
+const failedGlobalImageUrls = new Set<string>()
+
+const GlobalChatImage = React.memo(function GlobalChatImage({ url, alt }: { url: string; alt: string }) {
+  const [loaded, setLoaded] = React.useState(false)
+  const [errored, setErrored] = React.useState(() => failedGlobalImageUrls.has(url))
+  if (errored) return null
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="block flex-shrink-0">
+      {!loaded && (
+        <div className="rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" style={{ width: 200, height: 150 }} />
+      )}
+      <img
+        src={url}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        onError={() => { failedGlobalImageUrls.add(url); setErrored(true) }}
+        className={`rounded-xl border border-gray-200 dark:border-gray-700 cursor-zoom-in hover:opacity-90 transition-opacity object-cover ${loaded ? 'block' : 'hidden'}`}
+        style={{ width: 200, height: 150 }}
+        loading="lazy"
+      />
+    </a>
+  )
+})
+
 function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
   message: Message
   isStreaming?: boolean
@@ -677,6 +702,18 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
                 className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
               />
             )}
+            {!message.isTyping && message.documentImages && message.documentImages.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
+                  Images from document ({message.documentImages.length})
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+                  {message.documentImages.slice(0, 8).map((img) => (
+                    <GlobalChatImage key={img.url} url={img.url} alt={img.alt || img.documentName} />
+                  ))}
+                </div>
+              </div>
+            )}
             {!message.isTyping && message.citations && message.citations.length > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
@@ -688,9 +725,21 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
               </div>
             )}
             {!message.isTyping && !isStreaming && (
-              <div className="mt-1.5 flex gap-1">
-                <button onClick={() => handleVote('up')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Helpful">👍</button>
-                <button onClick={() => handleVote('down')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'down' ? 'text-red-500 dark:text-red-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Not helpful">👎</button>
+              <div className="mt-1.5 flex gap-0.5">
+                <button onClick={() => handleVote('up')} title="Helpful"
+                  className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                    <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                </button>
+                <button onClick={() => handleVote('down')} title="Not helpful"
+                  className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
+                    <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                  </svg>
+                </button>
               </div>
             )}
           </div>

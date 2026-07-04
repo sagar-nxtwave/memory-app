@@ -27,8 +27,8 @@ export async function GET(
   const key = `documents/${documentId}/images/${decodeURIComponent(imgId)}`
 
   try {
-    const url = await getSignedDownloadUrl(key, 3600)
-    return NextResponse.redirect(url)
+    const signedUrl = await getSignedDownloadUrl(key, 3600)
+    return NextResponse.redirect(signedUrl, 302)
   } catch {
     return new NextResponse('Image not found', { status: 404 })
   }

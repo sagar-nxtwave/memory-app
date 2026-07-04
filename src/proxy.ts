@@ -16,7 +16,7 @@ export default auth((req) => {
   }
 
   if (isLoggedIn && (path.startsWith('/login') || path.startsWith('/register'))) {
-    return NextResponse.redirect(new URL('/spaces', req.nextUrl))
+    return NextResponse.redirect(new URL('/', req.nextUrl))
   }
 
   return NextResponse.next()

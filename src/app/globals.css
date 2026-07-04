@@ -5,6 +5,52 @@
 
 @theme inline {
   --font-sans: var(--font-geist);
+  --font-serif: var(--font-playfair);
+  --font-figtree: var(--font-figtree);
+}
+
+/* Figma UI type = SF Pro. Use the real SF Pro on Apple devices; Inter (loaded
+   via next/font) is the cross-platform stand-in so Windows matches the design too. */
+.font-sf {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
+}
+
+/* Fluid, responsive sizing for the mobile view (baseline = Figma 402px width).
+   Values scale with viewport width and cap at the Figma size on larger phones. */
+.t-title   { font-size: clamp(1.375rem, 6.9vw, 1.75rem);  line-height: 1.18; letter-spacing: 0.0136em; }  /* greeting / page title 28 */
+.t-h2      { font-size: clamp(1.125rem, 5.45vw, 1.375rem); line-height: 1.25; letter-spacing: -0.0118em; } /* "Your Spaces" 22 */
+.t-ask     { font-size: clamp(1.0625rem, 4.95vw, 1.25rem); line-height: 1.25; letter-spacing: -0.0225em; } /* "Ask memory…" 20 */
+.thumb     { width: clamp(3.5rem, 17.9vw, 4.5rem); height: clamp(3.5rem, 17.9vw, 4.5rem); }               /* space thumbnail 72 */
+@media (min-width: 768px) {
+  /* Desktop pins to the Figma sizes (no oversized jump on smaller desktops). */
+  .t-title { font-size: 1.75rem;  line-height: 1.18; }  /* 28 */
+  .t-h2    { font-size: 1.375rem; line-height: 1.25; }  /* 22 */
+  .t-ask   { font-size: 1.25rem; }                       /* 20 */
+  .thumb   { width: 4.5rem; height: 4.5rem; }
+}
+
+/* Premium shimmer loader — a soft light sweep across skeleton blocks */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55));
+}
+.dark .shimmer {
+  background: rgba(255, 255, 255, 0.03);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.dark .shimmer::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
 }
 
 /* Use dynamic viewport height so mobile browser chrome doesn't hide content */

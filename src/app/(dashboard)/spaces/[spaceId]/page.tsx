@@ -8,7 +8,8 @@ import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentName: string; spaceName?: string }
-interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[] }
+interface DocumentImage { url: string; alt: string; documentName: string }
+interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number; version: number }
 interface PendingUpload { id: string; file: File; title: string; description: string; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; error?: string }
 interface DocDetail extends Doc {
@@ -32,7 +33,7 @@ type View = 'chat' | 'documents' | 'timeline'
 
 import { parseUtc, formatDateTime } from '@/lib/utils/date'
 
-const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️' }
+const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️', pptx: '📊', image: '🖼️', zip: '🗜️', email: '✉️', cad: '📐' }
 
 const TIMELINE_EVENT_CONFIG = {
   document: { label: 'Upload',   icon: '↑', dot: 'bg-gray-200 dark:bg-gray-700',          badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
@@ -64,6 +65,32 @@ const cardVariants = {
   hidden: { opacity: 0, y: 16 },
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, type: 'spring' as const, stiffness: 400, damping: 28 } }),
 }
+
+// Tracks permanently-failed image URLs so we don't retry on re-render
+const failedImageUrls = new Set<string>()
+
+const ChatImage = React.memo(function ChatImage({ url, alt }: { url: string; alt: string }) {
+  const [loaded, setLoaded] = React.useState(false)
+  const [errored, setErrored] = React.useState(() => failedImageUrls.has(url))
+
+  if (errored) return null
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="block flex-shrink-0">
+      {!loaded && (
+        <div className="rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" style={{ width: 200, height: 150 }} />
+      )}
+      <img
+        src={url}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        onError={() => { failedImageUrls.add(url); setErrored(true) }}
+        className={`rounded-xl border border-gray-200 dark:border-gray-700 cursor-zoom-in hover:opacity-90 transition-opacity object-cover ${loaded ? 'block' : 'hidden'}`}
+        style={{ width: 200, height: 150 }}
+        loading="lazy"
+      />
+    </a>
+  )
+})
 
 export default function SpacePage() {
   const { spaceId } = useParams<{ spaceId: string }>()
@@ -99,6 +126,9 @@ export default function SpacePage() {
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [readyDocs, setReadyDocs] = useState<{ id: string; name: string; fileType: string }[]>([])
+  const [otherSpaces, setOtherSpaces] = useState<{ id: string; name: string }[]>([])
+  const [spaceSuggestion, setSpaceSuggestion] = useState<{ id: string; name: string } | null>(null)
+  const spaceSuggestionRef = useRef<{ id: string; name: string } | null>(null)
   const [docSearch, setDocSearch] = useState('')
   const [docTypeFilter, setDocTypeFilter] = useState<string>('all')
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -117,6 +147,7 @@ export default function SpacePage() {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
     fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
     fetch(`/api/documents?spaceId=${spaceId}`).then((r) => r.ok ? r.json() : []).then((d: Doc[]) => { if (Array.isArray(d)) setReadyDocs(d.filter((doc) => doc.status === 'ready').map((doc) => ({ id: doc.id, name: doc.name, fileType: doc.fileType }))) })
+    fetch('/api/spaces').then((r) => r.ok ? r.json() : []).then((d: { id: string; name: string }[]) => { if (Array.isArray(d)) setOtherSpaces(d.filter((s) => s.id !== spaceId)) })
   }, [spaceId])
 
   useEffect(() => {
@@ -167,6 +198,11 @@ export default function SpacePage() {
     return () => clearInterval(interval)
   }, [view, docs, spaceId])
 
+  // Keep readyDocs in sync with docs so @ mention list updates after processing completes
+  useEffect(() => {
+    setReadyDocs(docs.filter((d) => d.status === 'ready').map((d) => ({ id: d.id, name: d.name, fileType: d.fileType })))
+  }, [docs])
+
   // Shared SSE streaming handler — used by chat, Brief Me, and Catch Me Up
   async function handleStream(endpoint: string, body: object, tempUserId: string, sid: string) {
     try {
@@ -202,7 +238,7 @@ export default function SpacePage() {
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -223,6 +259,8 @@ export default function SpacePage() {
     const docIds = mentionedDocIds
     setMentionedDocIds([])
     setMentionQuery(null)
+    setSpaceSuggestion(null)
+    spaceSuggestionRef.current = null
     setLoading(true)
 
     const tempUserId = `u-${Date.now()}`
@@ -235,7 +273,12 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined }, tempUserId, sid)
+    const crossSpace = !!spaceSuggestionRef.current
+    if (crossSpace) {
+      await handleStream('/api/global-chat', { content, responseStyle }, tempUserId, sid)
+    } else {
+      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined }, tempUserId, sid)
+    }
 
     setStreamingMessageId(null)
     setLoading(false)
@@ -472,7 +515,7 @@ export default function SpacePage() {
       >
         <div className="flex-1 min-w-0 pl-12 md:pl-0 flex items-center gap-2">
           <button
-            onClick={() => router.push('/spaces')}
+            onClick={() => router.push('/')}
             className="shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
             title="Home"
           >
@@ -564,7 +607,7 @@ export default function SpacePage() {
                 <div className="space-y-3">
                   <AnimatePresence initial={false}>
                     {messages.map((msg) => (
-                      <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show" layout>
+                      <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show">
                         <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onTypingDone={handleTypingDone} />
                       </motion.div>
                     ))}
@@ -633,7 +676,7 @@ export default function SpacePage() {
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop files or click to upload</p>
                       <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 500MB each</p>
                     </motion.div>
-                    <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" className="hidden"
+                    <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.pptx,.ppt,.txt,.jpg,.jpeg,.png,.webp,.zip,.eml,.msg,.dwg,.dxf,.skp" className="hidden"
                       onChange={(e) => { if (e.target.files && e.target.files.length > 0) stageFiles(e.target.files); e.target.value = '' }} />
 
                     {/* Upload queue */}
@@ -1027,6 +1070,33 @@ export default function SpacePage() {
               </div>
             )}
 
+            {/* Space switch suggestion */}
+            <AnimatePresence>
+              {spaceSuggestion && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.15 }}
+                  className="mb-2 flex items-center gap-2"
+                >
+                  <span className="text-xs text-gray-400 dark:text-gray-500">Switch to:</span>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/spaces/${spaceSuggestion.id}`)}
+                    className="text-xs px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium"
+                  >
+                    {spaceSuggestion.name} →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpaceSuggestion(null)}
+                    className="text-xs text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
+                  >✕</button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* @ mention dropdown */}
             <div className="relative">
               <AnimatePresence>
@@ -1098,6 +1168,11 @@ export default function SpacePage() {
                     } else {
                       setMentionQuery(null)
                     }
+                    // Detect space name mentions for switch suggestion
+                    const lv = val.toLowerCase()
+                    const matched = otherSpaces.find((s) => lv.includes(s.name.toLowerCase()) && s.name.length >= 3) ?? null
+                    setSpaceSuggestion(matched)
+                    spaceSuggestionRef.current = matched
                   }}
                   onKeyDown={(e) => {
                     if (mentionQuery !== null) {
@@ -1367,7 +1442,8 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
               remarkPlugins={[remarkGfm]}
               components={{
                 img: ({ src, alt }) => {
-                  const url = typeof src === 'string' ? src : undefined
+                  const url = typeof src === 'string' && src ? src : null
+                  if (!url) return null
                   return (
                     <a href={url} target="_blank" rel="noopener noreferrer">
                       <img
@@ -1388,6 +1464,18 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
                 className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
               />
             )}
+            {!message.isTyping && message.documentImages && message.documentImages.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
+                  Images from document ({message.documentImages.length})
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+                  {message.documentImages.slice(0, 8).map((img, i) => (
+                    <ChatImage key={img.url} url={img.url} alt={img.alt || img.documentName} />
+                  ))}
+                </div>
+              </div>
+            )}
             {!message.isTyping && message.citations && message.citations.length > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
@@ -1399,9 +1487,21 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
               </div>
             )}
             {!message.isTyping && !isStreaming && (
-              <div className="mt-1.5 flex gap-1">
-                <button onClick={() => handleVote('up')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Helpful">👍</button>
-                <button onClick={() => handleVote('down')} className={`text-xs px-1.5 py-0.5 rounded transition-colors ${vote === 'down' ? 'text-red-500 dark:text-red-400' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`} title="Not helpful">👎</button>
+              <div className="mt-1.5 flex gap-0.5">
+                <button onClick={() => handleVote('up')} title="Helpful"
+                  className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                    <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                </button>
+                <button onClick={() => handleVote('down')} title="Not helpful"
+                  className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
+                    <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                  </svg>
+                </button>
               </div>
             )}
           </div>

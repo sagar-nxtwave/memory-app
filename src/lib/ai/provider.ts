@@ -21,12 +21,11 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   return response.data.map((d) => d.embedding ?? [])
 }
 
-export const RERANK_MODEL = 'mistral-rerank-latest'
+export const RERANK_MODEL = process.env.OPENROUTER_RERANK_MODEL ?? 'cohere/rerank-v3.5'
 
 /**
- * Rerank chunks by relevance to the query using Mistral's cross-encoder.
- * Returns chunks sorted by rerank score descending, limited to topN.
- * Falls back to original order silently if rerank API fails.
+ * Rerank chunks via OpenRouter's /rerank endpoint.
+ * Falls back to hybrid score order silently if the API call fails.
  */
 export async function rerankChunks<T extends { content: string }>(
   query: string,
@@ -37,11 +36,13 @@ export async function rerankChunks<T extends { content: string }>(
   if (chunks.length <= 1) return chunks.slice(0, topN)
 
   try {
-    const response = await fetch('https://api.mistral.ai/v1/rerank', {
+    const response = await fetch('https://openrouter.ai/api/v1/rerank', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+        'X-Title': 'Memory',
       },
       body: JSON.stringify({
         model: RERANK_MODEL,
@@ -52,16 +53,14 @@ export async function rerankChunks<T extends { content: string }>(
     })
 
     if (!response.ok) {
-      console.error('[rerank] API error:', response.status, await response.text().catch(() => ''))
       return chunks.slice(0, topN)
     }
 
     const data = await response.json()
     const results: { index: number; relevance_score: number }[] = data.results ?? []
-
+    if (results.length === 0) return chunks.slice(0, topN)
     return results.map(r => chunks[r.index]).filter(Boolean)
-  } catch (err) {
-    console.error('[rerank] Failed, falling back to vector order:', err)
+  } catch {
     return chunks.slice(0, topN)
   }
 }

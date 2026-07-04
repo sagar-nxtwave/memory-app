@@ -10,7 +10,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
-import { parseQueryFilters } from '@/lib/utils/queryFilters'
+import { parseQueryFilters, isFinancialQuery } from '@/lib/utils/queryFilters'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -62,6 +62,9 @@ export async function POST(req: NextRequest) {
   const embeddingStr = `[${queryEmbedding.join(',')}]`
 
   const hasMentions = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
+  const financialBoost = isFinancialQuery(content)
+    ? sql` + CASE WHEN dc.contains_numbers = true OR dc.chunk_type IN ('table', 'financial') THEN 0.15 ELSE 0 END`
+    : sql``
 
   // Metadata filters derived from natural language hints in the query
   const filters = parseQueryFilters(content)
@@ -77,9 +80,10 @@ export async function POST(req: NextRequest) {
 
   const relevantChunks = queryEmbedding.length === 0 ? [] : hasMentions
     ? await db.execute(sql`
-        SELECT dc.content, d.name as document_name,
+        SELECT dc.content, dc.document_id, d.name as document_name,
                (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
+                0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
+                ${financialBoost}) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
         WHERE d.space_id = ${spaceId}
@@ -95,9 +99,10 @@ export async function POST(req: NextRequest) {
         LIMIT 12
       `)
     : await db.execute(sql`
-        SELECT dc.content, d.name as document_name,
+        SELECT dc.content, dc.document_id, d.name as document_name,
                (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
+                0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
+                ${financialBoost}) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
         WHERE d.space_id = ${spaceId}
@@ -112,13 +117,43 @@ export async function POST(req: NextRequest) {
         LIMIT 12
       `)
 
-  const rawChunks = relevantChunks as unknown as { content: string; document_name: string }[]
-  const reranked = await rerankChunks(content, rawChunks, 5)
+  const rawChunks = relevantChunks as unknown as { content: string; document_id: string; document_name: string }[]
 
+  // Fetch image-containing chunks from the whole space — image chunks score near-zero
+  // in vector search (minimal text) so we can't rely on them appearing in rawChunks
+  const imageRows = await db.execute(sql`
+    SELECT dc.content, dc.document_id, d.name as document_name
+    FROM document_chunks dc
+    INNER JOIN documents d ON d.id = dc.document_id
+    WHERE d.space_id = ${spaceId}
+      AND d.status = 'ready'
+      AND dc.content LIKE '%![%'
+    LIMIT 50
+  `)
+  const imageChunks = imageRows as unknown as { content: string; document_id: string; document_name: string }[]
+
+  // Extract image refs from both vector results and dedicated image chunk query
+  const IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
+  const documentImages: { url: string; alt: string; documentName: string }[] = []
+  for (const chunk of [...rawChunks, ...imageChunks]) {
+    let m: RegExpExecArray | null
+    IMAGE_RE.lastIndex = 0
+    while ((m = IMAGE_RE.exec(chunk.content)) !== null) {
+      let url = m[2]
+      if (!url.startsWith('/')) {
+        url = `/api/documents/${chunk.document_id}/images/${encodeURIComponent(url)}`
+      }
+      if (!documentImages.find((i) => i.url === url)) {
+        documentImages.push({ alt: m[1] || url.split('/').pop() || 'image', url, documentName: chunk.document_name })
+      }
+    }
+  }
+
+  const reranked = await rerankChunks(content, rawChunks, 5)
   const citations = [...new Set(reranked.map((c) => c.document_name))].map((name) => ({ documentName: name }))
 
   const context = reranked
-    .map((c) => `[From: ${c.document_name}]\n${c.content}`)
+    .map((c) => `[From: ${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
     .join('\n\n---\n\n')
 
   const spaceDocs = await db
@@ -142,8 +177,12 @@ export async function POST(req: NextRequest) {
     ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocs.find((x) => x.id === id); return d ? d.name : id }).join(', ')}. Answer exclusively from those documents.`
     : ''
 
+  const imageNote = documentImages.length > 0
+    ? `\nIMPORTANT: ${documentImages.length} image(s) extracted from this document are already displayed to the user in the interface. Never say images are missing, corrupted, or inaccessible.`
+    : ''
+
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
-${styleInstruction(responseStyle)}${focusNote}
+${styleInstruction(responseStyle)}${focusNote}${imageNote}
 
 ${docManifest}
 
@@ -176,7 +215,7 @@ ${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)
           .values({ spaceId, userId, role: 'assistant', content: fullContent || 'No response generated.' })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations })
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages })
       } catch (err) {
         console.error('[chat] Stream error:', err)
         try {

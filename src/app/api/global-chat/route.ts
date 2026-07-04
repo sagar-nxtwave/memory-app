@@ -8,7 +8,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
-import { parseQueryFilters } from '@/lib/utils/queryFilters'
+import { parseQueryFilters, isFinancialQuery } from '@/lib/utils/queryFilters'
 
 export const maxDuration = 60
 
@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
   } catch {}
 
   const hasMentionedDocs = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
+  const financialBoost = isFinancialQuery(content)
+    ? sql` + CASE WHEN dc.contains_numbers = true OR dc.chunk_type IN ('table', 'financial') THEN 0.15 ELSE 0 END`
+    : sql``
 
   const filters = parseQueryFilters(content)
   const fileTypeFilter = filters.fileTypes.length > 0
@@ -94,14 +97,16 @@ export async function POST(req: NextRequest) {
 
   let contextText = ''
   let citations: { documentName: string; spaceName?: string }[] = []
+  let documentImages: { url: string; alt: string; documentName: string; spaceName?: string }[] = []
   if (queryEmbedding.length > 0) {
     const embeddingStr = `[${queryEmbedding.join(',')}]`
     const spaceIdsSQL = sql.join(spaceIds.map((id) => sql`${id}::uuid`), sql`, `)
     const chunks = hasMentionedDocs
       ? await db.execute(sql`
-          SELECT dc.content, d.name as document_name, s.name as space_name,
+          SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name,
                  (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
+                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
+                  ${financialBoost}) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
@@ -118,9 +123,10 @@ export async function POST(req: NextRequest) {
           LIMIT 12
         `)
       : await db.execute(sql`
-          SELECT dc.content, d.name as document_name, s.name as space_name,
+          SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name,
                  (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
-                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))) AS hybrid_score
+                  0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
+                  ${financialBoost}) AS hybrid_score
           FROM document_chunks dc
           INNER JOIN documents d ON d.id = dc.document_id
           INNER JOIN spaces s ON s.id = d.space_id
@@ -135,15 +141,45 @@ export async function POST(req: NextRequest) {
           ORDER BY hybrid_score DESC
           LIMIT 12
         `)
-    const rawChunks = chunks as unknown as { content: string; document_name: string; space_name: string }[]
-    const reranked = await rerankChunks(content, rawChunks, 8)
+    const rawChunks = chunks as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
 
+    // Fetch image-containing chunks from all searched spaces — image chunks score near-zero
+    // in vector search (minimal text) so we can't rely on them appearing in rawChunks
+    const imageRows = await db.execute(sql`
+      SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name
+      FROM document_chunks dc
+      INNER JOIN documents d ON d.id = dc.document_id
+      INNER JOIN spaces s ON s.id = d.space_id
+      WHERE d.space_id IN (${spaceIdsSQL})
+        AND d.status = 'ready'
+        AND dc.content LIKE '%![%'
+      LIMIT 50
+    `)
+    const imageChunks = imageRows as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
+
+    // Extract image refs from both vector results and dedicated image chunk query
+    const IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
+    for (const chunk of [...rawChunks, ...imageChunks]) {
+      let m: RegExpExecArray | null
+      IMAGE_RE.lastIndex = 0
+      while ((m = IMAGE_RE.exec(chunk.content)) !== null) {
+        let url = m[2]
+        if (!url.startsWith('/')) {
+          url = `/api/documents/${chunk.document_id}/images/${encodeURIComponent(url)}`
+        }
+        if (!documentImages.find((i) => i.url === url)) {
+          documentImages.push({ alt: m[1] || url.split('/').pop() || 'image', url, documentName: chunk.document_name, spaceName: chunk.space_name })
+        }
+      }
+    }
+
+    const reranked = await rerankChunks(content, rawChunks, 8)
     citations = reranked
       .map((c) => ({ documentName: c.document_name, spaceName: c.space_name }))
       .filter((v, i, a) => a.findIndex((x) => x.documentName === v.documentName && x.spaceName === v.spaceName) === i)
 
     contextText = reranked
-      .map((c) => `[${c.space_name} › ${c.document_name}]\n${c.content}`)
+      .map((c) => `[${c.space_name} › ${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
       .join('\n\n---\n\n')
   }
 
@@ -187,8 +223,12 @@ export async function POST(req: NextRequest) {
     .slice(0, -1) // exclude the user message just saved
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
+  const imageNote = documentImages.length > 0
+    ? `\nIMPORTANT: ${documentImages.length} image(s) extracted from documents are already displayed to the user in the interface. Never say images are missing, corrupted, or inaccessible.`
+    : ''
+
   const systemPrompt = `${globalChatPrompt()}
-${styleInstruction(responseStyle)}
+${styleInstruction(responseStyle)}${imageNote}
 
 Searching across: ${spaceNames}
 
@@ -216,7 +256,7 @@ ${contextText ? `Relevant content from documents:\n\n${truncateToTokenLimit(cont
           .values({ userId, role: 'assistant', content: fullContent || 'No response generated.' })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations })
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages })
       } catch (err) {
         console.error('[global-chat] Error:', err)
         try {

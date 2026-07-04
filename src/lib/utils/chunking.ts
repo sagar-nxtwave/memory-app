@@ -127,7 +127,9 @@ export function chunkText(rawText: string): string[] {
 
   function saveChunk() {
     const restored = restoreTables(current.trim(), tables)
-    if (restored.length >= MIN_CHUNK_SIZE) chunks.push(restored)
+    // Always keep chunks with image refs even if short — they carry visual content
+    const hasImage = /!\[[^\]]*\]\([^)]+\)/.test(restored)
+    if (restored.length >= MIN_CHUNK_SIZE || hasImage) chunks.push(restored)
     // Carry last OVERLAP_SENTENCES into next chunk
     currentSentences = currentSentences.slice(-OVERLAP_SENTENCES)
     current = currentSentences.join(' ')
@@ -141,6 +143,12 @@ export function chunkText(rawText: string): string[] {
       if (tableContent.length >= MIN_CHUNK_SIZE) chunks.push(tableContent)
       current = ''
       currentSentences = []
+      continue
+    }
+
+    // If paragraph is an image ref — merge into current chunk so it has surrounding context
+    if (/^!\[[^\]]*\]\([^)]+\)$/.test(para.trim())) {
+      current += (current ? '\n' : '') + para.trim()
       continue
     }
 

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     fileType = detectFileType(fileName)
   } catch {
-    return NextResponse.json({ error: 'Unsupported file type. Use PDF, Word, Excel, or CSV.' }, { status: 400 })
+    return NextResponse.json({ error: 'Unsupported file type. Supported: PDF, Word, Excel, CSV, PowerPoint, TXT, images (JPG/PNG/WebP), ZIP, EML, MSG, DWG, DXF, SKP.' }, { status: 400 })
   }
 
   const [member] = await db

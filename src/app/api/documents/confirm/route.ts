@@ -32,11 +32,7 @@ export async function POST(req: NextRequest) {
       await processDocumentFromBuffer(doc.id, buffer, doc.fileType as DocumentType)
     } catch (err) {
       console.error('[confirm] Processing failed:', err)
-      await db
-        .update(documents)
-        .set({ status: 'failed', failureReason: 'Processing failed — try re-uploading.', updatedAt: new Date() })
-        .where(eq(documents.id, doc.id))
-        .catch(() => {})
+      // processing.ts already set status=failed + failureReason — nothing to do here
     }
   })
 

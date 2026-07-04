@@ -87,3 +87,9 @@ export function parseQueryFilters(query: string, now: Date = new Date()): QueryF
 
   return { fileTypes, afterDate, beforeDate }
 }
+
+const FINANCIAL_PATTERN = /\b(revenue|cost|budget|spend|spending|profit|loss|margin|ebitda|arr|mrr|burn|runway|valuation|equity|debt|loan|invoice|payment|price|pricing|fee|salary|salary|payroll|capex|opex|cashflow|cash flow|balance sheet|p&l|income|expense|expenses|forecast|actuals?|variance|roi|irr|npv|aed|usd|eur|gbp|sar|\$|€|£|%|percent|percentage|million|billion|thousand|quarterly|q[1-4]\b|fiscal|financial|numbers?|figures?|amounts?|totals?|breakdown|summary of numbers)\b/i
+
+export function isFinancialQuery(query: string): boolean {
+  return FINANCIAL_PATTERN.test(query)
+}

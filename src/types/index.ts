@@ -1,7 +1,7 @@
 export type UserRole = 'owner' | 'member'
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
 export type MessageRole = 'user' | 'assistant'
-export type DocumentType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'text'
+export type DocumentType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'text' | 'pptx' | 'image' | 'zip' | 'email' | 'cad'
 
 export interface Space {
   id: string
