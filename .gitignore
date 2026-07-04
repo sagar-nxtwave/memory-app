@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local debug / one-off scripts
+debug-*.mjs
+count-chunks.mjs
+migrate-db.mjs
+
+# editor / agent generated config
+.windsurf/
+.agents/
