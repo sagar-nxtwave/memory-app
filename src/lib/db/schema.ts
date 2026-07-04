@@ -75,6 +75,7 @@ export const spaces = pgTable('spaces', {
   name: text('name').notNull(),
   description: text('description'),
   status: spaceStatusEnum('status').notNull().default('new'),
+  imageKey: text('image_key'),
   createdBy: uuid('created_by')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
@@ -120,8 +121,9 @@ export const documents = pgTable('documents', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
-// chunk_type: 'prose' = normal text, 'table' = structured rows from xlsx/csv
-export const chunkTypeEnum = pgEnum('chunk_type', ['prose', 'table', 'financial'])
+// chunk_type: 'prose' = normal text, 'table' = structured rows from xlsx/csv,
+// 'financial' = number-dense prose, 'image' = one figure/diagram (embedding = vision caption + OCR text)
+export const chunkTypeEnum = pgEnum('chunk_type', ['prose', 'table', 'financial', 'image'])
 
 // Document chunks (RAG)
 export const documentChunks = pgTable(
@@ -135,6 +137,10 @@ export const documentChunks = pgTable(
     chunkIndex: integer('chunk_index').notNull(),
     chunkType: chunkTypeEnum('chunk_type').notNull().default('prose'),
     containsNumbers: boolean('contains_numbers').notNull().default(false),
+    // Served URL of the figure this chunk represents — set only when chunkType = 'image'
+    imageUrl: text('image_url'),
+    // Short human-readable label for the figure (e.g. "FIG. 1 — System Architecture") — set only when chunkType = 'image'
+    imageTitle: text('image_title'),
     embedding: vector('embedding', { dimensions: 1024 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
@@ -153,6 +159,10 @@ export const messages = pgTable('messages', {
     .references(() => users.id),
   role: messageRoleEnum('role').notNull(),
   content: text('content').notNull(),
+  // Assistant-only: citations/images resolved at answer time — persisted so they
+  // survive a page refresh instead of only existing on the live SSE response.
+  citations: jsonb('citations').$type<{ documentName: string }[]>(),
+  documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
@@ -173,6 +183,8 @@ export const globalMessages = pgTable('global_messages', {
     .references(() => users.id, { onDelete: 'cascade' }),
   role: messageRoleEnum('role').notNull(),
   content: text('content').notNull(),
+  citations: jsonb('citations').$type<{ documentName: string; spaceName?: string }[]>(),
+  documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string; spaceName?: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 

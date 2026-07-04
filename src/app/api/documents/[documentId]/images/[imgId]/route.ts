@@ -28,7 +28,13 @@ export async function GET(
 
   try {
     const signedUrl = await getSignedDownloadUrl(key, 3600)
-    return NextResponse.redirect(signedUrl, 302)
+    // Browsers don't cache 302s without an explicit Cache-Control — without this, every
+    // re-render/scroll-back-into-view re-triggers the DB lookups + a fresh signed URL.
+    // max-age kept just under the signed URL's own expiry so we never cache a dead redirect.
+    return NextResponse.redirect(signedUrl, {
+      status: 302,
+      headers: { 'Cache-Control': 'private, max-age=3300' },
+    })
   } catch {
     return new NextResponse('Image not found', { status: 404 })
   }

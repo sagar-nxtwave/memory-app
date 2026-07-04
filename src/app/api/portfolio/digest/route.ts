@@ -22,12 +22,13 @@ export async function GET() {
         documentCount: sql<number>`cast(count(${documents.id}) filter (where ${documents.status} = 'ready') as int)`,
         lastActivityAt: sql<string | null>`max(${documents.createdAt})`,
         latestDocumentName: sql<string | null>`(select name from documents where space_id = ${spaces.id} order by created_at desc limit 1)`,
+        hasImage: sql<boolean>`(${spaces.imageKey} is not null)`,
       })
       .from(spaces)
       .innerJoin(spaceMembers, eq(spaceMembers.spaceId, spaces.id))
       .leftJoin(documents, eq(documents.spaceId, spaces.id))
       .where(eq(spaceMembers.userId, userId))
-      .groupBy(spaces.id, spaces.name, spaces.description, spaces.status)
+      .groupBy(spaces.id, spaces.name, spaces.description, spaces.status, spaces.imageKey)
       .orderBy(sql`max(${documents.createdAt}) desc nulls last`),
 
     // All documents across all spaces, sorted by most recent

@@ -8,6 +8,7 @@ import {
   Digest, SpaceSignal, RecentDoc, greeting, Sparkle, ChevronRight, SpaceCard, openCreateSpace,
 } from '@/components/portfolio-ui'
 import { AttentionSheet } from '@/components/attention-sheet'
+import { GlobalChatPanel } from '@/components/global-chat-panel'
 
 type SignalItem = { text: string; spaceName: string; spaceId: string }
 
@@ -17,6 +18,8 @@ export function HomeDashboard() {
   const [digest, setDigest] = useState<Digest | null>(null)
   const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [askOpen, setAskOpen] = useState(false)
+  const [autoMic, setAutoMic] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -57,23 +60,42 @@ export function HomeDashboard() {
         </h1>
 
         {/* -- Ask memory pill — pad 24/24/24/32, radius 999, Icon shadow -- */}
-        <motion.button
-          whileTap={{ scale: 0.985 }}
-          onClick={() => router.push('/spaces/global')}
-          className="font-sf w-full md:max-w-2xl flex items-center gap-2 pl-8 pr-6 py-6 mb-6 md:mb-8 rounded-full bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 text-left"
-        >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0 text-[#64748B] dark:text-slate-400">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {/* Title3/Regular: SF Pro 20/25, -0.0225em, #64748B */}
-          <span className="flex-1 t-ask text-[#64748B] dark:text-slate-400">Ask memory…</span>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#94A3B8] dark:text-slate-500">
-            <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-            <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" />
-          </svg>
-        </motion.button>
+        {!askOpen && (
+          <motion.div
+            whileTap={{ scale: 0.985 }}
+            role="button"
+            tabIndex={0}
+            onClick={() => setAskOpen(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter') setAskOpen(true) }}
+            className="font-sf w-full md:max-w-2xl flex items-center gap-2 pl-8 pr-6 py-6 mb-6 md:mb-8 rounded-full bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 text-left cursor-pointer"
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0 text-[#64748B] dark:text-slate-400">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {/* Title3/Regular: SF Pro 20/25, -0.0225em, #64748B */}
+            <span className="flex-1 t-ask text-[#64748B] dark:text-slate-400">Ask memory…</span>
+            <button
+              type="button"
+              title="Speak your question"
+              onClick={(e) => { e.stopPropagation(); setAutoMic(true); setAskOpen(true) }}
+              className="shrink-0 text-[#94A3B8] dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" />
+              </svg>
+            </button>
+          </motion.div>
+        )}
 
-        {loading ? (
+        {askOpen ? (
+          <div className="h-[70vh] md:h-[75vh] rounded-3xl overflow-hidden bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5">
+            <GlobalChatPanel
+              autoStartMic={autoMic}
+              onClose={() => { setAskOpen(false); setAutoMic(false) }}
+            />
+          </div>
+        ) : loading ? (
           <LoadingSkeleton />
         ) : (
           <div className="space-y-6">

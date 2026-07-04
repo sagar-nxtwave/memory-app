@@ -1,12 +1,32 @@
+import { createHash } from 'crypto'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { documents, documentChunks } from '@/lib/db/schema'
-import { parseDocument, extractText } from '@/lib/parsers'
+import { parseDocument, extractText, type ParsedImage } from '@/lib/parsers'
 import { chunkText, chunkTable } from '@/lib/utils/chunking'
 import { sanitizeForPrompt } from '@/lib/utils/sanitize'
-import { mistral, EXTRACT_MODEL, EMBED_MODEL } from './provider'
+import { mistral, EXTRACT_MODEL, EMBED_MODEL, describeImage, type ImageDescription } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
+
+// Below this size an "image" is almost always a logo/icon/bullet/spacer, not a real figure —
+// skip captioning it entirely (saves vision calls + embeds nothing useless).
+const MIN_IMAGE_BYTES = 3000
+
+// Run async tasks with a concurrency cap — captioning 10+ images one-at-a-time was the
+// main source of slow uploads for image-heavy PDFs (patents, scanned reports).
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
 
 // Mistral embed limit is ~16k tokens per batch. 1 token ≈ 4 chars.
 function tokenBatches<T extends { content: string } | string>(items: T[], maxTokens = 14000): T[][] {
@@ -81,8 +101,12 @@ export async function processDocumentFromBuffer(
     // 1. Parse document — structured for xlsx/csv, prose for pdf/docx
     const parsed = await parseDocument(buffer, fileType, documentId)
 
-    // 2. AI extraction always uses flat text (needs prose for JSON summary)
-    const flatText = await extractText(buffer, fileType)
+    // 2. AI extraction always uses flat text (needs prose for JSON summary).
+    // Reuse parsed.text (already OCR'd for image-only PDFs) instead of re-parsing —
+    // extractText() has no documentId so it can't OCR and would wrongly return empty
+    // for scanned/no-text-layer PDFs. Only table types (xlsx/csv) need the fallback,
+    // since parsed.text is '' for those (content lives in parsed.tables instead).
+    const flatText = parsed.text || await extractText(buffer, fileType)
     const safeFlat = sanitizeForPrompt(flatText)
     if (!safeFlat.trim()) throw new Error('No text could be extracted from document')
     const extracted = await extractDocumentData(doc.name, safeFlat)
@@ -90,11 +114,13 @@ export async function processDocumentFromBuffer(
     // 3. Build chunks — table path or prose path
     interface ChunkRecord {
       content: string
-      chunkType: 'prose' | 'table' | 'financial'
+      chunkType: 'prose' | 'table' | 'financial' | 'image'
       containsNumbers: boolean
+      imageUrl?: string
+      imageTitle?: string
     }
 
-    let allChunks: ChunkRecord[] = []
+    const allChunks: ChunkRecord[] = []
 
     if (parsed.tables.length > 0) {
       // Excel / CSV — use table chunker for each sheet
@@ -105,8 +131,11 @@ export async function processDocumentFromBuffer(
         }
       }
     } else {
-      // PDF / DOCX / text — use prose chunker
-      const safeText = sanitizeForPrompt(parsed.text || flatText)
+      // PDF / DOCX / text — use prose chunker.
+      // Strip image markdown first: figures get their own dedicated 'image' chunks below,
+      // so we never bury (or double-store) them inside a prose chunk.
+      const proseSource = (parsed.text || flatText).replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      const safeText = sanitizeForPrompt(proseSource)
       const proseChunks = chunkText(safeText)
       for (const content of proseChunks) {
         const financial = isFinancialChunk(content)
@@ -116,6 +145,35 @@ export async function processDocumentFromBuffer(
           containsNumbers: financial || containsAnyNumbers(content),
         })
       }
+    }
+
+    // 3b. Image chunks — one per extracted figure. Embedding = vision caption + OCR text,
+    // so a visual query ("show the architecture diagram") lands directly on the right image.
+    // Skip tiny images (logos/icons/spacers) and dedupe repeated ones (e.g. a logo on every
+    // page) so a large image-heavy PDF doesn't fire one vision call per occurrence.
+    const captionCache = new Map<string, ImageDescription | null>()
+    const eligible = parsed.images.filter((img) => Buffer.byteLength(img.base64, 'base64') >= MIN_IMAGE_BYTES)
+
+    const captioned = await mapWithConcurrency(eligible, 4, async (img: ParsedImage) => {
+      const hash = createHash('sha1').update(img.base64).digest('hex')
+      let caption = captionCache.get(hash)
+      if (caption === undefined) {
+        caption = await describeImage(img.base64, img.mimeType, img.ocrText)
+        captionCache.set(hash, caption)
+      }
+      return { img, caption }
+    })
+
+    for (const { img, caption } of captioned) {
+      const title = caption?.title || 'Document image'
+      const searchText = sanitizeForPrompt([title, caption?.description, img.ocrText].filter(Boolean).join('\n')).slice(0, 4000)
+      allChunks.push({
+        content: searchText || title,
+        chunkType: 'image',
+        containsNumbers: containsAnyNumbers(searchText),
+        imageUrl: img.imageUrl,
+        imageTitle: title,
+      })
     }
 
     // 4. Embed in token-aware batches (stays under Mistral's 16k token/batch limit)
@@ -138,6 +196,8 @@ export async function processDocumentFromBuffer(
           chunkIndex: index,
           chunkType: chunk.chunkType,
           containsNumbers: chunk.containsNumbers,
+          imageUrl: chunk.imageUrl ?? null,
+          imageTitle: chunk.imageTitle ?? null,
           embedding: embeddings[index] ?? [],
         }))
       )

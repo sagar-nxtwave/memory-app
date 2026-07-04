@@ -9,9 +9,17 @@ export interface TableSheet {
   rows: string[][]
 }
 
+export interface ParsedImage {
+  imageUrl: string   // served path, e.g. /api/documents/{id}/images/{imgId}
+  base64: string     // raw image data — passed to the vision model for captioning
+  mimeType: string   // image/jpeg, image/png, ...
+  ocrText: string    // OCR'd text near the image (context for the caption + fallback search text)
+}
+
 export interface ParsedDocument {
   text: string          // prose content (pdf, docx, text paste)
   tables: TableSheet[]  // structured sheets (xlsx, csv)
+  images: ParsedImage[] // extracted figures/diagrams (pdf, image uploads)
   fileType: DocumentType
 }
 
@@ -21,26 +29,34 @@ export async function parseDocument(
   documentId?: string
 ): Promise<ParsedDocument> {
   switch (fileType) {
-    case 'pdf':
-      return { text: await extractPdf(buffer, documentId), tables: [], fileType }
+    case 'pdf': {
+      // OCR path (documentId present) returns both text and extracted image regions
+      if (documentId && process.env.MISTRAL_API_KEY) {
+        const { text, images } = await extractPdfOcr(buffer, documentId)
+        return { text, tables: [], images, fileType }
+      }
+      return { text: await extractPdf(buffer), tables: [], images: [], fileType }
+    }
     case 'docx':
-      return { text: await extractDocx(buffer), tables: [], fileType }
+      return { text: await extractDocx(buffer), tables: [], images: [], fileType }
     case 'xlsx':
-      return { text: '', tables: await extractExcelStructured(buffer), fileType }
+      return { text: '', tables: await extractExcelStructured(buffer), images: [], fileType }
     case 'csv':
-      return { text: '', tables: [await extractCsvStructured(buffer)], fileType }
+      return { text: '', tables: [await extractCsvStructured(buffer)], images: [], fileType }
     case 'text':
-      return { text: buffer.toString('utf-8'), tables: [], fileType }
+      return { text: buffer.toString('utf-8'), tables: [], images: [], fileType }
     case 'pptx':
-      return { text: await extractPptx(buffer), tables: [], fileType }
-    case 'image':
-      return { text: await extractImage(buffer, documentId), tables: [], fileType }
+      return { text: await extractPptx(buffer), tables: [], images: [], fileType }
+    case 'image': {
+      const { text, images } = await extractImageStructured(buffer, documentId)
+      return { text, tables: [], images, fileType }
+    }
     case 'zip':
-      return { text: await extractZip(buffer), tables: [], fileType }
+      return { text: await extractZip(buffer), tables: [], images: [], fileType }
     case 'email':
-      return { text: await extractEmail(buffer), tables: [], fileType }
+      return { text: await extractEmail(buffer), tables: [], images: [], fileType }
     case 'cad':
-      return { text: await extractCad(buffer), tables: [], fileType }
+      return { text: await extractCad(buffer), tables: [], images: [], fileType }
     default:
       throw new Error(`Unsupported file type: ${fileType}`)
   }
@@ -63,18 +79,25 @@ export async function extractText(buffer: Buffer, fileType: DocumentType): Promi
   }
 }
 
+// Flat-text PDF extraction — used by extractText() for AI summarisation (no image handling).
 async function extractPdf(buffer: Buffer, documentId?: string): Promise<string> {
-  // Always use OCR when documentId is provided (chunking path) — extracts images + text
-  // Fall back to pdf-parse only for AI summarisation (no documentId) or missing API key
   if (documentId && process.env.MISTRAL_API_KEY) {
-    return extractPdfOcr(buffer, documentId)
+    return (await extractPdfOcr(buffer, documentId)).text
   }
   const pdfParse = (await import('pdf-parse')).default
   const result = await pdfParse(buffer)
   return result.text?.trim() ?? ''
 }
 
-async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<string> {
+// Strip markdown image refs from a string (used to keep image data out of prose).
+function stripImageMarkdown(md: string): string {
+  return md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+}
+
+async function extractPdfOcr(
+  buffer: Buffer,
+  documentId?: string
+): Promise<{ text: string; images: ParsedImage[] }> {
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
 
   // Upload the PDF file
@@ -90,19 +113,50 @@ async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<strin
     includeImageBase64: true,
   })
 
-  // Build a map of image id → MinIO URL (upload each page image)
+  const images: ParsedImage[] = []
   const imageUrlMap = new Map<string, string>()
+  const pages = result.pages ?? []
+
+  // A full-page-sized "figure" is ambiguous: it could be a photographed/scanned TEXT page
+  // (patent claims, a document screenshot — not a real figure), or it could be a genuine
+  // full-page diagram (architectural floor plans, blueprints legitimately fill the page).
+  // Area alone can't tell these apart — a floor plan is just as page-sized as a scanned page.
+  // The real signal is text DENSITY: a scanned text page OCRs into dense paragraphs; a floor
+  // plan OCRs into sparse labels/dimensions even though the image itself is full-page.
+  const FULL_PAGE_AREA_RATIO = 0.85
+  const DENSE_TEXT_WORD_COUNT = 150
+
+  // Upload each page image + collect it as a ParsedImage (base64 kept for captioning)
   if (documentId) {
-    for (const page of result.pages ?? []) {
-      for (const img of (page as { images?: { id: string; imageBase64?: string }[] }).images ?? []) {
+    for (const page of pages) {
+      const pageText = stripImageMarkdown((page as { markdown?: string }).markdown ?? '')
+      const pageWordCount = pageText.split(/\s+/).filter(Boolean).length
+      const dims = (page as { dimensions?: { width: number; height: number } | null }).dimensions
+      const pageArea = dims ? dims.width * dims.height : 0
+
+      type OcrImg = { id: string; imageBase64?: string | null; topLeftX?: number | null; topLeftY?: number | null; bottomRightX?: number | null; bottomRightY?: number | null }
+      for (const img of ((page as { images?: OcrImg[] }).images ?? [])) {
         if (!img.imageBase64) continue
+
+        if (pageArea > 0 && img.topLeftX != null && img.topLeftY != null && img.bottomRightX != null && img.bottomRightY != null) {
+          const imgArea = Math.max(0, img.bottomRightX - img.topLeftX) * Math.max(0, img.bottomRightY - img.topLeftY)
+          const isFullPage = imgArea / pageArea >= FULL_PAGE_AREA_RATIO
+          // Only skip when it's BOTH full-page AND text-dense — a full-page floor plan
+          // with sparse labels is kept; a full-page scanned paragraph is dropped.
+          if (isFullPage && pageWordCount >= DENSE_TEXT_WORD_COUNT) continue
+        }
+
+        // Mistral sometimes returns a data-URL prefix — strip it to raw base64
+        const rawBase64 = img.imageBase64.replace(/^data:[^;]+;base64,/, '')
+        const ext = (img.id.split('.').pop() ?? 'jpeg').toLowerCase()
+        const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
         try {
-          const imgBuffer = Buffer.from(img.imageBase64, 'base64')
-          const ext = img.id.split('.').pop() ?? 'jpeg'
+          const imgBuffer = Buffer.from(rawBase64, 'base64')
           const key = `documents/${documentId}/images/${img.id}`
-          await uploadFile(key, imgBuffer, `image/${ext}`)
-          // Build a public-ish path — served via /api/documents/[id]/images/[imgId]
-          imageUrlMap.set(img.id, `/api/documents/${documentId}/images/${encodeURIComponent(img.id)}`)
+          await uploadFile(key, imgBuffer, mimeType)
+          const url = `/api/documents/${documentId}/images/${encodeURIComponent(img.id)}`
+          imageUrlMap.set(img.id, url)
+          images.push({ imageUrl: url, base64: rawBase64, mimeType, ocrText: pageText })
         } catch (imgErr) {
           console.error(`[OCR] Failed to upload image ${img.id}:`, imgErr)
         }
@@ -110,11 +164,9 @@ async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<strin
     }
   }
 
-  // Concatenate all pages, replacing local image refs with real URLs
-  const pages = result.pages ?? []
+  // Concatenate all pages, replacing local image refs with real served URLs
   const text = pages.map((p: { markdown?: string }) => {
     let md = p.markdown ?? ''
-    // Replace ![alt](img-0.jpeg) style refs with actual served URLs
     md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
       const url = imageUrlMap.get(src)
       return url ? `![${alt}](${url})` : `![${alt}](${src})`
@@ -125,7 +177,7 @@ async function extractPdfOcr(buffer: Buffer, documentId?: string): Promise<strin
   // Clean up uploaded file
   await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})
 
-  return text
+  return { text, images }
 }
 
 async function extractDocx(buffer: Buffer): Promise<string> {
@@ -214,8 +266,17 @@ async function extractPptx(buffer: Buffer): Promise<string> {
 }
 
 // --- IMAGES ---------------------------------------------------------------
+// Legacy flat-text variant — used by extractText()/extractZip() where images aren't tracked.
 async function extractImage(buffer: Buffer, documentId?: string): Promise<string> {
-  if (!process.env.MISTRAL_API_KEY) return '[Image file — no OCR API key configured]'
+  return (await extractImageStructured(buffer, documentId)).text
+}
+
+// Structured variant — returns OCR text plus the image itself as a ParsedImage for captioning.
+async function extractImageStructured(
+  buffer: Buffer,
+  documentId?: string
+): Promise<{ text: string; images: ParsedImage[] }> {
+  if (!process.env.MISTRAL_API_KEY) return { text: '[Image file — no OCR API key configured]', images: [] }
 
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
   const base64 = buffer.toString('base64')
@@ -227,20 +288,24 @@ async function extractImage(buffer: Buffer, documentId?: string): Promise<string
     })
 
     const pages = result.pages ?? []
+    const ocrText = pages.map((p: { markdown?: string }) => stripImageMarkdown(p.markdown ?? '')).join('\n\n')
     let text = pages.map((p: { markdown?: string }) => p.markdown ?? '').join('\n\n')
+    const images: ParsedImage[] = []
 
-    // Store the original image so it shows up in the chat image strip
+    // Store the original image so it can be displayed + captioned
     if (documentId) {
       try {
         const key = `documents/${documentId}/images/original.jpg`
         await uploadFile(key, buffer, 'image/jpeg')
-        text = `![Document image](/api/documents/${documentId}/images/original.jpg)\n\n${text}`
+        const url = `/api/documents/${documentId}/images/original.jpg`
+        text = `![Document image](${url})\n\n${text}`
+        images.push({ imageUrl: url, base64, mimeType: 'image/jpeg', ocrText })
       } catch {}
     }
 
-    return text
+    return { text, images }
   } catch {
-    return '[Image file — OCR extraction failed]'
+    return { text: '[Image file — OCR extraction failed]', images: [] }
   }
 }
 

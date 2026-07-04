@@ -84,6 +84,55 @@ function openRouterHeaders() {
   }
 }
 
+// Vision model used for image captioning. Defaults to the chat model (Claude Haiku is multimodal).
+export const VISION_MODEL = process.env.OPENROUTER_VISION_MODEL ?? CHAT_MODEL
+
+export interface ImageDescription {
+  title: string        // short, human-readable, unique — e.g. "FIG. 1 — System Architecture"
+  description: string  // 1-3 factual sentences for search + LLM reference
+}
+
+/**
+ * Generate a searchable title + description of an image using a vision model.
+ * Returns null on any failure (caller falls back to OCR text alone).
+ */
+export async function describeImage(base64: string, mimeType: string, context = ''): Promise<ImageDescription | null> {
+  try {
+    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: openRouterHeaders(),
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Look at this image from a business document and respond with EXACTLY two lines, no markdown, no extra text:
+TITLE: <a short, unique, human-readable label, max 8 words — e.g. "FIG. 1 — System Architecture Diagram" or "Q3 Revenue Chart". If the image is a figure/exhibit number, lead with that number exactly as shown.>
+DESCRIPTION: <1-3 factual sentences: what it is (diagram, chart, floor plan, photo, table, screenshot) and what it depicts — key labels, entities, and values visible.>${context ? `\n\nSurrounding document text for context:\n${context.slice(0, 1000)}` : ''}`,
+              },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const raw = (data.choices?.[0]?.message?.content ?? '').trim()
+    const titleMatch = raw.match(/TITLE:\s*(.+)/i)
+    const descMatch = raw.match(/DESCRIPTION:\s*([\s\S]+)/i)
+    const title = titleMatch?.[1]?.trim().replace(/^\*+|\*+$/g, '') ?? ''
+    const description = descMatch?.[1]?.trim() ?? raw
+    if (!title && !description) return null
+    return { title: title || description.slice(0, 60), description }
+  } catch {
+    return null
+  }
+}
+
 export async function chat(
   systemPrompt: string,
   userMessage: string,

@@ -93,3 +93,11 @@ const FINANCIAL_PATTERN = /\b(revenue|cost|budget|spend|spending|profit|loss|mar
 export function isFinancialQuery(query: string): boolean {
   return FINANCIAL_PATTERN.test(query)
 }
+
+// Only true when the user is explicitly asking to SEE something visual —
+// gates whether extracted document images are surfaced in the response at all.
+const VISUAL_INTENT_PATTERN = /\b(show|display|see|view|look at|open|pull up)\b.{0,40}\b(image|images|diagram|diagrams|figure|figures|fig\.?|layout|floor ?plan|chart|charts|graph|graphs|photo|photos|picture|pictures|screenshot|drawing|drawings|visual|illustration)\b|\b(what does (it|this|the (diagram|figure|chart|layout|image))) look like\b/i
+
+export function wantsVisual(query: string): boolean {
+  return VISUAL_INTENT_PATTERN.test(query)
+}

@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentName: string; spaceName?: string }
@@ -20,7 +21,7 @@ interface DocDetail extends Doc {
 }
 interface TimelineEvent { id: string; type: 'document' | 'decision' | 'risk' | 'number'; text: string; sourceName: string; sourceFileType: string; date: string; status: string }
 type SpaceStatus = 'new' | 'on_track' | 'at_risk' | 'on_hold' | 'completed'
-interface Space { id: string; name: string; description: string | null; status: SpaceStatus; lastVisit: string | null }
+interface Space { id: string; name: string; description: string | null; status: SpaceStatus; lastVisit: string | null; imageKey: string | null }
 
 const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: string }> = {
   new:       { label: 'New',       dot: 'bg-blue-400',                 badge: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' },
@@ -100,6 +101,9 @@ export default function SpacePage() {
 
   const [space, setSpace] = useState<Space | null>(null)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [coverBust, setCoverBust] = useState(0)
+  const coverInputRef = useRef<HTMLInputElement>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -126,7 +130,9 @@ export default function SpacePage() {
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [readyDocs, setReadyDocs] = useState<{ id: string; name: string; fileType: string }[]>([])
-  const [otherSpaces, setOtherSpaces] = useState<{ id: string; name: string }[]>([])
+  // Shared cache — avoids re-fetching /api/spaces on every space-page visit (sidebar already has it)
+  const { spaces: allSpaces } = useSpacesList()
+  const otherSpaces = useMemo(() => allSpaces.filter((s) => s.id !== spaceId), [allSpaces, spaceId])
   const [spaceSuggestion, setSpaceSuggestion] = useState<{ id: string; name: string } | null>(null)
   const spaceSuggestionRef = useRef<{ id: string; name: string } | null>(null)
   const [docSearch, setDocSearch] = useState('')
@@ -147,7 +153,6 @@ export default function SpacePage() {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
     fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
     fetch(`/api/documents?spaceId=${spaceId}`).then((r) => r.ok ? r.json() : []).then((d: Doc[]) => { if (Array.isArray(d)) setReadyDocs(d.filter((doc) => doc.status === 'ready').map((doc) => ({ id: doc.id, name: doc.name, fileType: doc.fileType }))) })
-    fetch('/api/spaces').then((r) => r.ok ? r.json() : []).then((d: { id: string; name: string }[]) => { if (Array.isArray(d)) setOtherSpaces(d.filter((s) => s.id !== spaceId)) })
   }, [spaceId])
 
   useEffect(() => {
@@ -495,6 +500,20 @@ export default function SpacePage() {
     setTimelineLoading(false)
   }
 
+  async function uploadCover(file: File) {
+    setUploadingCover(true)
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`/api/spaces/${spaceId}/image`, { method: 'POST', body: form })
+    if (res.ok) {
+      const { imageKey } = await res.json()
+      setSpace((s) => s ? { ...s, imageKey } : s)
+      setCoverBust((b) => b + 1)
+      window.dispatchEvent(new CustomEvent('space-created')) // refresh sidebar/home caches
+    }
+    setUploadingCover(false)
+  }
+
   async function openDocuments() {
     setView('documents')
     setDocsLoading(true)
@@ -524,6 +543,38 @@ export default function SpacePage() {
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
           </button>
+          {/* Cover photo avatar — click to upload/replace the space thumbnail used on Home/Spaces cards */}
+          <button
+            onClick={() => coverInputRef.current?.click()}
+            disabled={uploadingCover}
+            title="Change space photo"
+            className="relative shrink-0 w-9 h-9 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 group/cover"
+          >
+            {space?.imageKey ? (
+              // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect
+              <img key={coverBust} src={`/api/spaces/${spaceId}/image?v=${coverBust}`} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full grid place-items-center text-gray-400 dark:text-gray-500 text-xs font-semibold">
+                {(space?.name ?? nameHint ?? '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/cover:bg-black/40 transition-colors">
+              {uploadingCover ? (
+                <svg className="animate-spin text-white opacity-0 group-hover/cover:opacity-100" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /></svg>
+              ) : (
+                <svg className="text-white opacity-0 group-hover/cover:opacity-100 transition-opacity" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                </svg>
+              )}
+            </div>
+          </button>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.target.value = '' }}
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight min-w-0 shrink">

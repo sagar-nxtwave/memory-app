@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { parseUtc } from '@/lib/utils/date'
 
@@ -15,6 +16,7 @@ export interface SpaceSignal {
   latestDocumentName: string | null
   newDocsSinceVisit: number
   lastVisitAt: string | null
+  hasImage?: boolean
 }
 
 export interface RecentDoc {
@@ -91,6 +93,7 @@ const THUMB_GRADIENTS = [
 
 export function SpaceCard({ space, index = 0, onClick }: { space: SpaceSignal; index?: number; onClick: () => void }) {
   const isEmpty = space.documentCount === 0
+  const [imgFailed, setImgFailed] = useState(false)
   const gradient = THUMB_GRADIENTS[
     Math.abs([...space.name].reduce((a, c) => a + c.charCodeAt(0), 0)) % THUMB_GRADIENTS.length
   ]
@@ -109,10 +112,20 @@ export function SpaceCard({ space, index = 0, onClick }: { space: SpaceSignal; i
       onClick={onClick}
       className="w-full flex items-center gap-4 p-2 pr-4 rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 text-left group"
     >
-      {/* Thumbnail 72×72 (fluid), radius 18 */}
-      <div className={`thumb shrink-0 grid place-items-center rounded-[18px] bg-gradient-to-br ${gradient}`}>
-        <span className="font-figtree text-[clamp(1.25rem,6vw,1.5rem)] font-semibold text-white/95">{space.name.charAt(0).toUpperCase()}</span>
-      </div>
+      {/* Thumbnail 72×72 (fluid), radius 18 — real cover photo when set, else gradient monogram */}
+      {space.hasImage && !imgFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect, not a static asset Next can optimize
+        <img
+          src={`/api/spaces/${space.id}/image`}
+          alt=""
+          onError={() => setImgFailed(true)}
+          className="thumb shrink-0 rounded-[18px] object-cover"
+        />
+      ) : (
+        <div className={`thumb shrink-0 grid place-items-center rounded-[18px] bg-gradient-to-br ${gradient}`}>
+          <span className="font-figtree text-[clamp(1.25rem,6vw,1.5rem)] font-semibold text-white/95">{space.name.charAt(0).toUpperCase()}</span>
+        </div>
+      )}
 
       <div className="flex-1 min-w-0">
         {/* Label-1/SemiBold: Figtree 600 16/22, -0.0113em, #0F172A */}

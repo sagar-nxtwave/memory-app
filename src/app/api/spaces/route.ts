@@ -16,12 +16,13 @@ export async function GET() {
       createdAt: spaces.createdAt,
       documentCount: sql<number>`cast(count(${documents.id}) filter (where ${documents.status} = 'ready') as int)`,
       lastActivityAt: sql<string | null>`max(${documents.createdAt})`,
+      hasImage: sql<boolean>`(${spaces.imageKey} is not null)`,
     })
     .from(spaces)
     .innerJoin(spaceMembers, eq(spaceMembers.spaceId, spaces.id))
     .leftJoin(documents, eq(documents.spaceId, spaces.id))
     .where(eq(spaceMembers.userId, session.user.id))
-    .groupBy(spaces.id, spaces.name, spaces.description, spaces.createdAt)
+    .groupBy(spaces.id, spaces.name, spaces.description, spaces.createdAt, spaces.imageKey)
     .orderBy(sql`max(${documents.createdAt}) desc nulls last, ${spaces.createdAt} desc`)
 
   return NextResponse.json(userSpaces)

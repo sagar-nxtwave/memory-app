@@ -8,7 +8,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
-import { parseQueryFilters, isFinancialQuery } from '@/lib/utils/queryFilters'
+import { parseQueryFilters, isFinancialQuery, wantsVisual } from '@/lib/utils/queryFilters'
 
 export const maxDuration = 60
 
@@ -17,7 +17,14 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const history = await db
-    .select({ id: globalMessages.id, role: globalMessages.role, content: globalMessages.content, createdAt: globalMessages.createdAt })
+    .select({
+      id: globalMessages.id,
+      role: globalMessages.role,
+      content: globalMessages.content,
+      createdAt: globalMessages.createdAt,
+      citations: globalMessages.citations,
+      documentImages: globalMessages.documentImages,
+    })
     .from(globalMessages)
     .where(eq(globalMessages.userId, session.user.id))
     .orderBy(globalMessages.createdAt)
@@ -98,6 +105,7 @@ export async function POST(req: NextRequest) {
   let contextText = ''
   let citations: { documentName: string; spaceName?: string }[] = []
   let documentImages: { url: string; alt: string; documentName: string; spaceName?: string }[] = []
+  const showImages = wantsVisual(content)
   if (queryEmbedding.length > 0) {
     const embeddingStr = `[${queryEmbedding.join(',')}]`
     const spaceIdsSQL = sql.join(spaceIds.map((id) => sql`${id}::uuid`), sql`, `)
@@ -143,32 +151,60 @@ export async function POST(req: NextRequest) {
         `)
     const rawChunks = chunks as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
 
-    // Fetch image-containing chunks from all searched spaces — image chunks score near-zero
-    // in vector search (minimal text) so we can't rely on them appearing in rawChunks
-    const imageRows = await db.execute(sql`
-      SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name
-      FROM document_chunks dc
-      INNER JOIN documents d ON d.id = dc.document_id
-      INNER JOIN spaces s ON s.id = d.space_id
-      WHERE d.space_id IN (${spaceIdsSQL})
-        AND d.status = 'ready'
-        AND dc.content LIKE '%![%'
-      LIMIT 50
-    `)
-    const imageChunks = imageRows as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
-
-    // Extract image refs from both vector results and dedicated image chunk query
-    const IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
-    for (const chunk of [...rawChunks, ...imageChunks]) {
-      let m: RegExpExecArray | null
-      IMAGE_RE.lastIndex = 0
-      while ((m = IMAGE_RE.exec(chunk.content)) !== null) {
-        let url = m[2]
-        if (!url.startsWith('/')) {
-          url = `/api/documents/${chunk.document_id}/images/${encodeURIComponent(url)}`
+    // Only look up images when the user explicitly asked to see something visual —
+    // otherwise every cross-space answer would surface an unrelated image strip.
+    if (showImages) {
+      // Primary path: rank dedicated image chunks by how well their caption matches the query.
+      const imgRows = await db.execute(sql`
+        SELECT dc.image_url, dc.image_title, dc.content, d.name as document_name, s.name as space_name,
+               (1 - (dc.embedding <=> ${embeddingStr}::vector)) AS similarity
+        FROM document_chunks dc
+        INNER JOIN documents d ON d.id = dc.document_id
+        INNER JOIN spaces s ON s.id = d.space_id
+        WHERE d.space_id IN (${spaceIdsSQL})
+          AND d.status = 'ready'
+          AND dc.chunk_type = 'image'
+          AND dc.image_url IS NOT NULL
+          AND dc.embedding IS NOT NULL
+        ORDER BY dc.embedding <=> ${embeddingStr}::vector
+        LIMIT 6
+      `)
+      const rows = imgRows as unknown as { image_url: string; image_title: string | null; content: string; document_name: string; space_name: string; similarity: number }[]
+      // Only surface genuinely close matches — cap at 3, within a small margin of the best match.
+      const topScore = rows[0]?.similarity ?? 0
+      const passing = rows.filter((r) => r.similarity >= 0.3 && r.similarity >= topScore - 0.05).slice(0, 3)
+      const chosen = passing.length > 0 ? passing : rows.slice(0, 1)
+      for (const r of chosen) {
+        if (!documentImages.find((i) => i.url === r.image_url)) {
+          documentImages.push({ alt: r.image_title || r.content.slice(0, 80) || 'image', url: r.image_url, documentName: r.document_name, spaceName: r.space_name })
         }
-        if (!documentImages.find((i) => i.url === url)) {
-          documentImages.push({ alt: m[1] || url.split('/').pop() || 'image', url, documentName: chunk.document_name, spaceName: chunk.space_name })
+      }
+
+      // Legacy fallback: pre-migration documents keep figures as markdown inside prose chunks.
+      if (documentImages.length === 0) {
+        const legacyRows = await db.execute(sql`
+          SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name
+          FROM document_chunks dc
+          INNER JOIN documents d ON d.id = dc.document_id
+          INNER JOIN spaces s ON s.id = d.space_id
+          WHERE d.space_id IN (${spaceIdsSQL})
+            AND d.status = 'ready'
+            AND dc.chunk_type <> 'image'
+            AND dc.content LIKE '%![%'
+          LIMIT 50
+        `)
+        const legacy = legacyRows as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
+        const IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
+        for (const chunk of legacy) {
+          let m: RegExpExecArray | null
+          IMAGE_RE.lastIndex = 0
+          while ((m = IMAGE_RE.exec(chunk.content)) !== null) {
+            let url = m[2]
+            if (!url.startsWith('/')) url = `/api/documents/${chunk.document_id}/images/${encodeURIComponent(url)}`
+            if (!documentImages.find((i) => i.url === url)) {
+              documentImages.push({ alt: m[1] || url.split('/').pop() || 'image', url, documentName: chunk.document_name, spaceName: chunk.space_name })
+            }
+          }
         }
       }
     }
@@ -224,7 +260,7 @@ export async function POST(req: NextRequest) {
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
   const imageNote = documentImages.length > 0
-    ? `\nIMPORTANT: ${documentImages.length} image(s) extracted from documents are already displayed to the user in the interface. Never say images are missing, corrupted, or inaccessible.`
+    ? `\nIMPORTANT: The following ${documentImages.length} image(s) are already displayed to the user below your response, in this exact order:\n${documentImages.map((img, i) => `${i + 1}. ${img.alt}${img.spaceName ? ` (${img.spaceName})` : ''}`).join('\n')}\nWhen answering, identify which numbered image(s) answer the question and describe them directly by their content (e.g. "Image 2 below shows..."). Never tell the user to scroll, search, or look through the images themselves — you already know which one(s) are relevant. Never say images are missing, corrupted, or inaccessible.`
     : ''
 
   const systemPrompt = `${globalChatPrompt()}
@@ -253,7 +289,13 @@ ${contextText ? `Relevant content from documents:\n\n${truncateToTokenLimit(cont
 
         const [assistantMsg] = await db
           .insert(globalMessages)
-          .values({ userId, role: 'assistant', content: fullContent || 'No response generated.' })
+          .values({
+            userId,
+            role: 'assistant',
+            content: fullContent || 'No response generated.',
+            citations: citations.length > 0 ? citations : null,
+            documentImages: documentImages.length > 0 ? documentImages : null,
+          })
           .returning()
 
         send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages })

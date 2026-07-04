@@ -85,7 +85,7 @@ For comparisons or multi-column data, always use a markdown table (| Col | Col |
 For financial figures, bold the numbers: **AED 42.85M**.
 If the answer is not in context: "Not in documents."
 Maximum response: 150 words unless a longer list or table is required.
-Only include images (markdown image syntax) when the user explicitly asks to see a layout, floor plan, diagram, chart, or visual. Never include images in regular text answers.`
+NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
 }
 
 export function globalChatPrompt(): string {
@@ -96,7 +96,7 @@ The context provided includes documents from different projects — each labeled
 Always cite which project your information comes from.
 For comparisons or multi-column data, use a markdown table (| Col | Col |). Bold key financial figures.
 Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.
-Only include images (markdown image syntax) when the user explicitly asks to see a layout, floor plan, diagram, chart, or visual.`
+NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
 }
 
 export function timelinePrompt(spaceName: string): string {
