@@ -1,7 +1,15 @@
 import type { DocumentType } from '@/types'
 import { Mistral } from '@mistralai/mistralai'
 import { uploadFile } from '@/lib/storage/minio'
+import { mapWithConcurrency } from '@/lib/utils/concurrency'
 import AdmZip from 'adm-zip'
+
+// Splitting a large PDF into page-batches and OCR-ing them concurrently is a real win for
+// big scanned documents — Mistral OCR's per-call time scales with page count, and a 76-page
+// patent run as one call is fully serial. Below this threshold, splitting adds overhead for
+// no benefit, so small documents still go through as a single OCR call.
+const PAGES_PER_OCR_BATCH = 8
+const MAX_CONCURRENT_OCR_BATCHES = 3
 
 export interface TableSheet {
   sheetName: string
@@ -37,16 +45,20 @@ export async function parseDocument(
       }
       return { text: await extractPdf(buffer), tables: [], images: [], fileType }
     }
-    case 'docx':
-      return { text: await extractDocx(buffer), tables: [], images: [], fileType }
+    case 'docx': {
+      const { text, images } = await extractDocx(buffer, documentId)
+      return { text, tables: [], images, fileType }
+    }
     case 'xlsx':
       return { text: '', tables: await extractExcelStructured(buffer), images: [], fileType }
     case 'csv':
       return { text: '', tables: [await extractCsvStructured(buffer)], images: [], fileType }
     case 'text':
       return { text: buffer.toString('utf-8'), tables: [], images: [], fileType }
-    case 'pptx':
-      return { text: await extractPptx(buffer), tables: [], images: [], fileType }
+    case 'pptx': {
+      const { text, images } = await extractPptx(buffer, documentId)
+      return { text, tables: [], images, fileType }
+    }
     case 'image': {
       const { text, images } = await extractImageStructured(buffer, documentId)
       return { text, tables: [], images, fileType }
@@ -66,11 +78,11 @@ export async function parseDocument(
 export async function extractText(buffer: Buffer, fileType: DocumentType): Promise<string> {
   switch (fileType) {
     case 'pdf':   return extractPdf(buffer)
-    case 'docx':  return extractDocx(buffer)
+    case 'docx':  return (await extractDocx(buffer)).text
     case 'xlsx':  return extractExcelFlat(buffer)
     case 'csv':   return buffer.toString('utf-8')
     case 'text':  return buffer.toString('utf-8')
-    case 'pptx':  return extractPptx(buffer)
+    case 'pptx':  return (await extractPptx(buffer)).text
     case 'image': return extractImage(buffer)
     case 'zip':   return extractZip(buffer)
     case 'email': return extractEmail(buffer)
@@ -94,18 +106,45 @@ function stripImageMarkdown(md: string): string {
   return md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
 
-async function extractPdfOcr(
-  buffer: Buffer,
-  documentId?: string
-): Promise<{ text: string; images: ParsedImage[] }> {
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
+type OcrPage = {
+  markdown?: string
+  dimensions?: { width: number; height: number } | null
+  images?: { id: string; imageBase64?: string | null; topLeftX?: number | null; topLeftY?: number | null; bottomRightX?: number | null; bottomRightY?: number | null }[]
+}
 
-  // Upload the PDF file
+// Splits a PDF into ~PAGES_PER_OCR_BATCH-page chunks via pdf-lib. Returns [original buffer]
+// unchanged (no split) if the PDF is small enough, or if splitting fails for any reason
+// (encrypted/malformed PDFs, etc.) — OCR always falls back to the whole document as one call.
+async function splitPdfIntoBatches(buffer: Buffer): Promise<Buffer[]> {
+  try {
+    const { PDFDocument } = await import('pdf-lib')
+    const src = await PDFDocument.load(buffer, { ignoreEncryption: true })
+    const pageCount = src.getPageCount()
+    if (pageCount <= PAGES_PER_OCR_BATCH) return [buffer]
+
+    const batches: Buffer[] = []
+    for (let start = 0; start < pageCount; start += PAGES_PER_OCR_BATCH) {
+      const indices = Array.from(
+        { length: Math.min(PAGES_PER_OCR_BATCH, pageCount - start) },
+        (_, i) => start + i
+      )
+      const dst = await PDFDocument.create()
+      const copiedPages = await dst.copyPages(src, indices)
+      copiedPages.forEach((p) => dst.addPage(p))
+      batches.push(Buffer.from(await dst.save()))
+    }
+    return batches
+  } catch (err) {
+    console.error('[OCR] PDF split failed — falling back to single-batch OCR:', err)
+    return [buffer]
+  }
+}
+
+async function runMistralOcrOnBuffer(mistral: Mistral, buffer: Buffer): Promise<OcrPage[]> {
   const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
   const file = new File([blob], 'document.pdf', { type: 'application/pdf' })
   const uploaded = await mistral.files.upload({ file, purpose: 'ocr' })
 
-  // Get signed URL and run OCR with image extraction enabled
   const signedUrl = await mistral.files.getSignedUrl({ fileId: uploaded.id })
   const result = await mistral.ocr.process({
     model: 'mistral-ocr-latest',
@@ -113,9 +152,30 @@ async function extractPdfOcr(
     includeImageBase64: true,
   })
 
+  await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})
+  return (result.pages ?? []) as OcrPage[]
+}
+
+async function extractPdfOcr(
+  buffer: Buffer,
+  documentId?: string
+): Promise<{ text: string; images: ParsedImage[] }> {
+  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
+
+  const batches = await splitPdfIntoBatches(buffer)
+  // Each batch's OCR call resets its own page/image numbering — batches[i]'s "page 0" is
+  // NOT the document's actual page 0 when i > 0. Track (batchIndex, page) pairs throughout
+  // so ordering and image-id namespacing stay correct after reassembly.
+  const batchPages: OcrPage[][] = batches.length === 1
+    ? [await runMistralOcrOnBuffer(mistral, batches[0])]
+    : await mapWithConcurrency(batches, MAX_CONCURRENT_OCR_BATCHES, (b) => runMistralOcrOnBuffer(mistral, b))
+
   const images: ParsedImage[] = []
+  // Keyed by `${batchIndex}:${localImgId}` — Mistral's img.id (e.g. "img-0.jpeg") is only
+  // unique WITHIN one OCR call, so two different batches can both produce "img-0.jpeg"
+  // referring to two completely different images. A flat map keyed by id alone would let a
+  // later batch silently overwrite an earlier batch's URL for the same-named image.
   const imageUrlMap = new Map<string, string>()
-  const pages = result.pages ?? []
 
   // A full-page-sized "figure" is ambiguous: it could be a photographed/scanned TEXT page
   // (patent claims, a document screenshot — not a real figure), or it could be a genuine
@@ -128,62 +188,98 @@ async function extractPdfOcr(
 
   // Upload each page image + collect it as a ParsedImage (base64 kept for captioning)
   if (documentId) {
-    for (const page of pages) {
-      const pageText = stripImageMarkdown((page as { markdown?: string }).markdown ?? '')
-      const pageWordCount = pageText.split(/\s+/).filter(Boolean).length
-      const dims = (page as { dimensions?: { width: number; height: number } | null }).dimensions
-      const pageArea = dims ? dims.width * dims.height : 0
+    for (let batchIdx = 0; batchIdx < batchPages.length; batchIdx++) {
+      for (const page of batchPages[batchIdx]) {
+        const pageText = stripImageMarkdown(page.markdown ?? '')
+        const pageWordCount = pageText.split(/\s+/).filter(Boolean).length
+        const dims = page.dimensions
+        const pageArea = dims ? dims.width * dims.height : 0
 
-      type OcrImg = { id: string; imageBase64?: string | null; topLeftX?: number | null; topLeftY?: number | null; bottomRightX?: number | null; bottomRightY?: number | null }
-      for (const img of ((page as { images?: OcrImg[] }).images ?? [])) {
-        if (!img.imageBase64) continue
+        for (const img of page.images ?? []) {
+          if (!img.imageBase64) continue
 
-        if (pageArea > 0 && img.topLeftX != null && img.topLeftY != null && img.bottomRightX != null && img.bottomRightY != null) {
-          const imgArea = Math.max(0, img.bottomRightX - img.topLeftX) * Math.max(0, img.bottomRightY - img.topLeftY)
-          const isFullPage = imgArea / pageArea >= FULL_PAGE_AREA_RATIO
-          // Only skip when it's BOTH full-page AND text-dense — a full-page floor plan
-          // with sparse labels is kept; a full-page scanned paragraph is dropped.
-          if (isFullPage && pageWordCount >= DENSE_TEXT_WORD_COUNT) continue
-        }
+          if (pageArea > 0 && img.topLeftX != null && img.topLeftY != null && img.bottomRightX != null && img.bottomRightY != null) {
+            const imgArea = Math.max(0, img.bottomRightX - img.topLeftX) * Math.max(0, img.bottomRightY - img.topLeftY)
+            const isFullPage = imgArea / pageArea >= FULL_PAGE_AREA_RATIO
+            // Only skip when it's BOTH full-page AND text-dense — a full-page floor plan
+            // with sparse labels is kept; a full-page scanned paragraph is dropped.
+            if (isFullPage && pageWordCount >= DENSE_TEXT_WORD_COUNT) continue
+          }
 
-        // Mistral sometimes returns a data-URL prefix — strip it to raw base64
-        const rawBase64 = img.imageBase64.replace(/^data:[^;]+;base64,/, '')
-        const ext = (img.id.split('.').pop() ?? 'jpeg').toLowerCase()
-        const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
-        try {
-          const imgBuffer = Buffer.from(rawBase64, 'base64')
-          const key = `documents/${documentId}/images/${img.id}`
-          await uploadFile(key, imgBuffer, mimeType)
-          const url = `/api/documents/${documentId}/images/${encodeURIComponent(img.id)}`
-          imageUrlMap.set(img.id, url)
-          images.push({ imageUrl: url, base64: rawBase64, mimeType, ocrText: pageText })
-        } catch (imgErr) {
-          console.error(`[OCR] Failed to upload image ${img.id}:`, imgErr)
+          // Mistral sometimes returns a data-URL prefix — strip it to raw base64
+          const rawBase64 = img.imageBase64.replace(/^data:[^;]+;base64,/, '')
+          const ext = (img.id.split('.').pop() ?? 'jpeg').toLowerCase()
+          const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
+          const qualifiedId = `b${batchIdx}-${img.id}`
+          try {
+            const imgBuffer = Buffer.from(rawBase64, 'base64')
+            const key = `documents/${documentId}/images/${qualifiedId}`
+            await uploadFile(key, imgBuffer, mimeType)
+            const url = `/api/documents/${documentId}/images/${encodeURIComponent(qualifiedId)}`
+            imageUrlMap.set(`${batchIdx}:${img.id}`, url)
+            images.push({ imageUrl: url, base64: rawBase64, mimeType, ocrText: pageText })
+          } catch (imgErr) {
+            console.error(`[OCR] Failed to upload image ${qualifiedId}:`, imgErr)
+          }
         }
       }
     }
   }
 
-  // Concatenate all pages, replacing local image refs with real served URLs
-  const text = pages.map((p: { markdown?: string }) => {
-    let md = p.markdown ?? ''
-    md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
-      const url = imageUrlMap.get(src)
-      return url ? `![${alt}](${url})` : `![${alt}](${src})`
-    })
-    return md
-  }).join('\n\n')
+  // Concatenate all pages in original document order, replacing local image refs with
+  // real served URLs (looked up using this page's own batch index, not a global id).
+  const textParts: string[] = []
+  for (let batchIdx = 0; batchIdx < batchPages.length; batchIdx++) {
+    for (const page of batchPages[batchIdx]) {
+      let md = page.markdown ?? ''
+      md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+        const url = imageUrlMap.get(`${batchIdx}:${src}`)
+        return url ? `![${alt}](${url})` : `![${alt}](${src})`
+      })
+      textParts.push(md)
+    }
+  }
 
-  // Clean up uploaded file
-  await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})
-
-  return { text, images }
+  return { text: textParts.join('\n\n'), images }
 }
 
-async function extractDocx(buffer: Buffer): Promise<string> {
+// DOCX/PPTX are both zipped Office Open XML — embedded pictures live under a fixed media
+// folder inside the archive regardless of which text-extraction library reads the prose.
+// Vector formats (emf/wmf/svg) are skipped — vision models can't read them as raster input.
+const OFFICE_RASTER_EXT: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' }
+const MIN_OFFICE_IMAGE_BYTES = 3000
+
+async function extractOfficeMedia(zip: AdmZip, mediaPathPrefix: string, documentId?: string): Promise<ParsedImage[]> {
+  if (!documentId) return []
+  const images: ParsedImage[] = []
+  const mediaEntries = zip.getEntries().filter((e) => e.entryName.startsWith(mediaPathPrefix) && !e.isDirectory)
+
+  for (const entry of mediaEntries) {
+    const ext = entry.entryName.split('.').pop()?.toLowerCase() ?? ''
+    const mimeType = OFFICE_RASTER_EXT[ext]
+    if (!mimeType) continue
+
+    const data = entry.getData()
+    if (data.byteLength < MIN_OFFICE_IMAGE_BYTES) continue
+
+    try {
+      const safeName = entry.entryName.split('/').pop() ?? `image.${ext}`
+      const key = `documents/${documentId}/images/${safeName}`
+      await uploadFile(key, data, mimeType)
+      const url = `/api/documents/${documentId}/images/${encodeURIComponent(safeName)}`
+      images.push({ imageUrl: url, base64: data.toString('base64'), mimeType, ocrText: '' })
+    } catch (err) {
+      console.error(`[Office media] Failed to upload ${entry.entryName}:`, err)
+    }
+  }
+  return images
+}
+
+async function extractDocx(buffer: Buffer, documentId?: string): Promise<{ text: string; images: ParsedImage[] }> {
   const mammoth = await import('mammoth')
   const result = await mammoth.extractRawText({ buffer })
-  return result.value
+  const images = await extractOfficeMedia(new AdmZip(buffer), 'word/media/', documentId)
+  return { text: result.value, images }
 }
 
 // Used only for AI extraction summary (needs flat string)
@@ -246,7 +342,7 @@ async function extractCsvStructured(buffer: Buffer): Promise<TableSheet> {
 }
 
 // --- PPTX -----------------------------------------------------------------
-async function extractPptx(buffer: Buffer): Promise<string> {
+async function extractPptx(buffer: Buffer, documentId?: string): Promise<{ text: string; images: ParsedImage[] }> {
   const zip = new AdmZip(buffer)
   const slideEntries = zip.getEntries()
     .filter(e => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
@@ -262,7 +358,9 @@ async function extractPptx(buffer: Buffer): Promise<string> {
     const texts = [...xml.matchAll(/<a:t[^>]*>([^<]+)<\/a:t>/g)].map(m => m[1].trim()).filter(Boolean)
     if (texts.length > 0) slides.push(texts.join(' '))
   }
-  return slides.map((s, i) => `[Slide ${i + 1}]\n${s}`).join('\n\n')
+  const text = slides.map((s, i) => `[Slide ${i + 1}]\n${s}`).join('\n\n')
+  const images = await extractOfficeMedia(zip, 'ppt/media/', documentId)
+  return { text, images }
 }
 
 // --- IMAGES ---------------------------------------------------------------

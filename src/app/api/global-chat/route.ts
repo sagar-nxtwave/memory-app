@@ -8,7 +8,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
-import { parseQueryFilters, isFinancialQuery, wantsVisual } from '@/lib/utils/queryFilters'
+import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 
 export const maxDuration = 60
 
@@ -81,19 +81,25 @@ export async function POST(req: NextRequest) {
   const spaceIds = filteredSpaces.map((s) => s.spaceId)
   const spaceNames = filteredSpaces.map((s) => s.name).join(', ')
 
-  let queryEmbedding: number[] = []
-  try {
-    queryEmbedding = await generateEmbedding(content)
-  } catch {}
-
   const hasMentionedDocs = Array.isArray(mentionedDocIds) && mentionedDocIds.length > 0
+
+  // Skip retrieval entirely for greetings/small talk — otherwise a generic reply still
+  // cites whatever chunk happened to clear the similarity threshold.
+  const skipRetrieval = isChitChat(content) && !hasMentionedDocs
+
+  let queryEmbedding: number[] = []
+  if (!skipRetrieval) {
+    try {
+      queryEmbedding = await generateEmbedding(content)
+    } catch {}
+  }
   const financialBoost = isFinancialQuery(content)
     ? sql` + CASE WHEN dc.contains_numbers = true OR dc.chunk_type IN ('table', 'financial') THEN 0.15 ELSE 0 END`
     : sql``
 
   const filters = parseQueryFilters(content)
   const fileTypeFilter = filters.fileTypes.length > 0
-    ? sql` AND d.file_type = ANY(${filters.fileTypes}::text[])`
+    ? sql` AND d.file_type::text = ANY(${filters.fileTypes}::text[])`
     : sql``
   const afterFilter = filters.afterDate
     ? sql` AND d.created_at >= ${filters.afterDate.toISOString()}`

@@ -10,7 +10,7 @@ import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
-import { parseQueryFilters, isFinancialQuery, wantsVisual } from '@/lib/utils/queryFilters'
+import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
 export async function GET(req: NextRequest) {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName, responseStyle, mentionedDocIds, mentionedSpaceIds } = await req.json()
+  const { spaceId, content, spaceName, responseStyle, mentionedDocIds: bodyMentionedDocIds, mentionedSpaceIds } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -136,11 +136,36 @@ export async function POST(req: NextRequest) {
   const crossSpace = crossSpaceIds.length > 1
   const spaceIdsSQL = sql.join(crossSpaceIds.map((id) => sql`${id}::uuid`), sql`, `)
 
+  const spaceDocsRows = await db
+    .select({ id: documents.id, name: documents.name, createdAt: documents.createdAt, fileType: documents.fileType, spaceId: documents.spaceId, spaceName: spaces.name })
+    .from(documents)
+    .innerJoin(spaces, eq(spaces.id, documents.spaceId))
+    .where(and(sql`${documents.spaceId} IN (${spaceIdsSQL})`, eq(documents.status, 'ready')))
+    .orderBy(desc(documents.createdAt))
+
+  // Auto-focus: if the query explicitly names one specific document (e.g. "tell me about
+  // Statement_0061R00001Jjo4oQAB"), pull that document directly. Filenames/IDs often don't
+  // semantically resemble their own content, so pure embedding + BM25 search misses them
+  // entirely even though the document is fully processed and available.
+  let mentionedDocIds: string[] = Array.isArray(bodyMentionedDocIds) ? bodyMentionedDocIds : []
+  if (mentionedDocIds.length === 0) {
+    const nameMatches = findMentionedDocs(content, spaceDocsRows)
+    const distinctDocIds = [...new Set(nameMatches.map((m) => m.id))]
+    if (distinctDocIds.length === 1) mentionedDocIds = distinctDocIds
+  }
+
+  // Skip retrieval entirely for greetings/small talk ("Hello", "thanks") — otherwise a
+  // generic reply still cites whatever chunk happened to clear the similarity threshold.
+  // mentionedDocIds check: an explicit doc reference always wins even if oddly phrased.
+  const skipRetrieval = isChitChat(content) && mentionedDocIds.length === 0
+
   let queryEmbedding: number[] = []
-  try {
-    queryEmbedding = await generateEmbedding(content)
-  } catch (err) {
-    console.error('[chat] Embedding failed:', err)
+  if (!skipRetrieval) {
+    try {
+      queryEmbedding = await generateEmbedding(content)
+    } catch (err) {
+      console.error('[chat] Embedding failed:', err)
+    }
   }
 
   const embeddingStr = `[${queryEmbedding.join(',')}]`
@@ -153,7 +178,7 @@ export async function POST(req: NextRequest) {
   // Metadata filters derived from natural language hints in the query
   const filters = parseQueryFilters(content)
   const fileTypeFilter = filters.fileTypes.length > 0
-    ? sql` AND d.file_type = ANY(${filters.fileTypes}::text[])`
+    ? sql` AND d.file_type::text = ANY(${filters.fileTypes}::text[])`
     : sql``
   const afterFilter = filters.afterDate
     ? sql` AND d.created_at >= ${filters.afterDate.toISOString()}`
@@ -175,10 +200,6 @@ export async function POST(req: NextRequest) {
           AND d.id = ANY(${mentionedDocIds}::uuid[])
           AND d.status = 'ready'
           AND dc.embedding IS NOT NULL
-          AND (
-            1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.30
-            OR to_tsvector('simple', dc.content) @@ websearch_to_tsquery('simple', ${content})
-          )
           ${fileTypeFilter}${afterFilter}${beforeFilter}
         ORDER BY hybrid_score DESC
         LIMIT 12
@@ -276,13 +297,6 @@ export async function POST(req: NextRequest) {
   const context = reranked
     .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
     .join('\n\n---\n\n')
-
-  const spaceDocsRows = await db
-    .select({ id: documents.id, name: documents.name, createdAt: documents.createdAt, fileType: documents.fileType, spaceId: documents.spaceId, spaceName: spaces.name })
-    .from(documents)
-    .innerJoin(spaces, eq(spaces.id, documents.spaceId))
-    .where(and(sql`${documents.spaceId} IN (${spaceIdsSQL})`, eq(documents.status, 'ready')))
-    .orderBy(desc(documents.createdAt))
 
   const spaceDocs = spaceDocsRows.filter((d) => d.spaceId === spaceId)
 

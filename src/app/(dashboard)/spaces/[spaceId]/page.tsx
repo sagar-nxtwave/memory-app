@@ -57,7 +57,7 @@ function fmt(bytes: number) {
   return `${(bytes / 1048576).toFixed(1)} MB`
 }
 
-const PROCESSING_STAGES = ['Extracting text', 'Analyzing content', 'Generating summary', 'Building search index']
+const PROCESSING_STAGES = ['Extracting text', 'Analyzing images', 'Generating summary', 'Building search index']
 
 const msgVariants = {
   hidden: { opacity: 0, y: 10, scale: 0.98 },
@@ -438,7 +438,7 @@ export default function SpacePage() {
       const { documentId, uploadUrl } = await presignRes.json()
 
       // Step 2: Upload directly to B2/MinIO via XHR (for progress tracking)
-      const uploadOk = await new Promise<boolean>((resolve) => {
+      const uploadResult = await new Promise<{ ok: boolean; status: number; body: string }>((resolve) => {
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', uploadUrl)
         xhr.upload.onprogress = (e) => {
@@ -447,15 +447,20 @@ export default function SpacePage() {
             setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: pct } : p))
           }
         }
-        xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300)
-        xhr.onerror = () => resolve(false)
+        xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: xhr.responseText })
+        // status stays 0 on a genuine network/CORS block (browser can't even read a response) —
+        // any other status means the request reached B2 and it rejected it for a specific reason.
+        xhr.onerror = () => resolve({ ok: false, status: xhr.status, body: xhr.responseText })
         xhr.send(item.file)
       })
 
-      if (!uploadOk) {
+      if (!uploadResult.ok) {
         // Clean up ghost DB record
         await fetch(`/api/documents/${documentId}`, { method: 'DELETE' }).catch(() => {})
-        throw new Error('Upload to storage failed — check B2 CORS settings')
+        const reason = uploadResult.status === 0
+          ? 'Upload to storage failed — network error or CORS is blocking the request (check the B2 bucket\'s CORS rules for this origin).'
+          : `Upload to storage failed — B2 returned HTTP ${uploadResult.status}${uploadResult.body ? `: ${uploadResult.body.slice(0, 300)}` : ''}`
+        throw new Error(reason)
       }
 
       // Step 3: Notify server to start processing

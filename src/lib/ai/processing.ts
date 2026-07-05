@@ -5,6 +5,7 @@ import { documents, documentChunks } from '@/lib/db/schema'
 import { parseDocument, extractText, type ParsedImage } from '@/lib/parsers'
 import { chunkText, chunkTable } from '@/lib/utils/chunking'
 import { sanitizeForPrompt } from '@/lib/utils/sanitize'
+import { mapWithConcurrency } from '@/lib/utils/concurrency'
 import { mistral, EXTRACT_MODEL, EMBED_MODEL, describeImage, type ImageDescription } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
@@ -17,21 +18,6 @@ const MIN_IMAGE_BYTES = 3000
 // with dozens of figures) — beyond this, remaining images are skipped rather than captioned.
 // Chosen well above what a normal business document has; only kicks in for outliers.
 const MAX_IMAGES_PER_DOCUMENT = 30
-
-// Run async tasks with a concurrency cap — captioning 10+ images one-at-a-time was the
-// main source of slow uploads for image-heavy PDFs (patents, scanned reports).
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length)
-  let next = 0
-  async function worker() {
-    while (next < items.length) {
-      const i = next++
-      results[i] = await fn(items[i])
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
 
 // Mistral embed limit is ~16k tokens per batch. 1 token ≈ 4 chars.
 function tokenBatches<T extends { content: string } | string>(items: T[], maxTokens = 14000): T[][] {
@@ -114,7 +100,9 @@ export async function processDocumentFromBuffer(
     const flatText = parsed.text || await extractText(buffer, fileType)
     const safeFlat = sanitizeForPrompt(flatText)
     if (!safeFlat.trim()) throw new Error('No text could be extracted from document')
-    const extracted = await extractDocumentData(doc.name, safeFlat)
+    // Don't await yet — this is independent of chunking/image captioning below, so let it
+    // run concurrently instead of adding its full latency serially to every upload.
+    const extractedPromise = extractDocumentData(doc.name, safeFlat)
 
     // 3. Build chunks — table path or prose path
     interface ChunkRecord {
@@ -185,17 +173,15 @@ export async function processDocumentFromBuffer(
       })
     }
 
-    // 4. Embed in token-aware batches (stays under Mistral's 16k token/batch limit)
+    // 4. Embed in token-aware batches (stays under Mistral's 16k token/batch limit).
+    // Batches are independent — run them concurrently instead of one-at-a-time.
     if (allChunks.length > 0) {
-      const embeddings: number[][] = []
-
-      for (const batch of tokenBatches(allChunks)) {
-        const response = await mistral.embeddings.create({
-          model: EMBED_MODEL,
-          inputs: batch.map(c => c.content),
-        })
-        embeddings.push(...response.data.map((d) => d.embedding ?? []))
-      }
+      const batchResponses = await Promise.all(
+        tokenBatches(allChunks).map((batch) =>
+          mistral.embeddings.create({ model: EMBED_MODEL, inputs: batch.map((c) => c.content) })
+        )
+      )
+      const embeddings: number[][] = batchResponses.flatMap((response) => response.data.map((d) => d.embedding ?? []))
 
       // 5. Store chunks + embeddings
       await db.insert(documentChunks).values(
@@ -213,6 +199,7 @@ export async function processDocumentFromBuffer(
     }
 
     // 6. Mark ready with extracted metadata
+    const extracted = await extractedPromise
     await db
       .update(documents)
       .set({

@@ -61,11 +61,13 @@ export function findMentionedSpaces(
     .map((s) => ({ type: 'space' as const, id: s.id, name: s.name }))
 }
 
-// Matches other spaces' documents mentioned by name (full or shorthand-prefix).
+// Matches documents mentioned by name (full or shorthand-prefix). Pass excludeSpaceId to
+// only match OTHER spaces' docs (cross-space detection); omit it to match docs in any
+// space (used for same-space "tell me about [exact filename]" detection too).
 export function findMentionedDocs(
   query: string,
   docs: { id: string; name: string; spaceId: string; spaceName: string }[],
-  excludeSpaceId: string
+  excludeSpaceId?: string
 ): DocCandidate[] {
   const queryWords = normalizeWords(query)
   return docs

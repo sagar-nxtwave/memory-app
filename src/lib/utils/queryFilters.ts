@@ -25,7 +25,9 @@ export function parseQueryFilters(query: string, now: Date = new Date()): QueryF
   if (/\b(excel|spreadsheet|xlsx|xls)\b/.test(q)) fileTypes.push('xlsx')
   if (/\b(csv)\b/.test(q)) fileTypes.push('csv')
   if (/\b(pdf)\b/.test(q)) fileTypes.push('pdf')
-  if (/\b(word|docx|doc|document)\b/.test(q)) fileTypes.push('docx')
+  // NOT bare "document"/"doc"/"word" — those appear in totally unrelated sentences
+  // ("what is this document about", "in other words") and would wrongly filter results.
+  if (/\b(docx|word document|ms word|microsoft word)\b/.test(q)) fileTypes.push('docx')
 
   // ── Date hints ────────────────────────────────────────────────────────────
   let afterDate: Date | null = null
@@ -92,6 +94,15 @@ const FINANCIAL_PATTERN = /\b(revenue|cost|budget|spend|spending|profit|loss|mar
 
 export function isFinancialQuery(query: string): boolean {
   return FINANCIAL_PATTERN.test(query)
+}
+
+// Greetings/small talk with no actual question — retrieval should be skipped entirely for
+// these, not just have its results hidden, otherwise a generic reply still cites whatever
+// chunk happened to clear the (fairly permissive) similarity threshold.
+const CHITCHAT_PATTERN = /^\s*(hi|hello|hey|yo|hiya|sup|good\s?morning|good\s?afternoon|good\s?evening|thanks|thank\s?you|thx|ty|ok|okay|k|cool|great|nice|awesome|bye|goodbye|see\s?you|good\s?night|how\s?are\s?you|what'?s\s?up)[\s!.,?]*$/i
+
+export function isChitChat(query: string): boolean {
+  return CHITCHAT_PATTERN.test(query)
 }
 
 // Only true when the user is explicitly asking to SEE something visual —
