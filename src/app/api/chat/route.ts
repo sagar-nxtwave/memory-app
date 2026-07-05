@@ -11,6 +11,7 @@ import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
+import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
 export async function GET(req: NextRequest) {
@@ -224,7 +225,33 @@ export async function POST(req: NextRequest) {
         LIMIT ${crossSpace ? 20 : 12}
       `)
 
-  const rawChunks = relevantChunks as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
+  let rawChunks = relevantChunks as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
+
+  // Guardrail: a hard 0.40 similarity cutoff returns ZERO rows for plenty of legitimately
+  // relevant questions that are just phrased differently from the document text — the
+  // reranker below is a much better relevance judge than a blind cosine threshold, so it's
+  // worth giving it weaker candidates to evaluate rather than returning an empty context
+  // (which reads to the user as "empty response" / an unhelpful "not in documents").
+  if (!hasMentions && rawChunks.length === 0 && queryEmbedding.length > 0) {
+    const fallback = await db.execute(sql`
+      SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name,
+             (1 - (dc.embedding <=> ${embeddingStr}::vector)) AS hybrid_score
+      FROM document_chunks dc
+      INNER JOIN documents d ON d.id = dc.document_id
+      INNER JOIN spaces s ON s.id = d.space_id
+      WHERE d.space_id IN (${spaceIdsSQL})
+        AND d.status = 'ready'
+        AND dc.embedding IS NOT NULL
+        AND 1 - (dc.embedding <=> ${embeddingStr}::vector) >= 0.20
+        ${fileTypeFilter}${afterFilter}${beforeFilter}
+      ORDER BY hybrid_score DESC
+      LIMIT 8
+    `)
+    rawChunks = fallback as unknown as typeof rawChunks
+    if (rawChunks.length === 0) {
+      console.log(`[chat] No retrieval matches even at 0.20 threshold — space=${spaceId} query="${content.slice(0, 200)}"`)
+    }
+  }
 
   // Only look up images when the user is explicitly asking to see something visual —
   // otherwise every answer in a space with any images would surface an unrelated image strip.
@@ -286,6 +313,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Structured-data path: count / list-all / average / filter questions over spreadsheet
+  // rows can't be answered by top-K vector retrieval (it only ever sees a handful of rows).
+  // Run a safe SQL query over the stored table and hand the LLM the authoritative figure.
+  const tabularResult = skipRetrieval ? null : await answerTabularQuery(content, crossSpaceIds)
+
   const reranked = await rerankChunks(content, rawChunks, crossSpace ? 8 : 5)
   const citations = [...new Map(reranked.map((c) => [
     `${c.space_name}|${c.document_name}`,
@@ -293,6 +325,15 @@ export async function POST(req: NextRequest) {
       ? { documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }
       : { documentId: c.document_id, documentName: c.document_name },
   ])).values()]
+
+  // Surface the structured-query source document(s) as citations too (if not already cited).
+  if (tabularResult) {
+    for (const tc of tabularResult.citations) {
+      if (!citations.some((c) => c.documentId === tc.documentId)) {
+        citations.unshift({ documentId: tc.documentId, documentName: tc.documentName })
+      }
+    }
+  }
 
   const context = reranked
     .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
@@ -331,8 +372,8 @@ export async function POST(req: NextRequest) {
 ${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}
 
 ${docManifest}
-
-${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)}` : 'No relevant document content found for this query.'}`
+${tabularResult ? `\n${tabularResult.context}\n` : ''}
+${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)}` : tabularResult ? '' : 'No relevant document content found for this query.'}`
 
   const history = recentHistory
     .reverse()

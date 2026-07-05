@@ -99,6 +99,37 @@ Be concise and executive-focused. If information comes from multiple projects, p
 NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
 }
 
+// Translates a natural-language question into a constrained query spec over one stored
+// table. Returns {"operation":"none"} when the question is NOT a count/list/aggregate/filter
+// over tabular data (the caller then falls back to normal RAG). The spec is executed by a
+// safe parameterized SQL builder — the model never writes SQL.
+export function tableQueryPlannerPrompt(tables: string): string {
+  return `You convert a user's question into a JSON query over structured spreadsheet data.
+
+Available tables (column names must be copied EXACTLY from the table you target):
+${tables}
+
+Respond with ONLY a JSON object of this shape:
+{
+  "operation": "count" | "list" | "aggregate" | "sample" | "none",
+  "targets": [ { "tableId": "<uuid>", "column": "<exact column name, or null>" } ],
+  "aggregate": "sum" | "avg" | "min" | "max" | null,
+  "filters": [ { "column": "<exact column>", "op": "=" | "!=" | ">" | "<" | ">=" | "<=" | "contains", "value": "<string>" } ],
+  "distinct": true | false,
+  "limit": <integer or null>
+}
+
+Rules:
+- "count": how many rows (optionally with filters, optionally distinct on a column). e.g. "how many students", "number of records".
+- "list": return the values of ONE column per target (set "column"). Use "distinct": true for "unique"/"distinct". e.g. "list all student IDs".
+- "aggregate": compute sum/avg/min/max of ONE numeric column per target (set "column" + "aggregate"). e.g. "average score".
+- "sample": return a few full rows (column may be null). e.g. "show me some rows".
+- "none": NOT a count/list/aggregate/filter over tabular data (prose/summary/opinion). Use empty "targets".
+- DISAMBIGUATION: if the question is vague ("how many unique IDs") and MORE THAN ONE table has a column that plausibly answers it, include ALL of them in "targets" (one entry per table) so every candidate is reported. Only narrow to a single target when the question clearly points to one table/domain.
+- Only use column names that exist in the target table. If no table fits, use "operation":"none".
+- Never invent columns or values. Output raw JSON only, no markdown fences.`
+}
+
 export function timelinePrompt(spaceName: string): string {
   return `${SYSTEM_BASE}
 

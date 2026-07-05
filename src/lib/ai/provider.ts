@@ -1,24 +1,93 @@
-import { Mistral } from '@mistralai/mistralai'
+// ── OpenRouter (paid key) — chat, rerank, vision, and embeddings all route through here.
+// Mistral's own API is used ONLY for OCR (src/lib/parsers/index.ts) — that's a dedicated
+// product with no OpenRouter equivalent. Everything else that could hit the Mistral account
+// directly (chat, extraction, embeddings) has been moved to OpenRouter specifically to avoid
+// depending on that account's (free-tier) rate limits.
+if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set')
 
-// ── Embeddings: Mistral only ────────────────────────────────────────────────
-// pgvector is fixed at 1024 dimensions (mistral-embed).
-// Changing this model requires re-embedding every document in the DB.
-if (!process.env.MISTRAL_API_KEY) throw new Error('MISTRAL_API_KEY is not set')
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
-export const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY })
-export const EMBED_MODEL = 'mistral-embed'
+function openRouterHeaders() {
+  return {
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+    'X-Title': 'Memory',
+  }
+}
+
+// ── Embeddings ───────────────────────────────────────────────────────────────
+// pgvector is fixed at 1024 dimensions (mistral-embed's output size). Routed through
+// OpenRouter now, but it's still the same underlying Mistral model/weights — output vectors
+// are unchanged, so this is safe alongside anything already embedded via the old direct path.
+// Changing to a DIFFERENT model (not just a different proxy for the same one) still requires
+// re-embedding every document in the DB.
+export const EMBED_MODEL = process.env.OPENROUTER_EMBED_MODEL ?? 'mistralai/mistral-embed-2312'
 export const EMBED_DIMENSIONS = 1024
-// Used only for document extraction (JSON mode) — not for chat
-export const EXTRACT_MODEL = 'mistral-small-latest'
+
+// Mistral's embed API (via OpenRouter) silently DROPS inputs beyond a per-request array-size
+// limit — it returns fewer embeddings than sent, with no error. Observed live: 1138 inputs →
+// 1042 embeddings. tokenBatches() upstream caps by tokens only, so a spreadsheet of many tiny
+// row-chunks can pack hundreds of inputs into one request and trip this. Cap request size by
+// COUNT here as the real fix; the alignment/retry logic below is the safety net.
+const MAX_EMBED_INPUTS_PER_REQUEST = 64
+
+async function fetchEmbeddingsRaw(inputs: string[]): Promise<(number[] | undefined)[]> {
+  const res = await fetch(`${OPENROUTER_BASE}/embeddings`, {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({ model: EMBED_MODEL, input: inputs }),
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter embeddings error ${res.status}: ${err}`)
+  }
+  const data = await res.json()
+  const rows: { embedding: number[]; index: number }[] = data.data ?? []
+  // Place each returned embedding at its ORIGINAL input position via the `index` field —
+  // never .sort().map(), which silently collapses/misaligns when rows are missing.
+  const out: (number[] | undefined)[] = new Array(inputs.length).fill(undefined)
+  for (const r of rows) {
+    if (r.index >= 0 && r.index < inputs.length) out[r.index] = r.embedding
+  }
+  return out
+}
+
+async function fetchEmbeddings(inputs: string[]): Promise<number[][]> {
+  const result: (number[] | undefined)[] = new Array(inputs.length).fill(undefined)
+
+  // First pass: request in count-capped sub-batches.
+  for (let i = 0; i < inputs.length; i += MAX_EMBED_INPUTS_PER_REQUEST) {
+    const slice = inputs.slice(i, i + MAX_EMBED_INPUTS_PER_REQUEST)
+    const embeddings = await fetchEmbeddingsRaw(slice)
+    for (let j = 0; j < slice.length; j++) result[i + j] = embeddings[j]
+  }
+
+  // Safety net: retry any positions the provider still dropped, one at a time so a single
+  // problematic input can't take down its neighbours. Give each a couple of attempts.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const missing = result.flatMap((e, idx) => (e === undefined ? [idx] : []))
+    if (missing.length === 0) break
+    for (const idx of missing) {
+      const [embedding] = await fetchEmbeddingsRaw([inputs[idx]])
+      if (embedding) result[idx] = embedding
+    }
+  }
+
+  const stillMissing = result.filter((e) => e === undefined).length
+  if (stillMissing > 0) {
+    throw new Error(`Embedding provider dropped ${stillMissing}/${inputs.length} inputs after retries`)
+  }
+  return result as number[][]
+}
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await mistral.embeddings.create({ model: EMBED_MODEL, inputs: [text] })
-  return response.data[0].embedding ?? []
+  const [embedding] = await fetchEmbeddings([text])
+  return embedding ?? []
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const response = await mistral.embeddings.create({ model: EMBED_MODEL, inputs: texts })
-  return response.data.map((d) => d.embedding ?? [])
+  return fetchEmbeddings(texts)
 }
 
 export const RERANK_MODEL = process.env.OPENROUTER_RERANK_MODEL ?? 'cohere/rerank-v3.5'
@@ -70,17 +139,90 @@ export async function rerankChunks<T extends { content: string }>(
 // Recommended: anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)
 //              anthropic/claude-sonnet-4-6 (best quality)
 //              mistralai/mistral-large     (cheaper, good quality)
-if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set')
-
-const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-haiku-4-5'
 
-function openRouterHeaders() {
-  return {
-    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-    'X-Title': 'Memory',
+// ── PDF/OCR parsing via OpenRouter's file-parser plugin ─────────────────────
+// No direct Mistral API key used anywhere in this file — OpenRouter's "mistral-ocr" engine
+// is OpenRouter's own backend relationship, billed to the OpenRouter (paid) account, not ours.
+// Trade-off vs the old direct-Mistral-OCR integration (accepted deliberately): no per-page
+// boundaries, no bounding-box/page-dimension data, and the plugin caps extracted images at
+// 8 per REQUEST — mitigated by feeding it page-batches (see splitPdfIntoBatches in parsers)
+// so an N-batch document can still surface up to 8×N images instead of a hard 8 total.
+export const OCR_MODEL = process.env.OPENROUTER_OCR_MODEL ?? CHAT_MODEL
+
+export interface OpenRouterOcrResult {
+  text: string
+  images: { base64: string; mimeType: string }[]
+}
+
+export async function extractPdfViaOpenRouter(base64Pdf: string): Promise<OpenRouterOcrResult> {
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model: OCR_MODEL,
+      plugins: [{ id: 'file-parser', pdf: { engine: 'mistral-ocr' } }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Reply with only the word "OK" — do not describe or summarize the attached file.' },
+            { type: 'file', file: { filename: 'document.pdf', file_data: `data:application/pdf;base64,${base64Pdf}` } },
+          ],
+        },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter PDF parse error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  type FileContentItem = { type: string; text?: string; image_url?: { url: string } }
+  const annotations: { type: string; file?: { content?: FileContentItem[] } }[] = data.choices?.[0]?.message?.annotations ?? []
+  const items = annotations.find((a) => a.type === 'file')?.file?.content ?? []
+
+  const text = items.filter((i) => i.type === 'text').map((i) => i.text ?? '').join('\n\n')
+  const images = items
+    .filter((i): i is FileContentItem & { image_url: { url: string } } => i.type === 'image_url' && !!i.image_url?.url)
+    .map((i) => {
+      const match = i.image_url.url.match(/^data:([^;]+);base64,(.+)$/)
+      return match ? { mimeType: match[1], base64: match[2] } : null
+    })
+    .filter((x): x is { mimeType: string; base64: string } => x !== null)
+
+  return { text, images }
+}
+
+/**
+ * Transcribes visible text from a standalone image upload (replaces direct Mistral OCR for
+ * the 'image' file type). Returns '' on failure or if there's no legible text.
+ */
+export async function transcribeImageText(base64: string, mimeType: string): Promise<string> {
+  try {
+    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: openRouterHeaders(),
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Transcribe all text visible in this image verbatim, preserving structure/line breaks. If there is no legible text, respond with an empty string — no commentary either way.' },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!res.ok) return ''
+    const data = await res.json()
+    return (data.choices?.[0]?.message?.content ?? '').trim()
+  } catch {
+    return ''
   }
 }
 
@@ -154,6 +296,45 @@ DESCRIPTION: <1-3 factual sentences: what it is (diagram, chart, floor plan, pho
   } catch {
     return null
   }
+}
+
+// Model used for document extraction (summary/key numbers/risks/decisions JSON). Routed
+// through OpenRouter (paid key) — NOT a direct Mistral API call. This used to call
+// mistral.chat.complete() directly against the Mistral account, which is the free/limited
+// one; that account's rate limit was being hit on every single document upload since this
+// extraction runs for every doc. Defaults to the same model as chat; override if desired.
+export const EXTRACT_MODEL = process.env.OPENROUTER_EXTRACT_MODEL ?? CHAT_MODEL
+
+/**
+ * JSON-mode completion via OpenRouter (paid key) — used for structured extraction where
+ * the response must be parseable JSON. Throws on failure or unparseable output.
+ */
+export async function chatJson(systemPrompt: string, userMessage: string): Promise<string> {
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model: EXTRACT_MODEL,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  const raw = data.choices?.[0]?.message?.content ?? ''
+  // response_format: json_object is a best-effort instruction, not an enforced guarantee
+  // on every model OpenRouter proxies — some wrap the JSON in a ```json ... ``` fence
+  // anyway (seen intermittently, not on every call for the same model/input). Strip it.
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+  return fenceMatch ? fenceMatch[1] : raw
 }
 
 export async function chat(

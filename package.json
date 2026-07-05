@@ -10,14 +10,14 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "eval:rag": "node scripts/eval-rag.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.1077.0",
     "@kenjiuno/msgreader": "^1.28.0",
-    "@mistralai/mistralai": "^2.3.0",
     "@types/bcryptjs": "^2.4.6",
     "adm-zip": "^0.5.18",
     "bcryptjs": "^3.0.3",

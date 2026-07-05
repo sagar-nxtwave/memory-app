@@ -148,6 +148,69 @@ export const documentChunks = pgTable(
   (table) => [index('embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops'))]
 )
 
+// ── Structured tabular data ──────────────────────────────────────────────
+// RAG (document_chunks) can only surface the top-K most similar rows, so it can never
+// answer "how many students?", "list all IDs", or "average score" over a full column.
+// These two tables store spreadsheet/CSV (and any future tabular) data as queryable rows
+// so those enumeration/aggregation questions are answered by SQL, not vector retrieval.
+
+export interface ColumnStat {
+  name: string
+  type: 'number' | 'text' | 'date'
+  numericCount: number   // how many rows had a parseable number in this column
+  distinctCount: number
+  min: number | null
+  max: number | null
+  avg: number | null
+}
+
+// One row per sheet (CSV = one sheet, multi-sheet Excel = one row per sheet).
+export const documentTables = pgTable(
+  'document_tables',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    sheetName: text('sheet_name').notNull(),
+    headers: jsonb('headers').$type<string[]>().notNull(),
+    rowCount: integer('row_count').notNull().default(0),
+    columnStats: jsonb('column_stats').$type<ColumnStat[]>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('document_tables_document_idx').on(table.documentId),
+    index('document_tables_space_idx').on(table.spaceId),
+  ]
+)
+
+// Every data row of a sheet, stored as a JSONB object keyed by header name.
+export const documentRows = pgTable(
+  'document_rows',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tableId: uuid('table_id')
+      .notNull()
+      .references(() => documentTables.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    rowIndex: integer('row_index').notNull(),
+    data: jsonb('data').$type<Record<string, string>>().notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('document_rows_table_idx').on(table.tableId),
+    index('document_rows_space_idx').on(table.spaceId),
+  ]
+)
+
 // Chat messages
 export const messages = pgTable('messages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -224,6 +287,17 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   space: one(spaces, { fields: [documents.spaceId], references: [spaces.id] }),
   uploadedBy: one(users, { fields: [documents.uploadedBy], references: [users.id] }),
   chunks: many(documentChunks),
+  tables: many(documentTables),
+}))
+
+export const documentTablesRelations = relations(documentTables, ({ one, many }) => ({
+  document: one(documents, { fields: [documentTables.documentId], references: [documents.id] }),
+  space: one(spaces, { fields: [documentTables.spaceId], references: [spaces.id] }),
+  rows: many(documentRows),
+}))
+
+export const documentRowsRelations = relations(documentRows, ({ one }) => ({
+  table: one(documentTables, { fields: [documentRows.tableId], references: [documentTables.id] }),
 }))
 
 export const documentChunksRelations = relations(documentChunks, ({ one }) => ({

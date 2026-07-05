@@ -1,12 +1,13 @@
 import { createHash } from 'crypto'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { documents, documentChunks } from '@/lib/db/schema'
+import { documents, documentChunks, documentTables } from '@/lib/db/schema'
 import { parseDocument, extractText, type ParsedImage } from '@/lib/parsers'
 import { chunkText, chunkTable } from '@/lib/utils/chunking'
+import { persistSheets, buildTableSummaryInput } from './tableStore'
 import { sanitizeForPrompt } from '@/lib/utils/sanitize'
 import { mapWithConcurrency } from '@/lib/utils/concurrency'
-import { mistral, EXTRACT_MODEL, EMBED_MODEL, describeImage, type ImageDescription } from './provider'
+import { generateEmbeddings, describeImage, chatJson, type ImageDescription } from './provider'
 import { documentProcessingPrompt } from './prompts'
 import type { DocumentType } from '@/types'
 
@@ -82,7 +83,7 @@ export async function processDocumentFromBuffer(
 
   try {
     const [doc] = await db
-      .select({ name: documents.name })
+      .select({ name: documents.name, spaceId: documents.spaceId })
       .from(documents)
       .where(eq(documents.id, documentId))
       .limit(1)
@@ -92,13 +93,24 @@ export async function processDocumentFromBuffer(
     // 1. Parse document — structured for xlsx/csv, prose for pdf/docx
     const parsed = await parseDocument(buffer, fileType, documentId)
 
-    // 2. AI extraction always uses flat text (needs prose for JSON summary).
-    // Reuse parsed.text (already OCR'd for image-only PDFs) instead of re-parsing —
-    // extractText() has no documentId so it can't OCR and would wrongly return empty
-    // for scanned/no-text-layer PDFs. Only table types (xlsx/csv) need the fallback,
-    // since parsed.text is '' for those (content lives in parsed.tables instead).
-    const flatText = parsed.text || await extractText(buffer, fileType)
-    const safeFlat = sanitizeForPrompt(flatText)
+    // 1b. Persist structured rows for SQL-answerable count/list/aggregate queries.
+    // Clear any prior tables for this document first so reprocessing doesn't duplicate rows
+    // (chunks are cleared by the reprocess route; document_tables/rows are cleared here).
+    if (parsed.tables.length > 0) {
+      await db.delete(documentTables).where(eq(documentTables.documentId, documentId))
+      await persistSheets(documentId, doc.spaceId, parsed.tables)
+    }
+
+    // 2. AI extraction input.
+    // For tabular docs, feed aggregate facts (true row count + column stats + a sample)
+    // instead of raw rows — otherwise the extractor's 8000-char cap sees only the first ~37
+    // rows and reports "37 students" for a 6000-row sheet (the Brief Me bug).
+    // For prose docs, reuse parsed.text (already OCR'd for image-only PDFs) — extractText()
+    // has no documentId so it can't OCR and would wrongly return empty for scanned PDFs.
+    const summaryInput = parsed.tables.length > 0
+      ? buildTableSummaryInput(parsed.tables)
+      : (parsed.text || await extractText(buffer, fileType))
+    const safeFlat = sanitizeForPrompt(summaryInput)
     if (!safeFlat.trim()) throw new Error('No text could be extracted from document')
     // Don't await yet — this is independent of chunking/image captioning below, so let it
     // run concurrently instead of adding its full latency serially to every upload.
@@ -127,7 +139,7 @@ export async function processDocumentFromBuffer(
       // PDF / DOCX / text — use prose chunker.
       // Strip image markdown first: figures get their own dedicated 'image' chunks below,
       // so we never bury (or double-store) them inside a prose chunk.
-      const proseSource = (parsed.text || flatText).replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      const proseSource = (parsed.text || summaryInput).replace(/!\[[^\]]*\]\([^)]*\)/g, '')
       const safeText = sanitizeForPrompt(proseSource)
       const proseChunks = chunkText(safeText)
       for (const content of proseChunks) {
@@ -173,29 +185,38 @@ export async function processDocumentFromBuffer(
       })
     }
 
-    // 4. Embed in token-aware batches (stays under Mistral's 16k token/batch limit).
+    // 4. Embed in token-aware batches (stays under the embedding model's per-request token limit).
     // Batches are independent — run them concurrently instead of one-at-a-time.
     if (allChunks.length > 0) {
       const batchResponses = await Promise.all(
-        tokenBatches(allChunks).map((batch) =>
-          mistral.embeddings.create({ model: EMBED_MODEL, inputs: batch.map((c) => c.content) })
-        )
+        tokenBatches(allChunks).map((batch) => generateEmbeddings(batch.map((c) => c.content)))
       )
-      const embeddings: number[][] = batchResponses.flatMap((response) => response.data.map((d) => d.embedding ?? []))
+      const embeddings: number[][] = batchResponses.flat()
 
-      // 5. Store chunks + embeddings
-      await db.insert(documentChunks).values(
-        allChunks.map((chunk, index) => ({
-          documentId,
-          content: chunk.content,
-          chunkIndex: index,
-          chunkType: chunk.chunkType,
-          containsNumbers: chunk.containsNumbers,
-          imageUrl: chunk.imageUrl ?? null,
-          imageTitle: chunk.imageTitle ?? null,
-          embedding: embeddings[index] ?? [],
-        }))
-      )
+      // A mismatch here means some batch silently returned fewer embeddings than requested —
+      // inserting `[]` for the shortfall would violate the vector(1024) column and fail the
+      // WHOLE insert with a cryptic Postgres error. Fail loudly and specifically instead.
+      if (embeddings.length !== allChunks.length) {
+        throw new Error(`Embedding count mismatch: expected ${allChunks.length}, got ${embeddings.length}`)
+      }
+
+      // 5. Store chunks + embeddings — inserted in bounded batches, not one giant statement.
+      // A single INSERT with thousands of chunk rows (large CSVs/spreadsheets can easily
+      // produce that many) risks hitting Postgres's ~65535 bind-parameter ceiling.
+      const rows = allChunks.map((chunk, index) => ({
+        documentId,
+        content: chunk.content,
+        chunkIndex: index,
+        chunkType: chunk.chunkType,
+        containsNumbers: chunk.containsNumbers,
+        imageUrl: chunk.imageUrl ?? null,
+        imageTitle: chunk.imageTitle ?? null,
+        embedding: embeddings[index],
+      }))
+      const INSERT_BATCH_SIZE = 200
+      for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
+        await db.insert(documentChunks).values(rows.slice(i, i + INSERT_BATCH_SIZE))
+      }
     }
 
     // 6. Mark ready with extracted metadata
@@ -247,29 +268,30 @@ export async function processDocumentFromText(
     const proseChunks = chunkText(safeText)
 
     if (proseChunks.length > 0) {
-      const embeddings: number[][] = []
+      const batchResponses = await Promise.all(
+        tokenBatches(proseChunks.map(c => ({ content: c }))).map((batch) => generateEmbeddings(batch.map((c) => c.content)))
+      )
+      const embeddings: number[][] = batchResponses.flat()
 
-      for (const batch of tokenBatches(proseChunks.map(c => ({ content: c })))) {
-        const response = await mistral.embeddings.create({
-          model: EMBED_MODEL,
-          inputs: batch.map(c => c.content),
-        })
-        embeddings.push(...response.data.map((d) => d.embedding ?? []))
+      if (embeddings.length !== proseChunks.length) {
+        throw new Error(`Embedding count mismatch: expected ${proseChunks.length}, got ${embeddings.length}`)
       }
 
-      await db.insert(documentChunks).values(
-        proseChunks.map((content, index) => {
-          const financial = isFinancialChunk(content)
-          return {
-            documentId,
-            content,
-            chunkIndex: index,
-            chunkType: (financial ? 'financial' : 'prose') as 'financial' | 'prose',
-            containsNumbers: financial || containsAnyNumbers(content),
-            embedding: embeddings[index] ?? [],
-          }
-        })
-      )
+      const rows = proseChunks.map((content, index) => {
+        const financial = isFinancialChunk(content)
+        return {
+          documentId,
+          content,
+          chunkIndex: index,
+          chunkType: (financial ? 'financial' : 'prose') as 'financial' | 'prose',
+          containsNumbers: financial || containsAnyNumbers(content),
+          embedding: embeddings[index],
+        }
+      })
+      const INSERT_BATCH_SIZE = 200
+      for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
+        await db.insert(documentChunks).values(rows.slice(i, i + INSERT_BATCH_SIZE))
+      }
     }
 
     await db
@@ -297,16 +319,7 @@ export async function processDocumentFromText(
 async function extractDocumentData(name: string, text: string): Promise<ExtractedData> {
   const truncated = text.slice(0, 8000)
 
-  const response = await mistral.chat.complete({
-    model: EXTRACT_MODEL,
-    messages: [
-      { role: 'system', content: documentProcessingPrompt(name) },
-      { role: 'user', content: truncated },
-    ],
-    responseFormat: { type: 'json_object' },
-  })
-
-  const content = response.choices?.[0]?.message?.content as string
+  const content = await chatJson(documentProcessingPrompt(name), truncated)
   const parsed = JSON.parse(content)
 
   return {

@@ -1,13 +1,14 @@
 import type { DocumentType } from '@/types'
-import { Mistral } from '@mistralai/mistralai'
 import { uploadFile } from '@/lib/storage/minio'
 import { mapWithConcurrency } from '@/lib/utils/concurrency'
+import { extractPdfViaOpenRouter, transcribeImageText } from '@/lib/ai/provider'
 import AdmZip from 'adm-zip'
 
 // Splitting a large PDF into page-batches and OCR-ing them concurrently is a real win for
-// big scanned documents — Mistral OCR's per-call time scales with page count, and a 76-page
-// patent run as one call is fully serial. Below this threshold, splitting adds overhead for
-// no benefit, so small documents still go through as a single OCR call.
+// big scanned documents — OCR time scales with page count, and a 76-page patent run as one
+// call is fully serial. It also mitigates OpenRouter's file-parser plugin capping extracted
+// images at 8 per request — an N-batch document can surface up to 8×N images instead of a
+// hard 8 total. Below the threshold, splitting adds overhead for no benefit.
 const PAGES_PER_OCR_BATCH = 8
 const MAX_CONCURRENT_OCR_BATCHES = 3
 
@@ -39,7 +40,7 @@ export async function parseDocument(
   switch (fileType) {
     case 'pdf': {
       // OCR path (documentId present) returns both text and extracted image regions
-      if (documentId && process.env.MISTRAL_API_KEY) {
+      if (documentId) {
         const { text, images } = await extractPdfOcr(buffer, documentId)
         return { text, tables: [], images, fileType }
       }
@@ -93,23 +94,12 @@ export async function extractText(buffer: Buffer, fileType: DocumentType): Promi
 
 // Flat-text PDF extraction — used by extractText() for AI summarisation (no image handling).
 async function extractPdf(buffer: Buffer, documentId?: string): Promise<string> {
-  if (documentId && process.env.MISTRAL_API_KEY) {
+  if (documentId) {
     return (await extractPdfOcr(buffer, documentId)).text
   }
   const pdfParse = (await import('pdf-parse')).default
   const result = await pdfParse(buffer)
   return result.text?.trim() ?? ''
-}
-
-// Strip markdown image refs from a string (used to keep image data out of prose).
-function stripImageMarkdown(md: string): string {
-  return md.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
-}
-
-type OcrPage = {
-  markdown?: string
-  dimensions?: { width: number; height: number } | null
-  images?: { id: string; imageBase64?: string | null; topLeftX?: number | null; topLeftY?: number | null; bottomRightX?: number | null; bottomRightY?: number | null }[]
 }
 
 // Splits a PDF into ~PAGES_PER_OCR_BATCH-page chunks via pdf-lib. Returns [original buffer]
@@ -140,107 +130,49 @@ async function splitPdfIntoBatches(buffer: Buffer): Promise<Buffer[]> {
   }
 }
 
-async function runMistralOcrOnBuffer(mistral: Mistral, buffer: Buffer): Promise<OcrPage[]> {
-  const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' })
-  const file = new File([blob], 'document.pdf', { type: 'application/pdf' })
-  const uploaded = await mistral.files.upload({ file, purpose: 'ocr' })
-
-  const signedUrl = await mistral.files.getSignedUrl({ fileId: uploaded.id })
-  const result = await mistral.ocr.process({
-    model: 'mistral-ocr-latest',
-    document: { type: 'document_url', documentUrl: signedUrl.url },
-    includeImageBase64: true,
-  })
-
-  await mistral.files.delete({ fileId: uploaded.id }).catch(() => {})
-  return (result.pages ?? []) as OcrPage[]
-}
+// Below this size an "image" is almost always a logo/icon/bullet/spacer, not a real figure.
+// This is the ONLY filter available now — OpenRouter's file-parser plugin exposes no
+// bounding-box/page-dimension data, so the old whole-page-scan-vs-floor-plan text-density
+// filter (which needed that data) can no longer be computed and has been removed.
+const MIN_PDF_IMAGE_BYTES = 3000
 
 async function extractPdfOcr(
   buffer: Buffer,
   documentId?: string
 ): Promise<{ text: string; images: ParsedImage[] }> {
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
-
   const batches = await splitPdfIntoBatches(buffer)
-  // Each batch's OCR call resets its own page/image numbering — batches[i]'s "page 0" is
-  // NOT the document's actual page 0 when i > 0. Track (batchIndex, page) pairs throughout
-  // so ordering and image-id namespacing stay correct after reassembly.
-  const batchPages: OcrPage[][] = batches.length === 1
-    ? [await runMistralOcrOnBuffer(mistral, batches[0])]
-    : await mapWithConcurrency(batches, MAX_CONCURRENT_OCR_BATCHES, (b) => runMistralOcrOnBuffer(mistral, b))
+  const batchResults = batches.length === 1
+    ? [await extractPdfViaOpenRouter(batches[0].toString('base64'))]
+    : await mapWithConcurrency(batches, MAX_CONCURRENT_OCR_BATCHES, (b) => extractPdfViaOpenRouter(b.toString('base64')))
 
   const images: ParsedImage[] = []
-  // Keyed by `${batchIndex}:${localImgId}` — Mistral's img.id (e.g. "img-0.jpeg") is only
-  // unique WITHIN one OCR call, so two different batches can both produce "img-0.jpeg"
-  // referring to two completely different images. A flat map keyed by id alone would let a
-  // later batch silently overwrite an earlier batch's URL for the same-named image.
-  const imageUrlMap = new Map<string, string>()
 
-  // A full-page-sized "figure" is ambiguous: it could be a photographed/scanned TEXT page
-  // (patent claims, a document screenshot — not a real figure), or it could be a genuine
-  // full-page diagram (architectural floor plans, blueprints legitimately fill the page).
-  // Area alone can't tell these apart — a floor plan is just as page-sized as a scanned page.
-  // The real signal is text DENSITY: a scanned text page OCRs into dense paragraphs; a floor
-  // plan OCRs into sparse labels/dimensions even though the image itself is full-page.
-  const FULL_PAGE_AREA_RATIO = 0.85
-  const DENSE_TEXT_WORD_COUNT = 150
-
-  // Upload each page image + collect it as a ParsedImage (base64 kept for captioning)
   if (documentId) {
-    for (let batchIdx = 0; batchIdx < batchPages.length; batchIdx++) {
-      for (const page of batchPages[batchIdx]) {
-        const pageText = stripImageMarkdown(page.markdown ?? '')
-        const pageWordCount = pageText.split(/\s+/).filter(Boolean).length
-        const dims = page.dimensions
-        const pageArea = dims ? dims.width * dims.height : 0
+    for (let batchIdx = 0; batchIdx < batchResults.length; batchIdx++) {
+      const { text: batchText, images: batchImages } = batchResults[batchIdx]
+      // No per-page grouping available — use this whole batch's text (≤8 pages) as the
+      // closest available context for every image extracted from it.
+      for (let imgIdx = 0; imgIdx < batchImages.length; imgIdx++) {
+        const img = batchImages[imgIdx]
+        if (Buffer.byteLength(img.base64, 'base64') < MIN_PDF_IMAGE_BYTES) continue
 
-        for (const img of page.images ?? []) {
-          if (!img.imageBase64) continue
-
-          if (pageArea > 0 && img.topLeftX != null && img.topLeftY != null && img.bottomRightX != null && img.bottomRightY != null) {
-            const imgArea = Math.max(0, img.bottomRightX - img.topLeftX) * Math.max(0, img.bottomRightY - img.topLeftY)
-            const isFullPage = imgArea / pageArea >= FULL_PAGE_AREA_RATIO
-            // Only skip when it's BOTH full-page AND text-dense — a full-page floor plan
-            // with sparse labels is kept; a full-page scanned paragraph is dropped.
-            if (isFullPage && pageWordCount >= DENSE_TEXT_WORD_COUNT) continue
-          }
-
-          // Mistral sometimes returns a data-URL prefix — strip it to raw base64
-          const rawBase64 = img.imageBase64.replace(/^data:[^;]+;base64,/, '')
-          const ext = (img.id.split('.').pop() ?? 'jpeg').toLowerCase()
-          const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
-          const qualifiedId = `b${batchIdx}-${img.id}`
-          try {
-            const imgBuffer = Buffer.from(rawBase64, 'base64')
-            const key = `documents/${documentId}/images/${qualifiedId}`
-            await uploadFile(key, imgBuffer, mimeType)
-            const url = `/api/documents/${documentId}/images/${encodeURIComponent(qualifiedId)}`
-            imageUrlMap.set(`${batchIdx}:${img.id}`, url)
-            images.push({ imageUrl: url, base64: rawBase64, mimeType, ocrText: pageText })
-          } catch (imgErr) {
-            console.error(`[OCR] Failed to upload image ${qualifiedId}:`, imgErr)
-          }
+        const ext = img.mimeType.split('/').pop() ?? 'jpeg'
+        const qualifiedId = `b${batchIdx}-img-${imgIdx}.${ext}`
+        try {
+          const imgBuffer = Buffer.from(img.base64, 'base64')
+          const key = `documents/${documentId}/images/${qualifiedId}`
+          await uploadFile(key, imgBuffer, img.mimeType)
+          const url = `/api/documents/${documentId}/images/${encodeURIComponent(qualifiedId)}`
+          images.push({ imageUrl: url, base64: img.base64, mimeType: img.mimeType, ocrText: batchText })
+        } catch (imgErr) {
+          console.error(`[OCR] Failed to upload image ${qualifiedId}:`, imgErr)
         }
       }
     }
   }
 
-  // Concatenate all pages in original document order, replacing local image refs with
-  // real served URLs (looked up using this page's own batch index, not a global id).
-  const textParts: string[] = []
-  for (let batchIdx = 0; batchIdx < batchPages.length; batchIdx++) {
-    for (const page of batchPages[batchIdx]) {
-      let md = page.markdown ?? ''
-      md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
-        const url = imageUrlMap.get(`${batchIdx}:${src}`)
-        return url ? `![${alt}](${url})` : `![${alt}](${src})`
-      })
-      textParts.push(md)
-    }
-  }
-
-  return { text: textParts.join('\n\n'), images }
+  const text = batchResults.map((r) => r.text).join('\n\n')
+  return { text, images }
 }
 
 // DOCX/PPTX are both zipped Office Open XML — embedded pictures live under a fixed media
@@ -374,20 +306,11 @@ async function extractImageStructured(
   buffer: Buffer,
   documentId?: string
 ): Promise<{ text: string; images: ParsedImage[] }> {
-  if (!process.env.MISTRAL_API_KEY) return { text: '[Image file — no OCR API key configured]', images: [] }
-
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY! })
   const base64 = buffer.toString('base64')
 
   try {
-    const result = await mistral.ocr.process({
-      model: 'mistral-ocr-latest',
-      document: { type: 'image_url', imageUrl: `data:image/jpeg;base64,${base64}` } as Parameters<typeof mistral.ocr.process>[0]['document'],
-    })
-
-    const pages = result.pages ?? []
-    const ocrText = pages.map((p: { markdown?: string }) => stripImageMarkdown(p.markdown ?? '')).join('\n\n')
-    let text = pages.map((p: { markdown?: string }) => p.markdown ?? '').join('\n\n')
+    const ocrText = await transcribeImageText(base64, 'image/jpeg')
+    let text = ocrText
     const images: ParsedImage[] = []
 
     // Store the original image so it can be displayed + captioned
