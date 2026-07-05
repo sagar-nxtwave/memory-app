@@ -7,8 +7,12 @@ import { detectFileType, MAX_FILE_SIZE } from '@/lib/parsers'
 import { processDocumentFromBuffer } from '@/lib/ai/processing'
 import { uploadFile, generateStorageKey } from '@/lib/storage/minio'
 
-// Keep the function alive long enough for document processing
-export const maxDuration = 60
+// Keep the function alive long enough for document processing. Bumped from 60s: image-heavy
+// documents (patents, scanned reports) run OCR + N vision captioning calls in the same
+// invocation (via after()) — this is a safety net, not the fix; the real cost/time controls
+// are MAX_IMAGES_PER_DOCUMENT and image downscaling in processing.ts. No effect above your
+// Vercel plan's ceiling (Hobby caps at 60s regardless of this value).
+export const maxDuration = 180
 
 export async function GET(req: NextRequest) {
   const session = await auth()

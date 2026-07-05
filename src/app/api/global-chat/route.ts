@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     : sql``
 
   let contextText = ''
-  let citations: { documentName: string; spaceName?: string }[] = []
+  let citations: { documentId: string; documentName: string; spaceName?: string }[] = []
   let documentImages: { url: string; alt: string; documentName: string; spaceName?: string }[] = []
   const showImages = wantsVisual(content)
   if (queryEmbedding.length > 0) {
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
 
     const reranked = await rerankChunks(content, rawChunks, 8)
     citations = reranked
-      .map((c) => ({ documentName: c.document_name, spaceName: c.space_name }))
+      .map((c) => ({ documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }))
       .filter((v, i, a) => a.findIndex((x) => x.documentName === v.documentName && x.spaceName === v.spaceName) === i)
 
     contextText = reranked

@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { useSpeechToText } from '@/lib/hooks/useSpeechToText'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
-interface Citation { documentName: string; spaceName?: string }
+interface Citation { documentId?: string; documentName: string; spaceName?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
 interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
 interface SpaceDoc { id: string; name: string; fileType: string }
@@ -800,11 +800,17 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
             {!message.isTyping && message.citations && message.citations.length > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
-                {message.citations.map((c, i) => (
-                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]" title={`${c.spaceName ? c.spaceName + ' › ' : ''}${c.documentName}`}>
-                    {c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName}
-                  </span>
-                ))}
+                {message.citations.map((c, i) => {
+                  const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
+                  const className = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+                  return c.documentId ? (
+                    <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={`${className} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`}>
+                      {label}
+                    </a>
+                  ) : (
+                    <span key={i} title={label} className={className}>{label}</span>
+                  )
+                })}
               </div>
             )}
             {!message.isTyping && !isStreaming && (

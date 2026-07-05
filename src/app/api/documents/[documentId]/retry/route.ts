@@ -7,7 +7,9 @@ import { getFileBuffer } from '@/lib/storage/minio'
 import { processDocumentFromBuffer, processDocumentFromText } from '@/lib/ai/processing'
 import type { DocumentType } from '@/types'
 
-export const maxDuration = 60
+// See src/app/api/documents/route.ts for why this is 180 not 60 — image-heavy docs
+// (vision captioning) can approach the old ceiling.
+export const maxDuration = 180
 
 export async function POST(
   _req: NextRequest,

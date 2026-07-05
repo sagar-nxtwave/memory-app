@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
 type MessageRole = 'user' | 'assistant'
-interface Citation { documentName: string; spaceName?: string }
+interface Citation { documentId?: string; documentName: string; spaceName?: string }
 interface DocumentImage { url: string; alt: string; documentName: string }
 interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number; version: number }
@@ -31,6 +31,8 @@ const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: st
   completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
 }
 type View = 'chat' | 'documents' | 'timeline'
+interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
+interface MentionDoc { id: string; name: string; fileType: string }
 
 import { parseUtc, formatDateTime } from '@/lib/utils/date'
 
@@ -138,7 +140,12 @@ export default function SpacePage() {
   const [docSearch, setDocSearch] = useState('')
   const [docTypeFilter, setDocTypeFilter] = useState<string>('all')
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-  const [mentionedDocIds, setMentionedDocIds] = useState<string[]>([])
+  const [mentionChips, setMentionChips] = useState<MentionChip[]>([])
+  // 'space' = picking which project (current space's docs shown flat, others as drill-in
+  // entries); 'doc' = picking a document within mentionSpaceCtx (only reached for OTHER spaces)
+  const [mentionStage, setMentionStage] = useState<'space' | 'doc'>('space')
+  const [mentionSpaceCtx, setMentionSpaceCtx] = useState<{ id: string; name: string } | null>(null)
+  const [otherSpaceDocs, setOtherSpaceDocs] = useState<Record<string, MentionDoc[]>>({})
   const [mentionActiveIdx, setMentionActiveIdx] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
 
@@ -208,6 +215,80 @@ export default function SpacePage() {
     setReadyDocs(docs.filter((d) => d.status === 'ready').map((d) => ({ id: d.id, name: d.name, fileType: d.fileType })))
   }, [docs])
 
+  function loadOtherSpaceDocs(otherSpaceId: string) {
+    if (otherSpaceDocs[otherSpaceId]) return
+    fetch(`/api/documents?spaceId=${otherSpaceId}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: (Doc | MentionDoc)[]) => {
+        if (Array.isArray(data)) {
+          setOtherSpaceDocs((p) => ({
+            ...p,
+            [otherSpaceId]: data.filter((d) => !('status' in d) || d.status === 'ready').map((d) => ({ id: d.id, name: d.name, fileType: d.fileType })),
+          }))
+        }
+      })
+  }
+
+  type MentionItem =
+    | { kind: 'doc'; id: string; label: string; icon: string; doc: MentionDoc }
+    | { kind: 'otherspace'; id: string; label: string }
+    | { kind: 'allspace'; id: string; label: string }
+
+  // Stage 'space': this space's own docs listed directly, plus other projects as drill-in
+  // entries. Stage 'doc': reached only after clicking an other project — its docs + "all docs" option.
+  function getMentionItems(): MentionItem[] {
+    const q = (mentionQuery ?? '').toLowerCase()
+    if (mentionStage === 'doc' && mentionSpaceCtx) {
+      const items: MentionItem[] = []
+      if (!mentionChips.some((c) => c.spaceId === mentionSpaceCtx.id && !c.docId)) {
+        items.push({ kind: 'allspace', id: '__space__', label: `All docs in ${mentionSpaceCtx.name}` })
+      }
+      const docs = (otherSpaceDocs[mentionSpaceCtx.id] ?? []).filter((d) =>
+        !mentionChips.some((c) => c.docId === d.id) && d.name.toLowerCase().includes(q)
+      )
+      items.push(...docs.map((d) => ({ kind: 'doc' as const, id: d.id, label: d.name, icon: FILE_ICONS[d.fileType] ?? '📄', doc: d })))
+      return items
+    }
+    const currentDocs = readyDocs
+      .filter((d) => !mentionChips.some((c) => c.docId === d.id) && d.name.toLowerCase().includes(q))
+      .map((d) => ({ kind: 'doc' as const, id: d.id, label: d.name, icon: FILE_ICONS[d.fileType] ?? '📄', doc: d }))
+    const matchingSpaces = otherSpaces
+      .filter((s) => s.name.toLowerCase().includes(q))
+      .map((s) => ({ kind: 'otherspace' as const, id: s.id, label: s.name }))
+    return [...currentDocs, ...matchingSpaces]
+  }
+
+  function selectMentionItem(item: MentionItem) {
+    if (item.kind === 'otherspace') {
+      const atIdx = input.lastIndexOf('@')
+      setInput(input.slice(0, atIdx))
+      setMentionStage('doc')
+      setMentionSpaceCtx({ id: item.id, name: item.label })
+      setMentionQuery('')
+      setMentionActiveIdx(0)
+      loadOtherSpaceDocs(item.id)
+      return
+    }
+    const atIdx = input.lastIndexOf('@')
+    setInput(input.slice(0, atIdx))
+    if (item.kind === 'allspace' && mentionSpaceCtx) {
+      setMentionChips((p) => [...p, { spaceId: mentionSpaceCtx.id, spaceName: mentionSpaceCtx.name }])
+    } else if (item.kind === 'doc') {
+      const isCurrentSpace = mentionStage === 'space'
+      setMentionChips((p) => [...p, {
+        spaceId: isCurrentSpace ? spaceId : mentionSpaceCtx!.id,
+        spaceName: isCurrentSpace ? (space?.name ?? '') : mentionSpaceCtx!.name,
+        docId: item.doc.id,
+        docName: item.doc.name,
+      }])
+    }
+    setMentionQuery(null)
+    setMentionStage('space')
+    setMentionSpaceCtx(null)
+    setMentionActiveIdx(0)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
   // Shared SSE streaming handler — used by chat, Brief Me, and Catch Me Up
   async function handleStream(endpoint: string, body: object, tempUserId: string, sid: string) {
     try {
@@ -261,8 +342,10 @@ export default function SpacePage() {
   async function sendMessage(content: string) {
     if (!content.trim() || loading) return
     setInput('')
-    const docIds = mentionedDocIds
-    setMentionedDocIds([])
+    const chips = mentionChips
+    const docIds = chips.filter((c) => c.docId).map((c) => c.docId!)
+    const otherSpaceIds = [...new Set(chips.filter((c) => c.spaceId !== spaceId).map((c) => c.spaceId))]
+    setMentionChips([])
     setMentionQuery(null)
     setSpaceSuggestion(null)
     spaceSuggestionRef.current = null
@@ -282,7 +365,7 @@ export default function SpacePage() {
     if (crossSpace) {
       await handleStream('/api/global-chat', { content, responseStyle }, tempUserId, sid)
     } else {
-      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined }, tempUserId, sid)
+      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined, mentionedSpaceIds: otherSpaceIds.length > 0 ? otherSpaceIds : undefined }, tempUserId, sid)
     }
 
     setStreamingMessageId(null)
@@ -1103,16 +1186,19 @@ export default function SpacePage() {
               </div>
             )}
 
-            {/* @ mention chips */}
-            {mentionedDocIds.length > 0 && (
+            {/* @ mention chips — current-space docs show "@DocName"; other-project refs show
+                "@ProjectName:DocName", or just "@ProjectName" when the whole project was picked */}
+            {mentionChips.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {mentionedDocIds.map((id) => {
-                  const doc = readyDocs.find((d) => d.id === id)
-                  if (!doc) return null
+                {mentionChips.map((chip, i) => {
+                  const isCurrentSpace = chip.spaceId === spaceId
+                  const label = isCurrentSpace
+                    ? `@${chip.docName}`
+                    : `@${chip.spaceName}${chip.docName ? `:${chip.docName}` : ''}`
                   return (
-                    <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
-                      <span>@{doc.name}</span>
-                      <button onClick={() => setMentionedDocIds((p) => p.filter((x) => x !== id))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                    <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                      <span>{label}</span>
+                      <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
                     </span>
@@ -1160,32 +1246,42 @@ export default function SpacePage() {
                     transition={{ duration: 0.12 }}
                     className="absolute bottom-full left-0 mb-2 w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg overflow-hidden z-50"
                   >
-                    {(() => {
-                      const filtered = readyDocs.filter((d) =>
-                        !mentionedDocIds.includes(d.id) &&
-                        d.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                      )
-                      if (filtered.length === 0) return (
-                        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">No documents found</div>
-                      )
-                      return filtered.slice(0, 6).map((doc, idx) => (
+                    {mentionStage === 'doc' && mentionSpaceCtx && (
+                      <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                          {mentionSpaceCtx.name} › Select document
+                        </span>
                         <button
-                          key={doc.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery(''); setMentionActiveIdx(0) }}
+                          className="ml-auto text-[11px] text-blue-500 hover:text-blue-600"
+                        >← back</button>
+                      </div>
+                    )}
+                    {(() => {
+                      const items = getMentionItems()
+                      if (items.length === 0) return (
+                        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">
+                          {mentionStage === 'doc' ? 'No documents found' : 'No matches found'}
+                        </div>
+                      )
+                      return items.slice(0, 8).map((item, idx) => (
+                        <button
+                          key={`${item.kind}-${item.id}`}
                           type="button"
                           onMouseEnter={() => setMentionActiveIdx(idx)}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            const atIdx = input.lastIndexOf('@')
-                            setInput(input.slice(0, atIdx))
-                            setMentionedDocIds((p) => p.includes(doc.id) ? p : [...p, doc.id])
-                            setMentionQuery(null)
-                            setMentionActiveIdx(0)
-                            setTimeout(() => inputRef.current?.focus(), 0)
-                          }}
+                          onMouseDown={(e) => { e.preventDefault(); selectMentionItem(item) }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                         >
-                          <span className="text-base shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
-                          <span className="text-sm text-gray-900 dark:text-white truncate">{doc.name}</span>
+                          <span className="text-base shrink-0">
+                            {item.kind === 'doc' ? item.icon : item.kind === 'allspace' ? '🗂️' : '📁'}
+                          </span>
+                          <span className={`text-sm truncate ${item.kind === 'allspace' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>
+                            {item.label}
+                          </span>
+                          {item.kind === 'otherspace' && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto shrink-0 text-gray-400"><path d="M9 18l6-6-6-6"/></svg>
+                          )}
                         </button>
                       ))
                     })()}
@@ -1199,9 +1295,9 @@ export default function SpacePage() {
               >
                 <button
                   type="button"
-                  onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionQuery('') }}
-                  disabled={loading || readyDocs.length === 0}
-                  title="Reference a document"
+                  onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery('') }}
+                  disabled={loading || (readyDocs.length === 0 && otherSpaces.length === 0)}
+                  title="Reference a document or project"
                   className="shrink-0 h-7 w-7 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
                 >@</button>
                 <textarea
@@ -1227,13 +1323,10 @@ export default function SpacePage() {
                   }}
                   onKeyDown={(e) => {
                     if (mentionQuery !== null) {
-                      const filtered = readyDocs.filter((d) =>
-                        !mentionedDocIds.includes(d.id) &&
-                        d.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                      ).slice(0, 6)
+                      const items = getMentionItems().slice(0, 8)
                       if (e.key === 'ArrowDown') {
                         e.preventDefault()
-                        setMentionActiveIdx((i) => Math.min(i + 1, filtered.length - 1))
+                        setMentionActiveIdx((i) => Math.min(i + 1, items.length - 1))
                         return
                       }
                       if (e.key === 'ArrowUp') {
@@ -1241,21 +1334,16 @@ export default function SpacePage() {
                         setMentionActiveIdx((i) => Math.max(i - 1, 0))
                         return
                       }
-                      if (e.key === 'Enter' && filtered.length > 0) {
+                      if (e.key === 'Enter' && items.length > 0) {
                         e.preventDefault()
-                        const doc = filtered[mentionActiveIdx] ?? filtered[0]
-                        const atIdx = input.lastIndexOf('@')
-                        setInput(input.slice(0, atIdx))
-                        setMentionedDocIds((p) => p.includes(doc.id) ? p : [...p, doc.id])
-                        setMentionQuery(null)
-                        setMentionActiveIdx(0)
+                        selectMentionItem(items[mentionActiveIdx] ?? items[0])
                         return
                       }
-                      if (e.key === 'Escape') { setMentionQuery(null); return }
+                      if (e.key === 'Escape') { setMentionQuery(null); setMentionStage('space'); setMentionSpaceCtx(null); return }
                     }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
                   }}
-                  placeholder={readyDocs.length > 0 ? 'Ask anything… or @ a doc' : 'Ask anything…'}
+                  placeholder={(readyDocs.length > 0 || otherSpaces.length > 0) ? 'Ask anything… or @ a doc' : 'Ask anything…'}
                   disabled={loading}
                   className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
                 />
@@ -1530,11 +1618,17 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
             {!message.isTyping && message.citations && message.citations.length > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
-                {message.citations.map((c, i) => (
-                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]" title={c.documentName}>
-                    {c.documentName}
-                  </span>
-                ))}
+                {message.citations.map((c, i) => {
+                  const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
+                  const className = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+                  return c.documentId ? (
+                    <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={`${className} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`}>
+                      {label}
+                    </a>
+                  ) : (
+                    <span key={i} title={label} className={className}>{label}</span>
+                  )
+                })}
               </div>
             )}
             {!message.isTyping && !isStreaming && (

@@ -5,12 +5,13 @@ export const maxDuration = 60
 import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
-import { messages, spaceMembers, documents } from '@/lib/db/schema'
+import { messages, spaceMembers, documents, spaces } from '@/lib/db/schema'
 import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
 import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual } from '@/lib/utils/queryFilters'
+import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName, responseStyle, mentionedDocIds } = await req.json()
+  const { spaceId, content, spaceName, responseStyle, mentionedDocIds, mentionedSpaceIds } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -58,6 +59,82 @@ export async function POST(req: NextRequest) {
     .insert(messages)
     .values({ spaceId, userId: session.user.id, role: 'user', content: content.trim() })
     .returning()
+
+  const encoder = new TextEncoder()
+  const userId = session.user.id
+
+  // Cross-space comparison ("compare this to Space B", "how does X differ from the Sea
+  // Gardens vendor doc") — asked from inside Space A's chat but needs Space B's documents
+  // too. Detect it here and pull the other space into retrieval instead of forcing the
+  // user to switch to Ask All Spaces.
+  let crossSpaceIds = [spaceId]
+  let crossSpaceNote = ''
+  const explicitSpaceIds: string[] = Array.isArray(mentionedSpaceIds)
+    ? [...new Set(mentionedSpaceIds.filter((id: unknown) => typeof id === 'string' && id !== spaceId))]
+    : []
+
+  if (explicitSpaceIds.length > 0) {
+    // User explicitly picked another project via @ mention — no ambiguity to resolve,
+    // just verify they're actually a member of it before including its documents.
+    const memberOfExplicit = await db
+      .select({ id: spaces.id, name: spaces.name })
+      .from(spaceMembers)
+      .innerJoin(spaces, eq(spaces.id, spaceMembers.spaceId))
+      .where(and(eq(spaceMembers.userId, session.user.id), sql`${spaceMembers.spaceId} = ANY(${explicitSpaceIds}::uuid[])`))
+
+    if (memberOfExplicit.length > 0) {
+      crossSpaceIds = [spaceId, ...memberOfExplicit.map((s) => s.id)]
+      crossSpaceNote = `\nThe user explicitly referenced content from ${memberOfExplicit.length > 1 ? 'other projects' : 'another project'} (${memberOfExplicit.map((s) => `"${s.name}"`).join(', ')}) alongside "${spaceName ?? 'this project'}". The context below includes documents from all referenced projects, each labeled with its project name — clearly attribute which facts come from which project.`
+    }
+  } else if (hasCrossSpaceIntent(content)) {
+    const userSpaces = await db
+      .select({ id: spaces.id, name: spaces.name })
+      .from(spaceMembers)
+      .innerJoin(spaces, eq(spaces.id, spaceMembers.spaceId))
+      .where(eq(spaceMembers.userId, session.user.id))
+
+    const otherDocs = await db
+      .select({ id: documents.id, name: documents.name, spaceId: documents.spaceId, spaceName: spaces.name })
+      .from(documents)
+      .innerJoin(spaces, eq(spaces.id, documents.spaceId))
+      .innerJoin(spaceMembers, eq(spaceMembers.spaceId, documents.spaceId))
+      .where(and(eq(spaceMembers.userId, session.user.id), eq(documents.status, 'ready')))
+
+    const spaceMatches = findMentionedSpaces(content, userSpaces, spaceId)
+    const docMatches = findMentionedDocs(content, otherDocs, spaceId)
+    const candidates: CrossSpaceCandidate[] = [...spaceMatches, ...docMatches]
+    const distinctOtherSpaceIds = [...new Set(candidates.map((c) => (c.type === 'space' ? c.id : c.spaceId)))]
+
+    if (distinctOtherSpaceIds.length > 1) {
+      // Multiple different projects/docs could match — don't guess, ask which one.
+      const clarify = `I found multiple possible matches for that comparison:\n${candidates.map((c, i) => `${i + 1}. ${formatCandidate(c)}`).join('\n')}\n\nWhich one did you mean? Reply with the project or document name and I'll compare it against "${spaceName ?? 'this project'}".`
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (data: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+          send({ type: 'start', userMessageId: userMsg.id })
+          send({ type: 'delta', content: clarify })
+          const [assistantMsg] = await db
+            .insert(messages)
+            .values({ spaceId, userId, role: 'assistant', content: clarify })
+            .returning()
+          send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations: [], documentImages: [] })
+          controller.close()
+        },
+      })
+      return new Response(stream, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+      })
+    } else if (distinctOtherSpaceIds.length === 1) {
+      crossSpaceIds = [spaceId, distinctOtherSpaceIds[0]]
+      const matchedName = candidates.find((c) => (c.type === 'space' ? c.id : c.spaceId) === distinctOtherSpaceIds[0])
+      const otherName = matchedName?.type === 'space' ? matchedName.name : matchedName?.spaceName
+      crossSpaceNote = `\nThe user is asking to compare "${spaceName ?? 'this project'}" with another project ("${otherName}"). The context below includes documents from BOTH projects, each labeled with its project name — clearly attribute which facts come from which project.`
+    }
+  }
+
+  const crossSpace = crossSpaceIds.length > 1
+  const spaceIdsSQL = sql.join(crossSpaceIds.map((id) => sql`${id}::uuid`), sql`, `)
 
   let queryEmbedding: number[] = []
   try {
@@ -87,13 +164,14 @@ export async function POST(req: NextRequest) {
 
   const relevantChunks = queryEmbedding.length === 0 ? [] : hasMentions
     ? await db.execute(sql`
-        SELECT dc.content, dc.document_id, d.name as document_name,
+        SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name,
                (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
                 0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
                 ${financialBoost}) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
-        WHERE d.space_id = ${spaceId}
+        INNER JOIN spaces s ON s.id = d.space_id
+        WHERE d.space_id IN (${spaceIdsSQL})
           AND d.id = ANY(${mentionedDocIds}::uuid[])
           AND d.status = 'ready'
           AND dc.embedding IS NOT NULL
@@ -106,13 +184,14 @@ export async function POST(req: NextRequest) {
         LIMIT 12
       `)
     : await db.execute(sql`
-        SELECT dc.content, dc.document_id, d.name as document_name,
+        SELECT dc.content, dc.document_id, d.name as document_name, s.name as space_name,
                (0.6 * (1 - (dc.embedding <=> ${embeddingStr}::vector)) +
                 0.4 * ts_rank(to_tsvector('simple', dc.content), websearch_to_tsquery('simple', ${content}))
                 ${financialBoost}) AS hybrid_score
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
-        WHERE d.space_id = ${spaceId}
+        INNER JOIN spaces s ON s.id = d.space_id
+        WHERE d.space_id IN (${spaceIdsSQL})
           AND d.status = 'ready'
           AND dc.embedding IS NOT NULL
           AND (
@@ -121,10 +200,10 @@ export async function POST(req: NextRequest) {
           )
           ${fileTypeFilter}${afterFilter}${beforeFilter}
         ORDER BY hybrid_score DESC
-        LIMIT 12
+        LIMIT ${crossSpace ? 20 : 12}
       `)
 
-  const rawChunks = relevantChunks as unknown as { content: string; document_id: string; document_name: string }[]
+  const rawChunks = relevantChunks as unknown as { content: string; document_id: string; document_name: string; space_name: string }[]
 
   // Only look up images when the user is explicitly asking to see something visual —
   // otherwise every answer in a space with any images would surface an unrelated image strip.
@@ -137,7 +216,7 @@ export async function POST(req: NextRequest) {
              (1 - (dc.embedding <=> ${embeddingStr}::vector)) AS similarity
       FROM document_chunks dc
       INNER JOIN documents d ON d.id = dc.document_id
-      WHERE d.space_id = ${spaceId}
+      WHERE d.space_id IN (${spaceIdsSQL})
         AND d.status = 'ready'
         AND dc.chunk_type = 'image'
         AND dc.image_url IS NOT NULL
@@ -164,7 +243,7 @@ export async function POST(req: NextRequest) {
         SELECT dc.content, dc.document_id, d.name as document_name
         FROM document_chunks dc
         INNER JOIN documents d ON d.id = dc.document_id
-        WHERE d.space_id = ${spaceId}
+        WHERE d.space_id IN (${spaceIdsSQL})
           AND d.status = 'ready'
           AND dc.chunk_type <> 'image'
           AND dc.content LIKE '%![%'
@@ -186,22 +265,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const reranked = await rerankChunks(content, rawChunks, 5)
-  const citations = [...new Set(reranked.map((c) => c.document_name))].map((name) => ({ documentName: name }))
+  const reranked = await rerankChunks(content, rawChunks, crossSpace ? 8 : 5)
+  const citations = [...new Map(reranked.map((c) => [
+    `${c.space_name}|${c.document_name}`,
+    crossSpace
+      ? { documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }
+      : { documentId: c.document_id, documentName: c.document_name },
+  ])).values()]
 
   const context = reranked
-    .map((c) => `[From: ${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
+    .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
     .join('\n\n---\n\n')
 
-  const spaceDocs = await db
-    .select({ id: documents.id, name: documents.name, createdAt: documents.createdAt, fileType: documents.fileType })
+  const spaceDocsRows = await db
+    .select({ id: documents.id, name: documents.name, createdAt: documents.createdAt, fileType: documents.fileType, spaceId: documents.spaceId, spaceName: spaces.name })
     .from(documents)
-    .where(and(eq(documents.spaceId, spaceId), eq(documents.status, 'ready')))
+    .innerJoin(spaces, eq(spaces.id, documents.spaceId))
+    .where(and(sql`${documents.spaceId} IN (${spaceIdsSQL})`, eq(documents.status, 'ready')))
     .orderBy(desc(documents.createdAt))
 
-  const docManifest = spaceDocs.length > 0
-    ? `Documents in this space (${spaceDocs.length} total):\n${spaceDocs.map((d, i) => `${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`
-    : 'No documents have been uploaded to this space yet.'
+  const spaceDocs = spaceDocsRows.filter((d) => d.spaceId === spaceId)
+
+  const docManifest = !crossSpace
+    ? (spaceDocs.length > 0
+        ? `Documents in this space (${spaceDocs.length} total):\n${spaceDocs.map((d, i) => `${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`
+        : 'No documents have been uploaded to this space yet.')
+    : Object.entries(
+        spaceDocsRows.reduce<Record<string, typeof spaceDocsRows>>((acc, d) => {
+          acc[d.spaceName] = acc[d.spaceName] ?? []
+          acc[d.spaceName].push(d)
+          return acc
+        }, {})
+      ).map(([sName, docs]) => `${sName} (${docs.length} document${docs.length !== 1 ? 's' : ''}):\n${docs.map((d, i) => `  ${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`).join('\n\n')
 
   const recentHistory = await db
     .select({ role: messages.role, content: messages.content })
@@ -211,7 +306,7 @@ export async function POST(req: NextRequest) {
     .limit(10)
 
   const focusNote = hasMentions
-    ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocs.find((x) => x.id === id); return d ? d.name : id }).join(', ')}. Answer exclusively from those documents.`
+    ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocsRows.find((x) => x.id === id); return d ? (crossSpace ? `${d.name} (${d.spaceName})` : d.name) : id }).join(', ')}. Answer exclusively from those documents.`
     : ''
 
   const imageNote = documentImages.length > 0
@@ -219,7 +314,7 @@ export async function POST(req: NextRequest) {
     : ''
 
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
-${styleInstruction(responseStyle)}${focusNote}${imageNote}
+${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}
 
 ${docManifest}
 
@@ -229,9 +324,6 @@ ${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)
     .reverse()
     .slice(0, -1)
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
-
-  const encoder = new TextEncoder()
-  const userId = session.user.id
 
   const stream = new ReadableStream({
     async start(controller) {

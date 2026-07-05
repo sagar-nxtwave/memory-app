@@ -7,7 +7,9 @@ import { getFileBuffer } from '@/lib/storage/minio'
 import { processDocumentFromBuffer } from '@/lib/ai/processing'
 import type { DocumentType } from '@/types'
 
-export const maxDuration = 60
+// Reprocesses every document in a loop — even more exposed to timeouts than a single
+// upload. See src/app/api/documents/route.ts for the full reasoning.
+export const maxDuration = 300
 
 export async function POST(_req: NextRequest) {
   const session = await auth()

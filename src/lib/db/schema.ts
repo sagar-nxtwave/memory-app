@@ -161,7 +161,9 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
   // Assistant-only: citations/images resolved at answer time — persisted so they
   // survive a page refresh instead of only existing on the live SSE response.
-  citations: jsonb('citations').$type<{ documentName: string }[]>(),
+  // spaceName is set when the answer pulled in another space (cross-space comparison
+  // asked from within this space's chat — see crossSpaceIntent.ts).
+  citations: jsonb('citations').$type<{ documentId: string; documentName: string; spaceName?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
@@ -183,7 +185,7 @@ export const globalMessages = pgTable('global_messages', {
     .references(() => users.id, { onDelete: 'cascade' }),
   role: messageRoleEnum('role').notNull(),
   content: text('content').notNull(),
-  citations: jsonb('citations').$type<{ documentName: string; spaceName?: string }[]>(),
+  citations: jsonb('citations').$type<{ documentId: string; documentName: string; spaceName?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string; spaceName?: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })

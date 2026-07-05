@@ -13,6 +13,11 @@ import type { DocumentType } from '@/types'
 // skip captioning it entirely (saves vision calls + embeds nothing useless).
 const MIN_IMAGE_BYTES = 3000
 
+// Bounds worst-case processing time/cost for pathological documents (e.g. a 76-sheet patent
+// with dozens of figures) — beyond this, remaining images are skipped rather than captioned.
+// Chosen well above what a normal business document has; only kicks in for outliers.
+const MAX_IMAGES_PER_DOCUMENT = 30
+
 // Run async tasks with a concurrency cap — captioning 10+ images one-at-a-time was the
 // main source of slow uploads for image-heavy PDFs (patents, scanned reports).
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -152,7 +157,11 @@ export async function processDocumentFromBuffer(
     // Skip tiny images (logos/icons/spacers) and dedupe repeated ones (e.g. a logo on every
     // page) so a large image-heavy PDF doesn't fire one vision call per occurrence.
     const captionCache = new Map<string, ImageDescription | null>()
-    const eligible = parsed.images.filter((img) => Buffer.byteLength(img.base64, 'base64') >= MIN_IMAGE_BYTES)
+    const allEligible = parsed.images.filter((img) => Buffer.byteLength(img.base64, 'base64') >= MIN_IMAGE_BYTES)
+    const eligible = allEligible.slice(0, MAX_IMAGES_PER_DOCUMENT)
+    if (allEligible.length > MAX_IMAGES_PER_DOCUMENT) {
+      console.warn(`[processing] Document ${documentId} has ${allEligible.length} images — capturing captions for the first ${MAX_IMAGES_PER_DOCUMENT}, skipping ${allEligible.length - MAX_IMAGES_PER_DOCUMENT}`)
+    }
 
     const captioned = await mapWithConcurrency(eligible, 4, async (img: ParsedImage) => {
       const hash = createHash('sha1').update(img.base64).digest('hex')
