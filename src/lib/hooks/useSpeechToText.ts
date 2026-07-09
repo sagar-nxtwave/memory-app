@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // Minimal shape of the Web Speech API — not in lib.dom.d.ts by default.
 interface SpeechRecognitionResultLike {
@@ -51,7 +51,14 @@ export function useSpeechToText(onResult: (text: string) => void) {
   const [error, setError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
 
-  const supported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+  // Resolve browser support AFTER mount. Computing it during render (typeof window …) yields
+  // false on the server but true on the client's first render, causing a hydration mismatch
+  // on the mic button's disabled/title attributes. Starting false and updating in an effect
+  // keeps SSR and first client render identical.
+  const [supported, setSupported] = useState(false)
+  useEffect(() => {
+    setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition))
+  }, [])
 
   const start = useCallback(async () => {
     if (!supported || listening) return

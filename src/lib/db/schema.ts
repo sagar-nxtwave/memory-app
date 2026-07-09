@@ -226,7 +226,7 @@ export const messages = pgTable('messages', {
   // survive a page refresh instead of only existing on the live SSE response.
   // spaceName is set when the answer pulled in another space (cross-space comparison
   // asked from within this space's chat — see crossSpaceIntent.ts).
-  citations: jsonb('citations').$type<{ documentId: string; documentName: string; spaceName?: string }[]>(),
+  citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
@@ -248,10 +248,44 @@ export const globalMessages = pgTable('global_messages', {
     .references(() => users.id, { onDelete: 'cascade' }),
   role: messageRoleEnum('role').notNull(),
   content: text('content').notNull(),
-  citations: jsonb('citations').$type<{ documentId: string; documentName: string; spaceName?: string }[]>(),
+  citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string; spaceName?: string }[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// ── Web search ────────────────────────────────────────────────────────────
+// Cached provider results — web search is a paid per-query API, so identical queries
+// (same normalized query + provider + depth + maxResults hash) reuse a cached result
+// until it expires. Survives serverless cold starts (unlike an in-memory Map).
+export const webSearchCache = pgTable(
+  'web_search_cache',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    queryHash: text('query_hash').notNull().unique(),
+    query: text('query').notNull(),
+    provider: text('provider').notNull(),
+    results: jsonb('results').$type<unknown>().notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    expiresAt: timestamp('expires_at').notNull(),
+  },
+  (table) => [index('web_search_cache_hash_idx').on(table.queryHash)]
+)
+
+// One row per web search request (observability: query volume, latency, failures, cache hit rate).
+export const webSearchLogs = pgTable(
+  'web_search_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    query: text('query').notNull(),
+    provider: text('provider').notNull(),
+    latencyMs: integer('latency_ms'),
+    resultsReturned: integer('results_returned'),
+    cacheHit: boolean('cache_hit').notNull().default(false),
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('web_search_logs_created_idx').on(table.createdAt)]
+)
 
 // Space visits (powers "Catch Me Up")
 export const spaceVisits = pgTable('space_visits', {

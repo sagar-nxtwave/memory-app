@@ -134,6 +134,40 @@ export async function rerankChunks<T extends { content: string }>(
   }
 }
 
+/**
+ * Like rerankChunks but returns the relevance score alongside each item, so callers can
+ * threshold out weakly-relevant results (e.g. don't cite an internal doc that has nothing to
+ * do with the question). Fails open: on error, returns items with score Infinity so they pass
+ * any threshold rather than being wrongly dropped.
+ */
+export async function rerankWithScores<T extends { content: string }>(
+  query: string,
+  chunks: T[],
+  topN: number
+): Promise<{ item: T; score: number }[]> {
+  if (chunks.length === 0) return []
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/rerank', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+        'X-Title': 'Memory',
+      },
+      body: JSON.stringify({ model: RERANK_MODEL, query, documents: chunks.map(c => c.content), top_n: topN }),
+    })
+    if (!response.ok) return chunks.slice(0, topN).map(item => ({ item, score: Infinity }))
+    const data = await response.json()
+    const results: { index: number; relevance_score: number }[] = data.results ?? []
+    if (results.length === 0) return chunks.slice(0, topN).map(item => ({ item, score: Infinity }))
+    return results.map(r => ({ item: chunks[r.index], score: r.relevance_score })).filter(r => r.item)
+  } catch {
+    return chunks.slice(0, topN).map(item => ({ item, score: Infinity }))
+  }
+}
+
 // ── Chat: OpenRouter ────────────────────────────────────────────────────────
 // Switch models by setting OPENROUTER_CHAT_MODEL in .env.local.
 // Recommended: anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)

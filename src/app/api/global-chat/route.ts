@@ -10,6 +10,9 @@ import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
+import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
+import { answerSalesforceQuery } from '@/salesforce'
+import { webContextNote } from '@/lib/ai/prompts'
 
 export const maxDuration = 60
 
@@ -110,7 +113,8 @@ export async function POST(req: NextRequest) {
     : sql``
 
   let contextText = ''
-  let citations: { documentId: string; documentName: string; spaceName?: string }[] = []
+  let citations: Citation[] = []
+  let internalItems: RetrievalItem[] = []
   let documentImages: { url: string; alt: string; documentName: string; spaceName?: string }[] = []
   const showImages = wantsVisual(content)
   if (queryEmbedding.length > 0) {
@@ -249,6 +253,24 @@ export async function POST(req: NextRequest) {
     contextText = reranked
       .map((c) => `[${c.space_name} › ${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
       .join('\n\n---\n\n')
+
+    internalItems = reranked.map((c) => ({
+      id: '', sourceType: 'internal', content: c.content,
+      title: c.document_name, documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name,
+    }))
+  }
+
+  // Web search augmentation (Ask All Spaces) — same non-breaking pattern as per-space chat:
+  // classifier gates it, results merge with internal RAG into one labeled+cited context,
+  // and it fails soft to the internal-only path when web isn't needed or returns nothing.
+  let webUsed = false
+  if (!skipRetrieval) {
+    const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: 8 })
+    if (merged.webUsed) {
+      contextText = merged.context
+      citations = merged.citations
+      webUsed = true
+    }
   }
 
   // Structured-data path: count / list-all / average / filter questions over spreadsheet
@@ -260,6 +282,12 @@ export async function POST(req: NextRequest) {
         citations.unshift({ documentId: tc.documentId, documentName: tc.documentName })
       }
     }
+  }
+
+  // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
+  const salesforceResult = skipRetrieval ? null : await answerSalesforceQuery(content)
+  if (salesforceResult && !citations.some((c) => c.documentName === salesforceResult.citation.documentName)) {
+    citations.unshift(salesforceResult.citation)
   }
 
   // Build document manifest per space for the LLM to know what documents exist
@@ -307,15 +335,16 @@ export async function POST(req: NextRequest) {
     : ''
 
   const systemPrompt = `${globalChatPrompt()}
-${styleInstruction(responseStyle)}${imageNote}
+${styleInstruction(responseStyle)}${imageNote}${webUsed ? webContextNote() : ''}
 
 Searching across: ${spaceNames}
 
 Documents available across projects:
 ${docManifest}
 
+${salesforceResult ? `\n${salesforceResult.context}\n` : ''}
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
-${contextText ? `Relevant content from documents:\n\n${truncateToTokenLimit(contextText)}` : tabularResult ? '' : 'No relevant document content found for this query.'}`
+${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(contextText)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 
   const stream = new ReadableStream({
     async start(controller) {

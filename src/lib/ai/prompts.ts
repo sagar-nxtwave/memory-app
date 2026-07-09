@@ -79,11 +79,11 @@ Do not pad, do not add introductions or closing remarks.`
 export function chatPrompt(spaceName: string): string {
   return `${SYSTEM_BASE}
 
-Project: "${spaceName}". Answer questions using only the provided context.
+Project: "${spaceName}". Answer questions using the provided context.
 Lead with the direct answer. Use bullets for any list of 3+ items.
 For comparisons or multi-column data, always use a markdown table (| Col | Col |).
 For financial figures, bold the numbers: **AED 42.85M**.
-If the answer is not in context: "Not in documents."
+If the context truly doesn't cover the question, don't just refuse — say briefly what the documents do/don't have (e.g. "That's not in your documents yet.") and answer from any web sources provided. Only if there is genuinely nothing useful in either, say so in one natural sentence. Never repeat a rigid canned phrase.
 Maximum response: 150 words unless a longer list or table is required.
 NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
 }
@@ -128,6 +128,42 @@ Rules:
 - DISAMBIGUATION: if the question is vague ("how many unique IDs") and MORE THAN ONE table has a column that plausibly answers it, include ALL of them in "targets" (one entry per table) so every candidate is reported. Only narrow to a single target when the question clearly points to one table/domain.
 - Only use column names that exist in the target table. If no table fits, use "operation":"none".
 - Never invent columns or values. Output raw JSON only, no markdown fences.`
+}
+
+// Appended to the chat system prompt when web search results are merged into the context.
+// Enforces grounding + the [INT-n]/[WEB-n] citation format the UI relies on.
+export function webContextNote(): string {
+  return `
+WEB SEARCH IS ACTIVE FOR THIS ANSWER. The context below is labeled with [INT-n] (the user's internal documents) and [WEB-n] (live web sources) so YOU can tell them apart.
+- Answer ONLY from the supplied context. Never state facts that aren't grounded in a provided item.
+- Write a clean, natural answer. Do NOT print any reference tags like [WEB-1] or [INT-2] in your response, and do NOT add a "— web sources" line. The sources are shown to the user separately below your answer.
+- Prefer the internal documents when they and the web agree; when the answer comes from the web, just state it naturally.
+- Only if NEITHER the documents nor the web sources contain anything relevant, say so in one natural sentence — never a rigid canned phrase.`
+}
+
+// Turns a natural-language CRM question into a single read-only SOQL query. Returns
+// {"soql":null} when the question isn't answerable from Salesforce (caller falls back).
+// The result is validated (SELECT-only, single statement, LIMIT enforced) before execution.
+export function salesforceSoqlPrompt(schema: string): string {
+  return `You convert a user's question into ONE read-only Salesforce SOQL query.
+
+Available objects and fields (use these EXACT API names only):
+${schema}
+
+Respond with ONLY a JSON object:
+{ "soql": "<a single SELECT ... query, or null if not answerable from this data>" }
+
+Rules:
+- SELECT queries only. Never write DML (INSERT/UPDATE/DELETE) or multiple statements.
+- COUNT rules (SOQL is strict): use bare "SELECT COUNT() FROM ..." ONLY when it is the sole selection (no alias, no other columns). To alias or combine with other aggregates, use COUNT(Id): e.g. "SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE StageName = 'Closed Won'". Never write "COUNT() alias".
+- Grouped aggregates: e.g. SELECT StageName, COUNT(Id) c, SUM(Amount) total FROM Opportunity GROUP BY StageName.
+- SOQL is NOT SQL. Do NOT use the "AS" keyword for aliases — write "COUNT(Id) cnt", never "COUNT(Id) AS cnt". In ORDER BY, repeat the full expression ("ORDER BY COUNT(Id) DESC"), never an alias. No trailing semicolon.
+- For lists, SELECT the useful columns and add a LIMIT (max 200). Always include Name/Id where relevant.
+- Use only the objects/fields listed above with their exact API names. Do not invent fields.
+- For date filters use SOQL date literals (TODAY, THIS_MONTH, LAST_N_DAYS:30, THIS_QUARTER) or YYYY-MM-DD.
+- Quote picklist/string values with single quotes exactly as shown.
+- If the question is not about this CRM data, return {"soql": null}.
+- Output raw JSON only, no markdown.`
 }
 
 export function timelinePrompt(spaceName: string): string {

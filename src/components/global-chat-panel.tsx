@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { useSpeechToText } from '@/lib/hooks/useSpeechToText'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
-interface Citation { documentId?: string; documentName: string; spaceName?: string }
+interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
 interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
 interface SpaceDoc { id: string; name: string; fileType: string }
@@ -670,6 +670,10 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
 
 function normalizeMarkdown(text: string): string {
   return text
+    // Strip any model-emitted "[WEB-1], [WEB-3] — web source(s)" attribution line…
+    .replace(/\[(?:INT|WEB)-\d+\](?:\s*,\s*\[(?:INT|WEB)-\d+\])*\s*[—–-]\s*(?:web|internal)?\s*sources?\.?/gi, '')
+    // …and any remaining inline [INT-n] / [WEB-n] citation tags (sources are shown as chips).
+    .replace(/\s*\[(?:INT|WEB)-\d+\]/gi, '')
     .split('\n')
     .map(line => line.replace(/^(\s*)•\s+/, '$1- '))
     .join('\n')
@@ -797,22 +801,44 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
                 </div>
               </div>
             )}
-            {!message.isTyping && message.citations && message.citations.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-1">
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
-                {message.citations.map((c, i) => {
-                  const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
-                  const className = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
-                  return c.documentId ? (
-                    <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={`${className} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`}>
-                      {label}
-                    </a>
-                  ) : (
-                    <span key={i} title={label} className={className}>{label}</span>
-                  )
-                })}
-              </div>
-            )}
+            {!message.isTyping && message.citations && message.citations.length > 0 && (() => {
+              const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
+              const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
+              const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+              const chipLink = `${chip} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`
+              return (
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
+                  {internalCites.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
+                      {internalCites.map((c, i) => {
+                        const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
+                        return c.documentId ? (
+                          <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={chipLink}>{label}</a>
+                        ) : (
+                          <span key={i} title={label} className={chip}>{label}</span>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {webCites.length > 0 && (
+                    <>
+                      <p className="text-[10px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
+                        {webCites.map((c, i) => {
+                          let host = c.documentName
+                          try { host = new URL(c.url!).hostname.replace(/^www\./, '') } catch {}
+                          return (
+                            <a key={i} href={c.url} target="_blank" rel="noopener noreferrer" title={c.documentName} className={chipLink}>{host}</a>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
             {!message.isTyping && !isStreaming && (
               <div className="mt-1.5 flex gap-0.5">
                 <button onClick={() => handleVote('up')} title="Helpful"

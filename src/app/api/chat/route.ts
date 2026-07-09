@@ -12,6 +12,9 @@ import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
+import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
+import { answerSalesforceQuery } from '@/salesforce'
+import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
 export async function GET(req: NextRequest) {
@@ -318,8 +321,13 @@ export async function POST(req: NextRequest) {
   // Run a safe SQL query over the stored table and hand the LLM the authoritative figure.
   const tabularResult = skipRetrieval ? null : await answerTabularQuery(content, crossSpaceIds)
 
+  // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
+  // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
+  // over RAG/web for CRM facts; fails soft to those when it can't answer.
+  const salesforceResult = skipRetrieval ? null : await answerSalesforceQuery(content)
+
   const reranked = await rerankChunks(content, rawChunks, crossSpace ? 8 : 5)
-  const citations = [...new Map(reranked.map((c) => [
+  let citations: import('@/web-search').Citation[] = [...new Map(reranked.map((c) => [
     `${c.space_name}|${c.document_name}`,
     crossSpace
       ? { documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }
@@ -335,9 +343,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const context = reranked
+  // Cite the live CRM as a source when it answered.
+  if (salesforceResult && !citations.some((c) => c.documentName === salesforceResult.citation.documentName)) {
+    citations.unshift(salesforceResult.citation)
+  }
+
+  let context = reranked
     .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
     .join('\n\n---\n\n')
+
+  // Web search augmentation — only when the classifier detects a current/external question
+  // and web search is enabled. Merges internet results with internal RAG into one labeled,
+  // cited context. Fails soft: if web isn't needed or returns nothing, the internal-only
+  // path above is left completely untouched.
+  let webUsed = false
+  if (!skipRetrieval) {
+    const internalItems: RetrievalItem[] = reranked.map((c) => ({
+      id: '', sourceType: 'internal', content: c.content,
+      title: c.document_name, documentId: c.document_id, documentName: c.document_name,
+      spaceName: crossSpace ? c.space_name : undefined,
+    }))
+    const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
+    if (merged.webUsed) {
+      context = merged.context
+      citations = merged.citations
+      webUsed = true
+    }
+  }
 
   const spaceDocs = spaceDocsRows.filter((d) => d.spaceId === spaceId)
 
@@ -369,11 +401,12 @@ export async function POST(req: NextRequest) {
     : ''
 
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
-${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}
+${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}${webUsed ? webContextNote() : ''}
 
 ${docManifest}
+${salesforceResult ? `\n${salesforceResult.context}\n` : ''}
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
-${context ? `Relevant content from documents:\n\n${truncateToTokenLimit(context)}` : tabularResult ? '' : 'No relevant document content found for this query.'}`
+${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(context)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 
   const history = recentHistory
     .reverse()
