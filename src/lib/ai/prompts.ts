@@ -141,28 +141,69 @@ WEB SEARCH IS ACTIVE FOR THIS ANSWER. The context below is labeled with [INT-n] 
 - Only if NEITHER the documents nor the web sources contain anything relevant, say so in one natural sentence — never a rigid canned phrase.`
 }
 
-// Turns a natural-language CRM question into a single read-only SOQL query. Returns
-// {"soql":null} when the question isn't answerable from Salesforce (caller falls back).
-// The result is validated (SELECT-only, single statement, LIMIT enforced) before execution.
-export function salesforceSoqlPrompt(schema: string): string {
-  return `You convert a user's question into ONE read-only Salesforce SOQL query.
+// Semantic intent router — replaces brittle keyword gates. One LLM call decides which
+// sources are needed to answer, so a question about the company's own sales goes to CRM and
+// never falls through to a default web search.
+export function intentRouterPrompt(): string {
+  return `You route a user's question to the right data source(s) for an executive assistant. Available sources:
 
-Available objects and fields (use these EXACT API names only):
-${schema}
+(A) SALESFORCE — the company's LIVE CRM (a real-estate developer): sales, deals, opportunities, pipeline, units sold/purchased/booked, revenue, closings, accounts, customers, contacts, leads, agents, salespeople, communities/projects. Anything about the company's OWN commercial activity.
+(B) DOCUMENTS — files the user uploaded to this workspace: reports, contracts, spreadsheets, PDFs, meeting notes, and their AI summaries.
+(C) WEB — the public internet: current events/news, market prices, other/external companies, general knowledge NOT specific to this company.
 
-Respond with ONLY a JSON object:
-{ "soql": "<a single SELECT ... query, or null if not answerable from this data>" }
+Return ONLY JSON: { "salesforce": bool, "documents": bool, "web": bool }
 
 Rules:
-- SELECT queries only. Never write DML (INSERT/UPDATE/DELETE) or multiple statements.
-- COUNT rules (SOQL is strict): use bare "SELECT COUNT() FROM ..." ONLY when it is the sole selection (no alias, no other columns). To alias or combine with other aggregates, use COUNT(Id): e.g. "SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE StageName = 'Closed Won'". Never write "COUNT() alias".
-- Grouped aggregates: e.g. SELECT StageName, COUNT(Id) c, SUM(Amount) total FROM Opportunity GROUP BY StageName.
-- SOQL is NOT SQL. Do NOT use the "AS" keyword for aliases — write "COUNT(Id) cnt", never "COUNT(Id) AS cnt". In ORDER BY, repeat the full expression ("ORDER BY COUNT(Id) DESC"), never an alias. No trailing semicolon.
-- For lists, SELECT the useful columns and add a LIMIT (max 200). Always include Name/Id where relevant.
-- Use only the objects/fields listed above with their exact API names. Do not invent fields.
-- For date filters use SOQL date literals (TODAY, THIS_MONTH, LAST_N_DAYS:30, THIS_QUARTER) or YYYY-MM-DD.
-- Quote picklist/string values with single quotes exactly as shown.
-- If the question is not about this CRM data, return {"soql": null}.
+- The company's OWN sales/customers/deals/units/pipeline/CRM metrics → "salesforce": true. (e.g. "how much sale happened last month", "show me the units purchased", "top accounts", "pipeline by stage" — ALL salesforce.)
+- The user's uploaded files / "this contract" / "summarize the report" / document contents → "documents": true.
+- Set "web": true ONLY when answering genuinely requires CURRENT or EXTERNAL public information (news, live prices, other companies, latest releases, general facts). NEVER set web=true merely because internal data might be missing — web is a LAST RESORT, not a default.
+- More than one may be true. At least one must be true. If unsure between internal options, prefer "documents".
+- Output raw JSON only, no markdown.`
+}
+
+// Step 1 of Salesforce planning: pick the single most relevant object for the question.
+// Returns {"object": "<ApiName>"} or {"object": null} if the question isn't CRM-answerable.
+export function salesforceObjectPrompt(objectCatalog: string): string {
+  return `Pick the ONE Salesforce object most relevant to the user's question.
+
+Objects:
+${objectCatalog}
+
+Important: money/sales/revenue/deal-value/pipeline questions live on Opportunity (Opportunity.Amount) — pick "Opportunity" even when the question mentions accounts, customers, or communities (it can be grouped BY account/community/owner). Only pick "Account" for company attributes (industry, city, count of accounts), not for sales amounts.
+
+Respond with ONLY JSON: { "object": "<exact object API name from the list, or null if none fits>" }
+No markdown.`
+}
+
+// Step 2: turn the question into ONE read-only SOQL query over the chosen object, using its
+// ACTUAL fields (fetched live via describe). This is why arbitrary questions work without a
+// hand-maintained field list — the model sees real field names/labels and maps synonyms
+// itself (e.g. "location" → a community/project field). Result is validated before execution.
+export function salesforceSoqlPrompt(objectName: string, businessRules: string, hintsText: string, fieldsText: string, allObjects: string, feedback?: string): string {
+  return `You convert a user's question into ONE read-only Salesforce SOQL query over the "${objectName}" object.
+${businessRules ? `\n${businessRules}\n` : ''}${feedback ? `\n⚠️ PREVIOUS ATTEMPT FAILED — correct it based on this:\n${feedback}\nEither fix the SOQL for "${objectName}", OR if this object is wrong for the question, set "switchObject" to a better one.\n` : ''}
+${hintsText ? `\nPREFERRED FIELD MAPPINGS for common concepts (use these when the question matches — they are the business-correct fields):\n${hintsText}\n` : ''}
+ALL fields on ${objectName} — "ApiName (Label) [type]", groupable fields marked * (use for validity and anything not covered above; never invent a field not in this list):
+${fieldsText}
+
+You may also traverse PARENT relationships in SELECT/WHERE/GROUP BY even though only direct fields are listed above: e.g. from Opportunity use Account.Name (buyer company), Owner.Name (salesperson); from Contact/Case use Account.Name. Use the "<Lookup without Id>.<Field>" form (AccountId → Account.Name, OwnerId → Owner.Name).
+
+If "${objectName}" is the WRONG object for this question, set "switchObject" to the correct object from: ${allObjects}. Money/sales/revenue always live on Opportunity.
+
+Respond with ONLY a JSON object:
+{ "soql": "<a single SELECT ... query over ${objectName}, or null>", "switchObject": "<another object name to use instead, or null>" }
+
+Rules:
+- SELECT queries only. Never write DML or multiple statements.
+- Map the user's words to the closest field by name/label (e.g. "location"/"area"/"community"/"project" → the matching custom field; "amount"/"value" → an amount field). Only use fields listed above; never invent field names.
+- To break down "by <something>", GROUP BY a groupable (*) field: e.g. SELECT <field>, COUNT(Id) c FROM ${objectName} WHERE ... GROUP BY <field> ORDER BY COUNT(Id) DESC.
+- COUNT rules: bare "SELECT COUNT() FROM ..." ONLY as the sole selection. To alias/combine, use COUNT(Id): "SELECT COUNT(Id) cnt, SUM(Amount) total FROM ...".
+- SOQL is NOT SQL: never use "AS" for aliases (write "COUNT(Id) cnt"); in ORDER BY repeat the full expression ("ORDER BY COUNT(Id) DESC"), never an alias; no trailing semicolon.
+- SOQL has NO COALESCE, CASE, NVL, IFNULL, or arithmetic/functions inside SELECT. Use a plain field; to ignore nulls add a WHERE "<field> != null" filter (never wrap a field in a function).
+- An overall aggregate (SUM/COUNT/AVG with no GROUP BY) must NOT have a LIMIT clause.
+- Lists: SELECT useful columns incl. Id/Name, add LIMIT (max 200).
+- Dates: SOQL literals (TODAY, THIS_MONTH, LAST_N_DAYS:30, THIS_QUARTER) or YYYY-MM-DD.
+- Quote string/picklist values with single quotes.
 - Output raw JSON only, no markdown.`
 }
 

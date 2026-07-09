@@ -371,6 +371,36 @@ export async function chatJson(systemPrompt: string, userMessage: string): Promi
   return fenceMatch ? fenceMatch[1] : raw
 }
 
+// Whisper transcription via OpenRouter — routed through OUR backend instead of the browser
+// calling Google's speech service directly. Fixes voice input failing with "Speech recognition
+// needs an internet connection" on networks that block Google's endpoint specifically but allow
+// normal HTTPS (which is how every other OpenRouter call in this app already succeeds).
+export const TRANSCRIBE_MODEL = process.env.OPENROUTER_TRANSCRIBE_MODEL ?? 'openai/whisper-1'
+
+export async function transcribeAudio(audio: Blob, filename = 'audio.webm'): Promise<string> {
+  const form = new FormData()
+  form.append('file', audio, filename)
+  form.append('model', TRANSCRIBE_MODEL)
+
+  const res = await fetch(`${OPENROUTER_BASE}/audio/transcriptions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+      'X-Title': 'Memory',
+    },
+    body: form,
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter transcription error ${res.status}: ${err.slice(0, 300)}`)
+  }
+
+  const data = await res.json()
+  return (data.text ?? '').trim()
+}
+
 export async function chat(
   systemPrompt: string,
   userMessage: string,

@@ -1,8 +1,7 @@
 // Public entry point for the web search subsystem. Routes should import from here only.
 
-import type { Reranker, RetrievalItem, SearchDecision, WebSearchResult } from './types'
+import type { Reranker, RetrievalItem, WebSearchResult } from './types'
 import { getWebSearchConfig, type WebSearchConfig } from './config'
-import { classifyQuery } from './classifier'
 import { webSearch } from './search'
 import { cohereReranker } from './rerank'
 import { rerankWithScores } from '@/lib/ai/provider'
@@ -14,9 +13,8 @@ import { assignCitationIds, buildContext, toCitations, type Citation } from './c
 const INTERNAL_RELEVANCE_MIN = 0.3
 
 export { getWebSearchConfig } from './config'
-export { classifyQuery } from './classifier'
 export type { Citation } from './citations'
-export type { RetrievalItem, SearchDecision } from './types'
+export type { RetrievalItem } from './types'
 
 function toRetrievalItem(r: WebSearchResult): RetrievalItem {
   return {
@@ -33,7 +31,6 @@ function toRetrievalItem(r: WebSearchResult): RetrievalItem {
 
 export interface MergeResult {
   webUsed: boolean
-  decision: SearchDecision
   items: RetrievalItem[]
   context: string
   citations: Citation[]
@@ -61,15 +58,16 @@ export async function retrieveAndMerge(params: {
   const { query, internal, topN } = params
   const config = params.config ?? getWebSearchConfig()
   const reranker = params.reranker ?? cohereReranker
-  const decision = classifyQuery(query)
 
-  if (!decision.useWeb || !config.enabled) {
-    return { webUsed: false, decision, items: [], context: '', citations: [] }
+  // The caller (semantic intent router) has already decided web is wanted; we only guard on
+  // whether the provider is configured.
+  if (!config.enabled) {
+    return { webUsed: false, items: [], context: '', citations: [] }
   }
 
   const { results: webResults, answer } = await webSearch(query, config)
   if (webResults.length === 0 && !answer) {
-    return { webUsed: false, decision, items: [], context: '', citations: [] }
+    return { webUsed: false, items: [], context: '', citations: [] }
   }
 
   // Reserve slots per source so a single rerank over the merged set can't starve out ALL web
@@ -100,7 +98,6 @@ export async function retrieveAndMerge(params: {
 
   return {
     webUsed: true,
-    decision,
     items: withIds,
     context: buildContext(withIds),
     citations: toCitations(withIds),

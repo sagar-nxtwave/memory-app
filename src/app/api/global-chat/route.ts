@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { spaceMembers, spaces, globalMessages, documents } from '@/lib/db/schema'
-import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
+import { generateEmbedding, chatStream, rerankWithScores } from '@/lib/ai/provider'
 import { globalChatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
@@ -12,6 +12,7 @@ import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
 import { answerSalesforceQuery } from '@/salesforce'
+import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 
 export const maxDuration = 60
@@ -91,11 +92,16 @@ export async function POST(req: NextRequest) {
   // cites whatever chunk happened to clear the similarity threshold.
   const skipRetrieval = isChitChat(content) && !hasMentionedDocs
 
+  // Semantic intent routing (CRM / documents / web) — runs concurrently with embedding.
   let queryEmbedding: number[] = []
+  let intent: Intent = { salesforce: false, documents: true, web: false }
   if (!skipRetrieval) {
-    try {
-      queryEmbedding = await generateEmbedding(content)
-    } catch {}
+    const [emb, routed] = await Promise.all([
+      generateEmbedding(content).catch(() => [] as number[]),
+      classifyIntent(content),
+    ])
+    queryEmbedding = emb
+    intent = routed
   }
   const financialBoost = isFinancialQuery(content)
     ? sql` + CASE WHEN dc.contains_numbers = true OR dc.chunk_type IN ('table', 'financial') THEN 0.15 ELSE 0 END`
@@ -245,7 +251,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const reranked = await rerankChunks(content, rawChunks, 8)
+    // Threshold internal citations by rerank relevance (same rule as per-space chat) so a
+    // loosely keyword-matched chunk isn't cited when the real answer came from Salesforce/
+    // tabular data. Explicit @-mentions always pass through.
+    const INTERNAL_RELEVANCE_MIN = 0.3
+    const rerankedScored = await rerankWithScores(content, rawChunks, 8)
+    const reranked = hasMentionedDocs
+      ? rerankedScored.map((r) => r.item)
+      : rerankedScored.filter((r) => r.score >= INTERNAL_RELEVANCE_MIN).map((r) => r.item)
     citations = reranked
       .map((c) => ({ documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }))
       .filter((v, i, a) => a.findIndex((x) => x.documentName === v.documentName && x.spaceName === v.spaceName) === i)
@@ -263,8 +276,9 @@ export async function POST(req: NextRequest) {
   // Web search augmentation (Ask All Spaces) — same non-breaking pattern as per-space chat:
   // classifier gates it, results merge with internal RAG into one labeled+cited context,
   // and it fails soft to the internal-only path when web isn't needed or returns nothing.
+  // Web runs ONLY when the semantic router says so — never as a default fallback.
   let webUsed = false
-  if (!skipRetrieval) {
+  if (!skipRetrieval && intent.web) {
     const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: 8 })
     if (merged.webUsed) {
       contextText = merged.context
@@ -285,7 +299,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
-  const salesforceResult = skipRetrieval ? null : await answerSalesforceQuery(content)
+  const salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
   if (salesforceResult && !citations.some((c) => c.documentName === salesforceResult.citation.documentName)) {
     citations.unshift(salesforceResult.citation)
   }

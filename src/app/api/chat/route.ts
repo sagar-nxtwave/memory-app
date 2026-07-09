@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { messages, spaceMembers, documents, spaces } from '@/lib/db/schema'
-import { generateEmbedding, chatStream, rerankChunks } from '@/lib/ai/provider'
+import { generateEmbedding, chatStream, rerankWithScores } from '@/lib/ai/provider'
 import { chatPrompt, styleInstruction } from '@/lib/ai/prompts'
 import { sanitizeForPrompt, truncateToTokenLimit } from '@/lib/utils/sanitize'
 import { formatDateTime } from '@/lib/utils/date'
@@ -14,6 +14,7 @@ import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
 import { answerSalesforceQuery } from '@/salesforce'
+import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
@@ -163,13 +164,17 @@ export async function POST(req: NextRequest) {
   // mentionedDocIds check: an explicit doc reference always wins even if oddly phrased.
   const skipRetrieval = isChitChat(content) && mentionedDocIds.length === 0
 
+  // Semantic intent routing decides which sources to use (CRM / documents / web) — replaces
+  // brittle keyword gates. Run it concurrently with embedding to avoid adding latency.
   let queryEmbedding: number[] = []
+  let intent: Intent = { salesforce: false, documents: true, web: false }
   if (!skipRetrieval) {
-    try {
-      queryEmbedding = await generateEmbedding(content)
-    } catch (err) {
-      console.error('[chat] Embedding failed:', err)
-    }
+    const [emb, routed] = await Promise.all([
+      generateEmbedding(content).catch((err) => { console.error('[chat] Embedding failed:', err); return [] as number[] }),
+      classifyIntent(content),
+    ])
+    queryEmbedding = emb
+    intent = routed
   }
 
   const embeddingStr = `[${queryEmbedding.join(',')}]`
@@ -324,9 +329,17 @@ export async function POST(req: NextRequest) {
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  const salesforceResult = skipRetrieval ? null : await answerSalesforceQuery(content)
+  const salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
 
-  const reranked = await rerankChunks(content, rawChunks, crossSpace ? 8 : 5)
+  // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
+  // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
+  // answer came entirely from Salesforce/tabular data (e.g. "how many unconverted leads"
+  // wrongly citing unrelated uploaded docs). Explicit @-mentions always pass through.
+  const INTERNAL_RELEVANCE_MIN = 0.3
+  const rerankedScored = await rerankWithScores(content, rawChunks, crossSpace ? 8 : 5)
+  const reranked = hasMentions
+    ? rerankedScored.map((r) => r.item)
+    : rerankedScored.filter((r) => r.score >= INTERNAL_RELEVANCE_MIN).map((r) => r.item)
   let citations: import('@/web-search').Citation[] = [...new Map(reranked.map((c) => [
     `${c.space_name}|${c.document_name}`,
     crossSpace
@@ -356,8 +369,10 @@ export async function POST(req: NextRequest) {
   // and web search is enabled. Merges internet results with internal RAG into one labeled,
   // cited context. Fails soft: if web isn't needed or returns nothing, the internal-only
   // path above is left completely untouched.
+  // Web search runs ONLY when the semantic router says the question needs current/external
+  // info — never as a default fallback (that was the bug: CRM questions hitting the web).
   let webUsed = false
-  if (!skipRetrieval) {
+  if (!skipRetrieval && intent.web) {
     const internalItems: RetrievalItem[] = reranked.map((c) => ({
       id: '', sourceType: 'internal', content: c.content,
       title: c.document_name, documentId: c.document_id, documentName: c.document_name,

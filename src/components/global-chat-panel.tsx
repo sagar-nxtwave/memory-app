@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useSpeechToText } from '@/lib/hooks/useSpeechToText'
+import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
@@ -53,7 +53,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
     setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
     setTimeout(() => inputRef.current?.focus(), 0)
   }, [])
-  const speech = useSpeechToText(handleSpeechResult)
+  const speech = useVoiceRecorder(handleSpeechResult)
   const autoMicFired = useRef(false)
 
   // Load persisted history (spaces list comes from the shared useSpacesList cache instead
@@ -398,8 +398,14 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
               </span>
-              Listening…
-              <button onClick={speech.stop} className="ml-1 underline">Stop</button>
+              Recording…
+              <button onClick={speech.stop} className="ml-1 underline">Done</button>
+              <button onClick={speech.cancel} className="underline">Cancel</button>
+            </div>
+          )}
+          {speech.transcribing && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs w-fit">
+              Transcribing…
             </div>
           )}
 
@@ -507,8 +513,8 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
               <button
                 type="button"
                 onClick={speech.toggle}
-                disabled={loading || !speech.supported}
-                title={!speech.supported ? 'Voice input isn\'t supported in this browser — try Chrome, Edge, or Safari' : speech.listening ? 'Stop voice input' : 'Speak your question'}
+                disabled={loading || !speech.supported || speech.transcribing}
+                title={!speech.supported ? "Voice input isn't supported in this browser" : speech.listening ? 'Stop recording' : 'Speak your question'}
                 className={`shrink-0 h-7 w-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${
                   speech.listening ? 'text-red-500' : 'text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400'
                 }`}
