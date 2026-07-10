@@ -25,6 +25,22 @@ Task — activities: tasks, calls, meetings, to-dos.
 Case — support / service cases.
 `.trim()
 
+// Meta/overview questions ("what data do you have", "what can you tell me about the CRM")
+// don't fit any single object, so pickObject() correctly returns null for them — but that
+// used to mean "no answer" (zero context), which left the model to fabricate a "not connected"
+// excuse. Short-circuit these BEFORE the single-object picker with a canned catalog answer,
+// since we already know exactly what's connected.
+const META_OVERVIEW_RE = /\b(what (all )?(data|information|objects?|fields?)\b.{0,20}\b(crm|salesforce)|what (can|do) you (know|have|see|tell me)\b.{0,20}\b(crm|salesforce)|overview of (the )?(crm|salesforce)|what'?s in (the )?(crm|salesforce))/i
+
+function isMetaOverviewQuery(query: string): boolean {
+  return META_OVERVIEW_RE.test(query)
+}
+
+function metaOverviewContext(): SalesforceResult {
+  const context = `SALESFORCE LIVE CRM DATA — connection is ACTIVE. This is a real-estate developer's CRM. Available objects (ask a specific question about any of these for live numbers):\n${OBJECT_CATALOG}\n\n${SALESFORCE_ANSWER_NOTE}`
+  return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+}
+
 const MAX_FIELDS_IN_PROMPT = 300
 const MAX_ROWS_IN_CONTEXT = 50
 
@@ -189,6 +205,8 @@ const MAX_ATTEMPTS = 4
 export async function answerSalesforceQuery(query: string): Promise<SalesforceResult | null> {
   // Invocation is gated by the semantic intent router upstream; here we only check config.
   if (!getSalesforceConfig().enabled) return null
+
+  if (isMetaOverviewQuery(query)) return metaOverviewContext()
 
   let objectName = await pickObject(query)
   if (!objectName) return null

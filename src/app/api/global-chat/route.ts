@@ -299,9 +299,23 @@ export async function POST(req: NextRequest) {
   }
 
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
-  const salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
-  if (salesforceResult && !citations.some((c) => c.documentName === salesforceResult.citation.documentName)) {
-    citations.unshift(salesforceResult.citation)
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
+  if (salesforceResult) {
+    const sfCitation = salesforceResult.citation
+    if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
+  }
+
+  // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
+  // questions. If EVERY source came back empty, try Salesforce once as a last resort before
+  // giving up — high-level executive questions must not silently fail on one bad classification.
+  if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0) {
+    const fallback = await answerSalesforceQuery(content)
+    if (fallback) {
+      salesforceResult = fallback
+      if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
+        citations.unshift(fallback.citation)
+      }
+    }
   }
 
   // Build document manifest per space for the LLM to know what documents exist

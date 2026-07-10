@@ -48,3 +48,5 @@ migrate-db.mjs
 # editor / agent generated config
 .windsurf/
 .agents/
+
+.vercel

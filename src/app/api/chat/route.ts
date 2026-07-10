@@ -329,7 +329,7 @@ export async function POST(req: NextRequest) {
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  const salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
 
   // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
   // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
@@ -357,8 +357,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Cite the live CRM as a source when it answered.
-  if (salesforceResult && !citations.some((c) => c.documentName === salesforceResult.citation.documentName)) {
-    citations.unshift(salesforceResult.citation)
+  if (salesforceResult) {
+    const sfCitation = salesforceResult.citation
+    if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
   }
 
   let context = reranked
@@ -383,6 +384,21 @@ export async function POST(req: NextRequest) {
       context = merged.context
       citations = merged.citations
       webUsed = true
+    }
+  }
+
+  // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
+  // questions (e.g. "how many deals closed this year" not flagged as salesforce). If EVERY
+  // source came back empty, don't just answer "not in documents" — try Salesforce once as a
+  // last resort before giving up. High-level executive questions must not silently fail just
+  // because one classification call guessed wrong; this is the client's top complaint.
+  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
+    const fallback = await answerSalesforceQuery(content)
+    if (fallback) {
+      salesforceResult = fallback
+      if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
+        citations.unshift(fallback.citation)
+      }
     }
   }
 
