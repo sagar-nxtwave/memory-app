@@ -1,5 +1,5 @@
 import { chatJson } from '@/lib/ai/provider'
-import { salesforceObjectPrompt, salesforceSoqlPrompt } from '@/lib/ai/prompts'
+import { salesforceObjectPrompt, salesforceSoqlPrompt, followUpResolverPrompt } from '@/lib/ai/prompts'
 import { getSalesforceConfig } from './config'
 import { soql, describeObject, type SoqlResult, type FieldInfo } from './client'
 import { ALLOWED_OBJECTS, FIELD_HINTS } from './schema'
@@ -17,7 +17,9 @@ export function isSalesforceQuery(query: string): boolean {
 // Short descriptions to help the model pick the right object (step 1). Field-level detail
 // comes LIVE from describe() so this never needs updating per-org.
 const OBJECT_CATALOG = `
-Opportunity — sales deals / property-unit sales: pipeline, stages, amounts, close dates, community/location of the unit.
+Opportunity — sales deals / property-unit sales: pipeline, stages, amounts, close dates, community/location of the unit. Each Opportunity IS one unit sale/transaction.
+Property_Inventory__c — the MASTER catalog of every physical unit/property the developer has (sold, available, or rented) — ~17,000+ records. Use this for general "units"/"properties" questions NOT tied to a specific sale (e.g. "how many units do we have", "list available units", "units in building X").
+Opportunity_Property__c — detailed per-transaction unit/property attributes (selling price, area breakdown, order status) linked to a SPECIFIC Opportunity via cm_Opportunity__c, and to a specific Property_Inventory__c record via cm_Property_Inventory__c. Use this when the question is about a sold unit's detailed transaction attributes, not just the Opportunity's own summary fields.
 Account — companies / customers / buyers.
 Contact — individual people (usually linked to an Account).
 Lead — unconverted prospects.
@@ -75,6 +77,28 @@ function sanitizeSoql(raw: string): string | null {
   return q
 }
 
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+// Step 0: resolve a conversational follow-up into a standalone question BEFORE planning.
+// The planner only ever sees one string — without this, "yes break down" or "which building?"
+// arrive with no idea what they refer to and the model (correctly, given nothing) answers as
+// if that data doesn't exist at all. Only spends the extra LLM call when history exists.
+async function resolveFollowUp(query: string, history?: ChatTurn[]): Promise<string> {
+  if (!history || history.length === 0) return query
+  try {
+    const transcript = history.slice(-6).map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content.slice(0, 500)}`).join('\n')
+    const raw = await chatJson(followUpResolverPrompt(), `${transcript}\nUser: ${query}`)
+    const parsed = JSON.parse(raw) as { question?: string }
+    return parsed.question?.trim() || query
+  } catch (err) {
+    console.error('[salesforce] follow-up resolution failed, using raw query:', err)
+    return query
+  }
+}
+
 // Step 1: pick the single most relevant object.
 async function pickObject(query: string): Promise<string | null> {
   try {
@@ -123,7 +147,7 @@ function fieldErrorHint(message: string, fieldNames: string[]): string {
 function formatFields(fields: FieldInfo[]): string {
   return fields
     .slice(0, MAX_FIELDS_IN_PROMPT)
-    .map((f) => `${f.name} (${f.label}) [${f.type}]${f.groupable ? '*' : ''}`)
+    .map((f) => `${f.name} (${f.label}) [${f.type}]${f.groupable ? '*' : ''}${f.referenceTo.length ? ` -> ${f.referenceTo.join(',')}` : ''}`)
     .join('\n')
 }
 
@@ -202,9 +226,13 @@ const MAX_ATTEMPTS = 4
  * fed back and the model revises — including switching to a different object — up to a bound.
  * This removes the need for a developer to hand-tune prompts for each new question type.
  */
-export async function answerSalesforceQuery(query: string): Promise<SalesforceResult | null> {
+export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn[]): Promise<SalesforceResult | null> {
   // Invocation is gated by the semantic intent router upstream; here we only check config.
   if (!getSalesforceConfig().enabled) return null
+
+  // Resolve conversational follow-ups ("yes break down", "which building?") against recent
+  // history BEFORE anything else — every step below only ever sees one string.
+  const query = await resolveFollowUp(rawQuery, history)
 
   if (isMetaOverviewQuery(query)) return metaOverviewContext()
 

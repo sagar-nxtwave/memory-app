@@ -73,6 +73,7 @@ export interface FieldInfo {
   label: string
   type: string
   groupable: boolean
+  referenceTo: string[]   // target object(s) this lookup/reference field points to, e.g. ['Account']
 }
 
 // Describe results are cached per object — field metadata rarely changes within a session.
@@ -89,11 +90,16 @@ export async function describeObject(object: string): Promise<FieldInfo[]> {
     throw new Error(`Salesforce describe failed ${res.status}: ${err.slice(0, 300)}`)
   }
   const data = await res.json()
-  const fields: FieldInfo[] = (data.fields ?? []).map((f: { name: string; label: string; type: string; groupable?: boolean }) => ({
+  // referenceTo tells us which object(s) a lookup field actually points to (e.g.
+  // cm_Opportunity__c -> ['Opportunity']) — without this, cross-object joins only work for
+  // relationships the model already knows from training (standard Account/Opportunity) or
+  // ones we've hand-hinted; capturing it makes ANY custom lookup traversable.
+  const fields: FieldInfo[] = (data.fields ?? []).map((f: { name: string; label: string; type: string; groupable?: boolean; referenceTo?: string[] }) => ({
     name: f.name,
     label: f.label ?? f.name,
     type: f.type ?? 'string',
     groupable: f.groupable ?? false,
+    referenceTo: Array.isArray(f.referenceTo) ? f.referenceTo : [],
   }))
   describeCache.set(object, fields)
   return fields

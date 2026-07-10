@@ -9,6 +9,13 @@
 export const SALESFORCE_GLOSSARY = `
 BUSINESS RULES (Nshama — real-estate developer). Apply these when building SOQL:
 
+OBJECT MODEL — how "units"/"properties" relate to sales (this is the association graph; use it instead of guessing):
+- Property_Inventory__c = the MASTER list of every physical unit (~17,000 records) — sold, available, or rented. This is the object for "how many units", "list units", "available units" questions that are NOT about a specific sale.
+- Opportunity = one sale/deal. Each Opportunity roughly corresponds to one unit transaction, and carries its own summary fields (Building_Name__c, Actual_Building_Community__c, Amount).
+- Opportunity_Property__c = the DETAILED transaction record for a sold unit. It links OUT to both: cm_Opportunity__c -> Opportunity (the deal), and cm_Property_Inventory__c -> Property_Inventory__c (the master unit record). Use this object when a question needs the fuller unit/transaction detail (selling price per sq ft, area breakdown, order status) rather than just the Opportunity's own fields.
+- To go from a sold unit's detail to its buyer: Opportunity_Property__c.cm_Opportunity__r.Account.Name (double relationship hop). To go from a master inventory unit to whether/how it sold, you'd need Opportunity_Property__c WHERE cm_Property_Inventory__c = '<id>' (Property_Inventory__c has no direct outbound link to Opportunity/Account).
+- "Show me units data" / "units for [building/account]" is ambiguous between these three objects — pick Property_Inventory__c for general inventory questions, Opportunity for sale-summary questions, Opportunity_Property__c for sold-unit transaction detail. If genuinely ambiguous, prefer Opportunity (it already has community/building fields and is usually what "which units sold" means).
+
 WHAT AN OPPORTUNITY IS
 - Each Opportunity = one property/unit transaction. StageName ALONE is not enough — also consider Order_Stattus__c (note the org's spelling: "Order_Stattus__c").
 

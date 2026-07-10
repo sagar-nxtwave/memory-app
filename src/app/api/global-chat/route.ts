@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { eq, desc } from 'drizzle-orm'
+import { and, eq, desc } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
@@ -91,6 +91,18 @@ export async function POST(req: NextRequest) {
   // Skip retrieval entirely for greetings/small talk — otherwise a generic reply still
   // cites whatever chunk happened to clear the similarity threshold.
   const skipRetrieval = isChitChat(content) && !hasMentionedDocs
+
+  // Fetched early so follow-ups like "yes break down" / "which building?" can be resolved
+  // against recent turns before reaching the Salesforce planner — see chat/route.ts for the
+  // full rationale (a follow-up reaching the planner in isolation wrongly concludes the
+  // requested data doesn't exist).
+  const priorTurns = await db
+    .select({ role: globalMessages.role, content: globalMessages.content })
+    .from(globalMessages)
+    .where(and(eq(globalMessages.userId, userId), sql`${globalMessages.id} != ${userMsg.id}`))
+    .orderBy(desc(globalMessages.createdAt))
+    .limit(6)
+  const sfHistory: { role: 'user' | 'assistant'; content: string }[] = priorTurns.reverse().map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
   // Semantic intent routing (CRM / documents / web) — runs concurrently with embedding.
   let queryEmbedding: number[] = []
@@ -299,7 +311,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, sfHistory) : null
   if (salesforceResult) {
     const sfCitation = salesforceResult.citation
     if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
@@ -309,7 +321,7 @@ export async function POST(req: NextRequest) {
   // questions. If EVERY source came back empty, try Salesforce once as a last resort before
   // giving up — high-level executive questions must not silently fail on one bad classification.
   if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content)
+    const fallback = await answerSalesforceQuery(content, sfHistory)
     if (fallback) {
       salesforceResult = fallback
       if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {

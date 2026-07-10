@@ -33,7 +33,7 @@ Case — support/service cases.
 // Objects the planner is allowed to query — used to validate generated SOQL.
 export const ALLOWED_OBJECTS = [
   'Opportunity', 'Account', 'Contact', 'Lead', 'Task', 'Case',
-  'Opportunity_Property__c',
+  'Opportunity_Property__c', 'Property_Inventory__c',
 ]
 
 // Curated semantic hints per object — maps everyday words to the CORRECT field when the live
@@ -55,6 +55,23 @@ export const FIELD_HINTS: Record<string, string> = {
   Account: [
     'location / city → BillingCity; country → BillingCountry',
     'company name → Name; industry → Industry',
+  ].join('\n'),
+  Property_Inventory__c: [
+    'unit/property identifier → Name; unit status (sold/available/rented) → check the picklist fields on this object via describe (do not guess a field name — look for one whose label matches "status")',
+    'rent → Actual_Rent_Aed__c (current) / Advertised_Rent_Aed__c (listed); cost → Actual_Cost__c',
+    'area → Assignable_Area__c and the DLD_* Attribute fields (DLD Plot/Unit/Balcony/Garage/Total Area — check labels via describe, field names are generic Attribute20__c-style)',
+    'address → Address__c / Address_Line_1__c..4__c',
+    'to link a unit to its buyer/sale, join via Opportunity_Property__c.cm_Property_Inventory__c (this object has no direct Opportunity/Account lookup)',
+  ].join('\n'),
+  Opportunity_Property__c: [
+    'this is a specific SOLD/booked unit\'s transaction detail — links to the sale via cm_Opportunity__c (-> Opportunity) and to the master unit record via cm_Property_Inventory__c (-> Property_Inventory__c)',
+    'selling price → cm_Selling_Price__c; price per sq ft → cm_Selling_Price_Per_Sq_Ft__c; order amount → ns_Order_Amount__c',
+    'unit identifier → cm_Unit__c; property name → cm_Property_Name__c; property status → cm_Property_Status__c / Property_Sale_status__c',
+    'order status → cm_Order_Status__c; order date → cm_Order_Date__c',
+    'area breakdown → Plot_Area__c, Saleable_Leasable_Area__c, Balcony_Area__c, Terrace_Area__c, Garage_Area__c, Total_Area__c',
+    'deposit → Deposit_Recieved__c / Deposit_Amount__c',
+    'building/community (also duplicated here) → Building_Name__c',
+    'to find the buyer, traverse cm_Opportunity__r.Account.Name (Opportunity_Property__c -> Opportunity -> Account)',
   ].join('\n'),
   Lead: [
     'status → Status; converted? → IsConverted; source → LeadSource; company → Company',

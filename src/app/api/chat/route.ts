@@ -164,6 +164,18 @@ export async function POST(req: NextRequest) {
   // mentionedDocIds check: an explicit doc reference always wins even if oddly phrased.
   const skipRetrieval = isChitChat(content) && mentionedDocIds.length === 0
 
+  // Fetched early so follow-ups like "yes break down" / "which building?" can be resolved
+  // against recent turns before reaching the Salesforce planner (see resolveFollowUp) —
+  // without this, a follow-up reaches the planner as an isolated string with nothing to
+  // refer to, and it wrongly concludes the requested data doesn't exist.
+  const priorTurns = await db
+    .select({ role: messages.role, content: messages.content })
+    .from(messages)
+    .where(and(eq(messages.spaceId, spaceId), sql`${messages.id} != ${userMsg.id}`))
+    .orderBy(desc(messages.createdAt))
+    .limit(6)
+  const conversationHistory: { role: 'user' | 'assistant'; content: string }[] = priorTurns.reverse().map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
   // Semantic intent routing decides which sources to use (CRM / documents / web) — replaces
   // brittle keyword gates. Run it concurrently with embedding to avoid adding latency.
   let queryEmbedding: number[] = []
@@ -329,7 +341,7 @@ export async function POST(req: NextRequest) {
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content) : null
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory) : null
 
   // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
   // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
@@ -393,7 +405,7 @@ export async function POST(req: NextRequest) {
   // last resort before giving up. High-level executive questions must not silently fail just
   // because one classification call guessed wrong; this is the client's top complaint.
   if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content)
+    const fallback = await answerSalesforceQuery(content, conversationHistory)
     if (fallback) {
       salesforceResult = fallback
       if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {

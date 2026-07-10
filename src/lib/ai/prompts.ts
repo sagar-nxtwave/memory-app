@@ -161,6 +161,17 @@ Rules:
 - Output raw JSON only, no markdown.`
 }
 
+// Rewrites a conversational follow-up ("yes break down", "which building?", "and last month?")
+// into a standalone question carrying its own context, so a downstream planner that only sees
+// ONE message (no chat history) can still resolve it correctly. Without this, "yes break down"
+// reaching the Salesforce SOQL planner in isolation has nothing to break down — it can't know
+// the prior turn was about top deals, and (observed live) falsely claims the data doesn't exist.
+export function followUpResolverPrompt(): string {
+  return `Rewrite the user's LAST message into ONE standalone, self-contained question that includes all context implied by the conversation (the topic being discussed, any filters, any requested grouping/breakdown). If the last message is already fully self-contained, return it unchanged. Do not answer the question — only rewrite it.
+Respond with ONLY JSON: { "question": "<the standalone question>" }
+No markdown.`
+}
+
 // Step 1 of Salesforce planning: pick the single most relevant object for the question.
 // Returns {"object": "<ApiName>"} or {"object": null} if the question isn't CRM-answerable.
 export function salesforceObjectPrompt(objectCatalog: string): string {
@@ -186,7 +197,7 @@ ${hintsText ? `\nPREFERRED FIELD MAPPINGS for common concepts (use these when th
 ALL fields on ${objectName} — "ApiName (Label) [type]", groupable fields marked * (use for validity and anything not covered above; never invent a field not in this list):
 ${fieldsText}
 
-You may also traverse PARENT relationships in SELECT/WHERE/GROUP BY even though only direct fields are listed above: e.g. from Opportunity use Account.Name (buyer company), Owner.Name (salesperson); from Contact/Case use Account.Name. Use the "<Lookup without Id>.<Field>" form (AccountId → Account.Name, OwnerId → Owner.Name).
+Fields marked "-> TargetObject" are lookup/reference fields — you may traverse them in SELECT/WHERE/GROUP BY using "<field without Id/__c suffix>.<field on the target object>" form (e.g. a field "cm_Opportunity__c [reference] -> Opportunity" lets you write "cm_Opportunity__r.Name" or filter "cm_Opportunity__c = '<id>'"; standard lookups like AccountId -> Account become "Account.Name", OwnerId -> User becomes "Owner.Name"). Custom lookup relationship names take the form "<FieldApiName minus __c>__r" (e.g. cm_Opportunity__c → cm_Opportunity__r.SomeField).
 
 If "${objectName}" is the WRONG object for this question, set "switchObject" to the correct object from: ${allObjects}. Money/sales/revenue always live on Opportunity.
 
