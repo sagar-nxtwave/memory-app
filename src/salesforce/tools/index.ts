@@ -1,4 +1,5 @@
 import { soql, type SoqlResult } from '../client'
+import { currentYear } from '../today'
 
 export interface ToolResult {
   context: string
@@ -1320,6 +1321,77 @@ const getTasksByPriority: ToolDefinition = {
   }
 }
 
+// Tool 55: compare-years
+const compareYears: ToolDefinition = {
+  name: 'compare-years',
+  description: 'Compare sales metrics between two years. Use for "compare 2024 and 2025", "year over year", "yoy comparison", "how did we do last year vs this year".',
+  params: [
+    { name: 'year1', type: 'string', description: 'First year to compare (e.g. "2024")', required: true },
+    { name: 'year2', type: 'string', description: 'Second year to compare (e.g. "2025")', required: false },
+    { name: 'metric', type: 'string', description: 'What to compare: "all" (default), "revenue", "count", "avg"', required: false },
+  ],
+  keywords: ['compare', 'year over year', 'yoy', 'vs', 'versus', '2024 vs 2025', 'last year vs this year', 'annual comparison'],
+  execute: async (params) => {
+    const year1 = (params.year1 as string) || '2024'
+    const year2 = (params.year2 as string) || String(currentYear() - 1)
+    const metric = (params.metric as string) || 'all'
+
+    try {
+      const results: string[] = []
+
+      // Won deals
+      const q1 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31`
+      const q2 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31`
+      const [r1, r2] = await Promise.all([soql(q1), soql(q2)])
+
+      const c1 = r1.records[0]
+      const c2 = r2.records[0]
+      const cnt1 = (c1?.cnt as number) ?? 0
+      const cnt2 = (c2?.cnt as number) ?? 0
+      const total1 = (c1?.total as number) ?? 0
+      const total2 = (c2?.total as number) ?? 0
+      const avg1 = cnt1 > 0 ? Math.round(total1 / cnt1) : 0
+      const avg2 = cnt2 > 0 ? Math.round(total2 / cnt2) : 0
+
+      const pctChange = (a: number, b: number) => {
+        if (a === 0) return b > 0 ? '+100%' : 'N/A'
+        const change = ((b - a) / a) * 100
+        return change >= 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`
+      }
+
+      results.push(`${year1} vs ${year2} — Won Deals Comparison:`)
+      results.push(`  ${year1}: ${cnt1} deals | AED ${(total1 / 1_000_000).toFixed(1)}M | Avg AED ${(avg1 / 1_000_000).toFixed(2)}M`)
+      results.push(`  ${year2}: ${cnt2} deals | AED ${(total2 / 1_000_000).toFixed(1)}M | Avg AED ${(avg2 / 1_000_000).toFixed(2)}M`)
+      results.push(`  Change: ${pctChange(cnt1, cnt2)} deals | ${pctChange(total1, total2)} revenue | ${pctChange(avg1, avg2)} avg deal`)
+
+      // Lost deals
+      const q3 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE IsClosed = true AND IsWon = false AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31`
+      const q4 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE IsClosed = true AND IsWon = false AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31`
+      const [r3, r4] = await Promise.all([soql(q3), soql(q4)])
+      const lost1 = (r3.records[0]?.cnt as number) ?? 0
+      const lost2 = (r4.records[0]?.cnt as number) ?? 0
+
+      const totalClosed1 = cnt1 + lost1
+      const totalClosed2 = cnt2 + lost2
+      const wr1 = totalClosed1 > 0 ? ((cnt1 / totalClosed1) * 100).toFixed(1) : '0'
+      const wr2 = totalClosed2 > 0 ? ((cnt2 / totalClosed2) * 100).toFixed(1) : '0'
+
+      results.push(`  ${year1}: ${lost1} lost deals | Win rate: ${wr1}%`)
+      results.push(`  ${year2}: ${lost2} lost deals | Win rate: ${wr2}%`)
+
+      // Top building comparison
+      const qb1 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
+      const qb2 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
+      const [rb1, rb2] = await Promise.all([soql(qb1), soql(qb2)])
+
+      results.push(`  Top buildings ${year1}: ${rb1.records.map((r: Record<string, unknown>) => `${r.bld} (${r.cnt})`).join(', ')}`)
+      results.push(`  Top buildings ${year2}: ${rb2.records.map((r: Record<string, unknown>) => `${r.bld} (${r.cnt})`).join(', ')}`)
+
+      return { context: results.join('\n'), citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EXISTING TOOLS CONTINUE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1382,6 +1454,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getTasksByStatus,
   getTasksOverdue,
   getTasksByPriority,
+  compareYears,
 ]
 
 export function getToolByName(name: string): ToolDefinition | undefined {

@@ -77,7 +77,8 @@ Rules:
 22. For "sales by agent" (external broker) → get-sales-by-agent.
 23. For "booking trend" or "bookings by month" → get-booking-trend.
 24. For "cancellations by community" → get-cancellations-by-community.
-25. NEVER ask for clarification — always try to answer with the best available tool.
+25. For "compare years" or "year over year" or "2024 vs 2025" → compare-years.
+26. NEVER ask for clarification — always try to answer with the best available tool.
 
 Respond with ONLY JSON:
 {

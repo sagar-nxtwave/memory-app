@@ -178,6 +178,14 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   'villa': { field: 'Type__c', value: 'Villa', object: 'Property_Inventory__c', description: 'villa property type' },
   'apartment': { field: 'Type__c', value: 'Apartment', object: 'Property_Inventory__c', description: 'apartment property type' },
   'townhouse': { field: 'Type__c', value: 'Townhouse', object: 'Property_Inventory__c', description: 'townhouse property type' },
+
+  // Year comparison
+  'compare': { field: 'CloseDate', object: 'Opportunity', description: 'compare data between periods' },
+  'year over year': { field: 'CloseDate', object: 'Opportunity', description: 'year-over-year comparison' },
+  'yoy': { field: 'CloseDate', object: 'Opportunity', description: 'year-over-year comparison' },
+  'vs': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between periods' },
+  'versus': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between periods' },
+  'last year vs this year': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between last year and this year' },
 }
 
 // Resolve user terms to field names and values
