@@ -1752,6 +1752,137 @@ const compareYears: ToolDefinition = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tool 67: get-related-deals
+// ─────────────────────────────────────────────────────────────────────────────
+const getRelatedDeals: ToolDefinition = {
+  name: 'get-related-deals',
+  description: 'Find all related/opportunity deals linked to a given deal. Uses Old_Opportunity__c and New_Opportunity__c links. Use for "related deals", "linked deals", "old opportunity", "new opportunity", "deal linked to".',
+  params: [
+    { name: 'dealId', type: 'string', description: 'Deal ID (e.g. "TS LXT-1-17812" or "006ak000007sFCK")', required: true },
+  ],
+  keywords: ['related deal', 'linked deal', 'old opportunity', 'new opportunity', 'deal linked to', 'linked opportunity'],
+  execute: async (params) => {
+    const raw = (params.dealId as string)?.replace(/'/g, "")
+    if (!raw) return null
+
+    try {
+      // First, resolve deal name to Salesforce ID
+      const oppResult = await soql(`SELECT Id FROM Opportunity WHERE Name LIKE '%${raw}%' LIMIT 1`)
+      if (oppResult.records.length === 0) return null
+      const oppId = oppResult.records[0].Id
+
+      const [byOld, byNew] = await Promise.all([
+        soql(`SELECT Id, Name, StageName, Amount, CloseDate, Building_Name__c, Opportunity_Name__c, New_Opportunity__c FROM Opportunity WHERE New_Opportunity__c = '${oppId}' OR Opportunity_Name__c = '${oppId}'`),
+        soql(`SELECT Id, Name, StageName, Amount, CloseDate, Building_Name__c, Old_Opportunity__c FROM Opportunity WHERE Old_Opportunity__c = '${oppId}'`),
+      ])
+
+      const records = [...byOld.records, ...byNew.records]
+      if (!records.length) return null
+
+      return {
+        context: records.map((r: Record<string, unknown>) =>
+          `${r.Name} | Stage: ${r.StageName} | AED ${(r.Amount as number ?? 0).toLocaleString()} | Close: ${r.CloseDate ?? 'N/A'} | Building: ${r.Building_Name__c ?? 'N/A'}`
+        ).join('\n'),
+        citation: { documentName: 'Salesforce (live CRM)' },
+      }
+    } catch { return null }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool 68: get-project-details
+// ─────────────────────────────────────────────────────────────────────────────
+const getProjectDetails: ToolDefinition = {
+  name: 'get-project-details',
+  description: 'Get property/project details from Property__c table (projects, buildings, developments). Use for "project details", "building info", "what projects do we have", "property details".',
+  params: [
+    { name: 'projectName', type: 'string', description: 'Project/building name or part of name', required: false },
+  ],
+  keywords: ['project details', 'building info', 'what projects', 'property details', 'development', 'projects list', 'project info'],
+  execute: async (params) => {
+    const raw = params.projectName ? (params.projectName as string).replace(/'/g, "") : null
+
+    try {
+      const q = raw
+        ? `SELECT Name, Property_Name__c, cm_Building__c, cm_Property_Code__c, Property_Status__c, Active_Property__c, Portfolio__c, Country__c, District__c, Zone__c FROM Property__c WHERE Name LIKE '%${raw}%' OR Property_Name__c LIKE '%${raw}%' OR cm_Building__c LIKE '%${raw}%' LIMIT 20`
+        : `SELECT Name, Property_Name__c, cm_Building__c, cm_Property_Code__c, Property_Status__c, Active_Property__c, Portfolio__c FROM Property__c WHERE Active_Property__c = true ORDER BY LastActivityDate DESC LIMIT 20`
+
+      const r = await soql(q)
+      if (!r.records.length) return null
+
+      return {
+        context: r.records.map((rec: Record<string, unknown>) => {
+          const name = rec.Property_Name__c || rec.Name
+          const building = rec.cm_Building__c
+          const code = rec.cm_Property_Code__c
+          const status = rec.Property_Status__c
+          const active = rec.Active_Property__c ? 'Active' : 'Inactive'
+          const portfolio = rec.Portfolio__c ? ` | Portfolio: ${rec.Portfolio__c}` : ''
+          return `${name}${building ? ' (' + building + ')' : ''} | Code: ${code ?? 'N/A'} | Status: ${status ?? 'N/A'} | ${active}${portfolio}`
+        }).join('\n'),
+        citation: { documentName: 'Salesforce (live CRM)' },
+      }
+    } catch { return null }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool 69: get-deal-property-details
+// ─────────────────────────────────────────────────────────────────────────────
+const getDealPropertyDetails: ToolDefinition = {
+  name: 'get-deal-property-details',
+  description: 'Get detailed unit/property attributes for a deal from Opportunity_Property__c. Includes areas, parking, deposit, order info, construction status. Use for "deal unit details", "what unit", "deal property info", "unit attributes", "deal parking", "deal areas".',
+  params: [
+    { name: 'dealId', type: 'string', description: 'Deal ID (e.g. "TS LXT-1-17812" or "006ak000007sFCK")', required: true },
+  ],
+  keywords: ['deal property', 'unit details', 'deal unit', 'unit attributes', 'deal parking', 'deal areas', 'opportunity property', 'property for deal'],
+  execute: async (params) => {
+    const raw = (params.dealId as string)?.replace(/'/g, "")
+    if (!raw) return null
+
+    try {
+      // First, resolve deal name to Salesforce ID
+      const oppResult = await soql(`SELECT Id FROM Opportunity WHERE Name LIKE '%${raw}%' LIMIT 1`)
+      if (oppResult.records.length === 0) return null
+      const oppId = oppResult.records[0].Id
+
+      const r = await soql(`SELECT cm_Property_Name__c, Building_Community__c, Unit_No__c, Unit_Type__c, Sales_Room__c, cm_Selling_Price__c, Net_Selling_Price__c, Net_Amount__c, Plot_Area__c, Saleable_Leasable_Area__c, Total_Area__c, Garage_Area__c, Balcony_Area__c, Terrace_Area__c, Parking_Count__c, Default_Parking_1__c, Default_Parking_2__c, Building_Name__c, Project_Name__c, cm_Status__c, Order_Sold_Date__c, cm_Selling_Price_Per_Sq_Ft__c, DLD_Unit_Area__c FROM Opportunity_Property__c WHERE cm_Opportunity__c = '${oppId}'`)
+
+      if (!r.records.length) return null
+
+      return {
+        context: r.records.map((rec: Record<string, unknown>) => {
+          const parts: string[] = []
+          if (rec.cm_Property_Name__c) parts.push(`Unit: ${rec.cm_Property_Name__c}`)
+          if (rec.Unit_No__c) parts.push(`#${rec.Unit_No__c}`)
+          if (rec.Unit_Type__c) parts.push(`Type: ${rec.Unit_Type__c}`)
+          if (rec.Sales_Room__c) parts.push(`BR: ${rec.Sales_Room__c}`)
+          if (rec.Building_Name__c) parts.push(`Building: ${rec.Building_Name__c}`)
+          if (rec.Project_Name__c) parts.push(`Project: ${rec.Project_Name__c}`)
+          if (rec.cm_Selling_Price__c) parts.push(`Price: AED ${(rec.cm_Selling_Price__c as number).toLocaleString()}`)
+          if (rec.Net_Selling_Price__c) parts.push(`Net: AED ${(rec.Net_Selling_Price__c as number).toLocaleString()}`)
+          if (rec.Plot_Area__c) parts.push(`Plot: ${rec.Plot_Area__c} sqft`)
+          if (rec.Saleable_Leasable_Area__c) parts.push(`Saleable: ${rec.Saleable_Leasable_Area__c} sqft`)
+          if (rec.Total_Area__c) parts.push(`Total: ${rec.Total_Area__c} sqft`)
+          if (rec.Garage_Area__c) parts.push(`Garage: ${rec.Garage_Area__c} sqft`)
+          if (rec.Balcony_Area__c) parts.push(`Balcony: ${rec.Balcony_Area__c} sqft`)
+          if (rec.Terrace_Area__c) parts.push(`Terrace: ${rec.Terrace_Area__c} sqft`)
+          if (rec.Parking_Count__c) parts.push(`Parking: ${rec.Parking_Count__c}`)
+          if (rec.Default_Parking_1__c) parts.push(`P1: ${rec.Default_Parking_1__c}`)
+          if (rec.Default_Parking_2__c) parts.push(`P2: ${rec.Default_Parking_2__c}`)
+          if (rec.DLD_Unit_Area__c) parts.push(`DLD Unit: ${rec.DLD_Unit_Area__c} sqft`)
+          if (rec.cm_Status__c) parts.push(`Status: ${rec.cm_Status__c.replace(/<[^>]*>/g, '').trim()}`)
+          if (rec.Order_Sold_Date__c) parts.push(`Sold: ${rec.Order_Sold_Date__c}`)
+          if (rec.cm_Selling_Price_Per_Sq_Ft__c) parts.push(`Price/sqft: AED ${rec.cm_Selling_Price_Per_Sq_Ft__c}`)
+          return parts.join(' | ')
+        }).join('\n'),
+        citation: { documentName: 'Salesforce (live CRM)' },
+      }
+    } catch { return null }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EXISTING TOOLS CONTINUE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1828,6 +1959,9 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getQuoteDetails,
   getBookingToClose,
   compareYears,
+  getRelatedDeals,
+  getProjectDetails,
+  getDealPropertyDetails,
 ]
 
 export function getToolByName(name: string): ToolDefinition | undefined {

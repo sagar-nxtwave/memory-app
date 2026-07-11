@@ -90,7 +90,10 @@ Rules:
 35. For "lease for deal X", "rental status", "tenant lease" → get-lease-status.
 36. For "quote for deal X", "price quote", "how much quoted" → get-quote-details.
 37. For "how long from booking to close", "deal cycle time", "average time to close" → get-booking-to-close.
-38. NEVER ask for clarification — always try to answer with the best available tool.
+38. For "related deals", "linked deals", "old opportunity", "new opportunity", "deal linked to" → get-related-deals.
+39. For "project details", "building info", "what projects", "project list", "developments" → get-project-details.
+40. For "deal unit details", "unit attributes", "deal parking", "deal areas", "property for deal" → get-deal-property-details.
+41. NEVER ask for clarification — always try to answer with the best available tool.
 
 Respond with ONLY JSON:
 {

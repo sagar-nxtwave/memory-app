@@ -229,6 +229,25 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   // Cycle time
   'cycle time': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'booking to close time' },
   'time to close': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'days from booking to close' },
+
+  // Related deals
+  'related deal': { field: 'Old_Opportunity__c', object: 'Opportunity', description: 'related opportunity' },
+  'linked deal': { field: 'Old_Opportunity__c', object: 'Opportunity', description: 'linked opportunity' },
+  'old opportunity': { field: 'Old_Opportunity__c', object: 'Opportunity', description: 'previous opportunity' },
+  'new opportunity': { field: 'New_Opportunity__c', object: 'Opportunity', description: 'replacement opportunity' },
+
+  // Project/building
+  'project details': { field: 'Property_Name__c', object: 'Property__c', description: 'project information' },
+  'building info': { field: 'cm_Building__c', object: 'Property__c', description: 'building details' },
+  'what projects': { field: 'Property_Name__c', object: 'Property__c', description: 'list of projects' },
+  'project list': { field: 'Property_Name__c', object: 'Property__c', description: 'all projects' },
+
+  // Deal property/unit
+  'deal unit': { field: 'cm_Opportunity__c', object: 'Opportunity_Property__c', description: 'unit for deal' },
+  'unit details': { field: 'Unit_No__c', object: 'Opportunity_Property__c', description: 'unit information' },
+  'deal parking': { field: 'Parking_Count__c', object: 'Opportunity_Property__c', description: 'parking for deal' },
+  'deal areas': { field: 'Total_Area__c', object: 'Opportunity_Property__c', description: 'area details for deal' },
+  'unit attributes': { field: 'Unit_Type__c', object: 'Opportunity_Property__c', description: 'unit attributes' },
 }
 
 // Resolve user terms to field names and values

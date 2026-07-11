@@ -19,6 +19,9 @@ const QUESTIONS = [
   'Monthly sales trend',
   'How many handovers are completed?',
   'Tell me about customer Al Futtaim',
+  'What are the related deals for TS LXT-1-17812?',
+  'What project details do we have?',
+  'What unit details are linked to deal TS LXT-5-515?',
 ]
 
 async function runLiveTest() {
