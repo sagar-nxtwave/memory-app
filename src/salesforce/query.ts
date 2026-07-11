@@ -432,8 +432,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     return formatDirectResult(result, 'Task')
   }
 
-  // Average deal value
-  if (q.includes('average') || q.includes('avg') || q.includes('mean')) {
+  // Average deal value — BUT skip "average cycle time" or "time to close" (goes to tool matcher)
+  if ((q.includes('average') || q.includes('avg') || q.includes('mean')) && !q.includes('cycle') && !q.includes('time to close') && !q.includes('booking to close')) {
     if (q.includes('deal') || q.includes('sale') || q.includes('price') || q.includes('amount') || q.includes('value')) {
       const result = await soql(`SELECT AVG(Amount) avgVal, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true`)
       return formatDirectResult(result, 'Opportunity')
@@ -471,7 +471,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   }
 
   // Mortgage status — Current_Mortgage_Status__c can't be grouped, so query raw and aggregate in code
-  if (q.includes('mortgage') || q.includes('mortgaged')) {
+  // BUT skip "mortgage for deal X" (goes to tool matcher)
+  if ((q.includes('mortgage') || q.includes('mortgaged')) && !q.includes('for deal') && !q.includes('for opportunity')) {
     const result = await soql(`SELECT Current_Mortgage_Status__c FROM Opportunity WHERE Current_Mortgage_Status__c != null AND IsWon = true LIMIT 500`)
     const counts: Record<string, number> = {}
     for (const r of result.records) {

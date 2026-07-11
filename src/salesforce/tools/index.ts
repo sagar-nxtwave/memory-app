@@ -1552,6 +1552,134 @@ const getDealTimeline: ToolDefinition = {
   }
 }
 
+// Tool 62: get-payment-history
+const getPaymentHistory: ToolDefinition = {
+  name: 'get-payment-history',
+  description: 'Get payment history for a deal. Use for "payment history for deal X", "payments received", "receipt details", "payment status".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['payment history', 'payments received', 'receipt details', 'payment status', 'paid amount', 'payment records'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    const oppResult = await soql(`SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%' LIMIT 1`)
+    if (oppResult.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const oppId = oppResult.records[0].Id
+    try {
+      const result = await soql(`SELECT Name, Amount__c, Status__c, Receipt_Date__c, Receipt_Number__c, Payment_Category__c, Reference_Number__c, Account_Name__c, Response_Message__c FROM Opportunity_Payment__c WHERE Opportunity__c = '${oppId}' ORDER BY CreatedDate DESC LIMIT 20`)
+      if (result.records.length === 0) return { context: `No payment records found for deal "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Payment History for "${dealName}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 63: get-mortgage-details
+const getMortgageDetails: ToolDefinition = {
+  name: 'get-mortgage-details',
+  description: 'Get mortgage details for a deal. Use for "mortgage for deal X", "financing details", "bank loan status".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['mortgage', 'financing', 'bank loan', 'mortgage status', 'loan details'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    const oppResult = await soql(`SELECT Id, Mortgage_Amount_AED__c, Mortgage_Bank_Name__c, Mortgage_Start_Date__c, Mortgage_End_Date__c, Mortgage_Type__c, Current_Mortgage_Status__c FROM Opportunity WHERE Name LIKE '%${dealName}%' LIMIT 1`)
+    if (oppResult.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const opp = oppResult.records[0]
+    const lines: string[] = [`Mortgage for "${dealName}":`]
+    if (opp.Mortgage_Amount_AED__c) lines.push(`  Amount: AED ${Number(opp.Mortgage_Amount_AED__c).toLocaleString()}`)
+    if (opp.Mortgage_Bank_Name__c) lines.push(`  Bank: ${opp.Mortgage_Bank_Name__c}`)
+    if (opp.Mmortgage_Start_Date__c) lines.push(`  Start: ${String(opp.Mortgage_Start_Date__c).slice(0, 10)}`)
+    if (opp.Mortgage_End_Date__c) lines.push(`  End: ${String(opp.Mortgage_End_Date__c).slice(0, 10)}`)
+    if (opp.Mortgage_Type__c) lines.push(`  Type: ${opp.Mortgage_Type__c}`)
+    if (opp.Current_Mortgage_Status__c) lines.push(`  Status: ${opp.Current_Mortgage_Status__c}`)
+    // Also check Mortgage__c records
+    try {
+      const mortResult = await soql(`SELECT Name, Mortgage_Amount_AED__c, Mortgage_Start_Date__c, Mortgage_End_Date__c, Mortgage_Type__c FROM Mortgage__c WHERE Related_Opportunity__c IN (SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%') LIMIT 5`)
+      if (mortResult.records.length > 0) {
+        lines.push(`\nMortgage Records:`)
+        mortResult.records.forEach((r: Record<string, unknown>) => {
+          lines.push(`  ${r.Name}: AED ${Number(r.Mortgage_Amount_AED__c ?? 0).toLocaleString()} (${r.Mortgage_Type__c ?? 'N/A'}) ${String(r.Mortgage_Start_Date__c ?? '').slice(0, 10)} → ${String(r.Mortgage_End_Date__c ?? '').slice(0, 10)}`)
+        })
+      }
+    } catch { /* ignore */ }
+    return { context: lines.join('\n'), citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+}
+
+// Tool 64: get-lease-status
+const getLeaseStatus: ToolDefinition = {
+  name: 'get-lease-status',
+  description: 'Get lease details for a property. Use for "lease for deal X", "rental status", "tenant lease", "lease expiry".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['lease', 'rental', 'tenant', 'lease status', 'lease expiry', 'rent'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    try {
+      const result = await soql(`SELECT Name, Status__c, Customer_Name__c, Lease_Start_Date__c, Lease_End_Date__c, Contract_Value_Amount__c, Rent_per_SFT__c, Total_Area__c, Security_Deposit_Amount__c, Building_Name__c, Permitted_Use__c, Contract_Term__c FROM Lease_Request__c WHERE Account__c IN (SELECT AccountId FROM Opportunity WHERE Name LIKE '%${dealName}%') OR Property_Inventory__c IN (SELECT Id FROM Opportunity_Property__c WHERE Opportunity__c IN (SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%')) LIMIT 5`)
+      if (result.records.length === 0) return { context: `No lease records found for deal "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Lease for "${dealName}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 65: get-quote-details
+const getQuoteDetails: ToolDefinition = {
+  name: 'get-quote-details',
+  description: 'Get quote/price details for a deal. Use for "quote for deal X", "price quote", "how much was quoted".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['quote', 'price quote', 'quotation', 'how much quoted', 'price details'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    try {
+      const result = await soql(`SELECT Name, QuoteNumber, Status, Subtotal, TotalPrice, Tax, GrandTotal, Discount, ExpirationDate, LineItemCount, CreatedDate FROM Quote WHERE OpportunityId IN (SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%') ORDER BY CreatedDate DESC LIMIT 5`)
+      if (result.records.length === 0) return { context: `No quotes found for deal "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Quotes for "${dealName}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 66: get-booking-to-close
+const getBookingToClose: ToolDefinition = {
+  name: 'get-booking-to-close',
+  description: 'Get time from booking to close for deals. Use for "how long from booking to close", "average deal cycle time", "booking to closure timeline".',
+  params: [
+    { name: 'period', type: 'string', description: 'Time period', required: false },
+    { name: 'limit', type: 'number', description: 'Max deals to analyze', required: false },
+  ],
+  keywords: ['booking to close', 'deal cycle time', 'time to close', 'how long to close', 'booking to closure'],
+  execute: async (params) => {
+    const period = params.period as string | undefined
+    const limit = (params.limit as number) || 20
+    let where = "WHERE Property_Booked_Date__c != null AND CloseDate != null AND IsClosed = true"
+    where += dateFilter('CloseDate', period)
+    const query = `SELECT Name, Property_Booked_Date__c, CloseDate, StageName, Amount FROM Opportunity ${where} ORDER BY CloseDate DESC LIMIT ${limit}`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: 'No deals with booking and close dates found.', citation: { documentName: 'Salesforce (live CRM)' } }
+      const lines: string[] = ['Booking to Close Timeline:']
+      let totalDays = 0
+      let count = 0
+      result.records.forEach((r: Record<string, unknown>) => {
+        const booked = new Date(r.Property_Booked_Date__c as string)
+        const closed = new Date(r.CloseDate as string)
+        const days = Math.round((closed.getTime() - booked.getTime()) / (1000 * 60 * 60 * 24))
+        if (days >= 0) {
+          lines.push(`  ${r.Name}: ${days} days (${String(r.Property_Booked_Date__c).slice(0, 10)} → ${String(r.CloseDate).slice(0, 10)}) [${r.StageName}]`)
+          totalDays += days
+          count++
+        }
+      })
+      if (count > 0) lines.push(`\n  Average: ${Math.round(totalDays / count)} days across ${count} deals`)
+      return { context: lines.join('\n'), citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
 // Tool 55 (renumbered): compare-years
 const compareYears: ToolDefinition = {
   name: 'compare-years',
@@ -1693,6 +1821,12 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getDealsFiltered,
   getAdvisorPerformance,
   getDealTimeline,
+  // Association tools (62-66)
+  getPaymentHistory,
+  getMortgageDetails,
+  getLeaseStatus,
+  getQuoteDetails,
+  getBookingToClose,
   compareYears,
 ]
 

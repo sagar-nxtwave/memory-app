@@ -85,7 +85,12 @@ Rules:
 30. For "deals with filter", "search deals in community", "find deals with bedroom" → get-deals-filtered.
 31. For "advisor performance", "salesperson ranking", "best advisor", "leaderboard" → get-advisor-performance.
 32. For "timeline for deal", "key dates", "booking to handover" → get-deal-timeline.
-33. NEVER ask for clarification — always try to answer with the best available tool.
+33. For "payment history for deal X", "receipts", "payments received" → get-payment-history.
+34. For "mortgage for deal X", "financing details", "bank loan" → get-mortgage-details.
+35. For "lease for deal X", "rental status", "tenant lease" → get-lease-status.
+36. For "quote for deal X", "price quote", "how much quoted" → get-quote-details.
+37. For "how long from booking to close", "deal cycle time", "average time to close" → get-booking-to-close.
+38. NEVER ask for clarification — always try to answer with the best available tool.
 
 Respond with ONLY JSON:
 {

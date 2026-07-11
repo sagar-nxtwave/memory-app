@@ -207,6 +207,28 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   'timeline': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'deal timeline' },
   'milestones': { field: 'Target_Handover_Date__c', object: 'Opportunity', description: 'deal milestones' },
   'key dates': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'important dates for a deal' },
+
+  // Payment
+  'payment history': { field: 'Amount__c', object: 'Opportunity_Payment__c', description: 'payment records' },
+  'receipts': { field: 'Receipt_Number__c', object: 'Opportunity_Payment__c', description: 'payment receipts' },
+  'paid': { field: 'Amount__c', object: 'Opportunity_Payment__c', description: 'amount paid' },
+
+  // Mortgage
+  'bank loan': { field: 'Mortgage_Bank_Name__c', object: 'Opportunity', description: 'bank financing' },
+  'financing': { field: 'Mortgage_Amount_AED__c', object: 'Opportunity', description: 'financing details' },
+
+  // Lease
+  'lease': { field: 'Lease_Start_Date__c', object: 'Lease_Request__c', description: 'lease agreement' },
+  'rental': { field: 'Rent_per_SFT__c', object: 'Lease_Request__c', description: 'rental details' },
+  'tenant': { field: 'Customer_Name__c', object: 'Lease_Request__c', description: 'tenant information' },
+
+  // Quote
+  'quote': { field: 'TotalPrice', object: 'Quote', description: 'price quote' },
+  'quotation': { field: 'TotalPrice', object: 'Quote', description: 'price quotation' },
+
+  // Cycle time
+  'cycle time': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'booking to close time' },
+  'time to close': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'days from booking to close' },
 }
 
 // Resolve user terms to field names and values

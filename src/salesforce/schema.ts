@@ -58,6 +58,7 @@ Case — support/service cases.
 export const ALLOWED_OBJECTS = [
   'Opportunity', 'Account', 'Contact', 'Lead', 'Task', 'Case',
   'Opportunity_Property__c', 'Property_Inventory__c', 'User',
+  'Opportunity_Payment__c', 'Mortgage__c', 'Lease_Request__c', 'Quote',
 ]
 
 // Curated semantic hints per object — maps everyday words to the CORRECT field when the live
