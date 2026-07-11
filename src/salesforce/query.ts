@@ -9,6 +9,7 @@ import { executeAdHocSpec } from './spec-executor'
 import { validateFollowUp } from './schemas'
 import { recordMetric, recordError, type QueryMetric } from './observability'
 import { verifyAnswer, quickCheck } from './verifier'
+import { todayStr, currentYear, dateContext } from './today'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -243,7 +244,7 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
 
   // Step 9: Absolute final fallback — query all objects for any mention of the key terms
   recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'low', method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: false, soqlError: 'No method matched', guardrailBlocked: false, instructorRetries: 0, resultCount: 0 })
-  return { context: `SALESFORCE LIVE CRM DATA — I queried your CRM but couldn't find a specific match for "${query}". Try rephrasing or ask about Opportunities, Cases, or Accounts directly.`, citation: { documentName: 'Salesforce (live CRM)' } }
+  return { context: `I couldn't find a specific match for "${query}" in the CRM. Could you rephrase your question or ask about sales, properties, cases, or customers directly?`, citation: { documentName: 'Salesforce (live CRM)' } }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -363,9 +364,12 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       const count = countResult.records[0]?.cnt ?? countResult.totalSize
       const rows = listResult.records.map(r => {
         const { attributes, ...fields } = r; void attributes
-        return Object.entries(fields).map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ')
+        return Object.entries(fields).filter(([k]) => k !== 'attributes').map(([k, v]) => {
+          const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+          return v == null ? '' : `${cleanKey}: ${v}`
+        }).filter(([, v]) => v !== '').join(' | ')
       })
-      return { context: `SALESFORCE LIVE CRM DATA (object: Case, queried just now — authoritative)\n\nTotal cases: ${count}\n\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Total cases: ${count}\n\n${rows.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
     }
     // Case breakdown by type/status/priority
     if (q.includes('type') || q.includes('category')) {
@@ -474,8 +478,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       const val = String(r.Current_Mortgage_Status__c || 'Unknown')
       counts[val] = (counts[val] || 0) + 1
     }
-    const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `Current_Mortgage_Status__c: ${k} | cnt: ${v}`)
-    return { context: `SALESFORCE LIVE CRM DATA (object: Opportunity, queried just now — authoritative)\n\n${result.totalSize} record(s) matched.\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`)
+    return { context: `Mortgage status breakdown:\n${rows.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
   }
 
   // Milestone/handover
@@ -509,7 +513,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
 function formatDirectResult(result: { records: Record<string, unknown>[]; totalSize: number; done: boolean }, objectName: string): SalesforceResult {
   if (result.records.length === 0) {
-    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now)\n\n0 records found for this query.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    return { context: `No records found for this query.`, citation: { documentName: 'Salesforce (live CRM)' } }
   }
 
   // Detect COUNT queries — produce a clear summary instead of raw field names
@@ -519,7 +523,7 @@ function formatDirectResult(result: { records: Record<string, unknown>[]; totalS
 
   if (isCountQuery) {
     const countValue = firstRecord[keys[0]]
-    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\nTotal ${objectName} records: ${countValue}\n\nUse this exact number as the answer.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    return { context: `Count: ${countValue}`, citation: { documentName: 'Salesforce (live CRM)' } }
   }
 
   // Detect SUM/COUNT combo queries (e.g. get-sales-summary) — only when keys are exactly cnt+total
@@ -527,19 +531,32 @@ function formatDirectResult(result: { records: Record<string, unknown>[]; totalS
   if (hasCountAndTotal) {
     const cnt = firstRecord.cnt
     const total = firstRecord.total
-    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\nCount: ${cnt} records\nTotal Amount: AED ${total}\n\nUse these exact figures as the answer.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    return { context: `Count: ${cnt} records\nTotal Amount: AED ${total}`, citation: { documentName: 'Salesforce (live CRM)' } }
   }
 
-  // Regular records — format as table
+  // Regular records — format as clean table
   const rows = result.records.slice(0, 50).map((r) => {
     const { attributes, ...fields } = r
     void attributes
     return Object.entries(fields)
-      .map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .filter(([k]) => k !== 'attributes')
+      .map(([k, v]) => {
+        const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+        let val = v
+        if (typeof val === 'object' && val !== null) {
+          if ((val as Record<string, unknown>).Name) {
+            val = (val as Record<string, unknown>).Name
+          } else {
+            val = JSON.stringify(val)
+          }
+        }
+        return val == null ? '' : `${cleanKey}: ${val}`
+      })
+      .filter(([, v]) => v !== '')
       .join(' | ')
   })
-  const body = `${result.totalSize} record(s) matched.\n${rows.join('\n')}`
-  return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\n${body}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+  const body = rows.join('\n')
+  return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -557,9 +574,12 @@ async function catchAllFallback(query: string): Promise<SalesforceResult | null>
       const count = countResult.records[0]?.cnt ?? countResult.totalSize
       const rows = listResult.records.map(r => {
         const { attributes, ...fields } = r; void attributes
-        return Object.entries(fields).map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ')
+        return Object.entries(fields).filter(([k]) => k !== 'attributes').map(([k, v]) => {
+          const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+          return v == null ? '' : `${cleanKey}: ${v}`
+        }).filter(([, v]) => v !== '').join(' | ')
       })
-      return { context: `SALESFORCE LIVE CRM DATA (object: Case, queried just now — authoritative)\n\nTotal cases: ${count}\n\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Total cases: ${count}\n\n${rows.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { /* fall through */ }
   }
 

@@ -1,5 +1,6 @@
 import { chatJson } from '@/lib/ai/provider'
 import { recordMetric } from './observability'
+import { todayStr, currentYear } from './today'
 
 // Real-time answer verification layer — runs BEFORE returning to user.
 // Checks: (1) does the data answer the question? (2) is it complete? (3) any anomalies?
@@ -18,6 +19,9 @@ You will receive:
 1. The original user question
 2. The SOQL query that was executed
 3. The raw data returned
+4. Today's date and current year
+
+IMPORTANT: The current date is ${todayStr()} and the current year is ${currentYear()}. Dates in ${currentYear()} are CURRENT (not future). Do NOT flag ${currentYear()} dates as "future" or "data quality issues".
 
 Evaluate on these criteria:
 - RELEVANCE: Does the data relate to what was asked? (0-30 points)
@@ -110,7 +114,7 @@ export function quickCheck(
     if (match && match[1]) {
       const name = match[1].toLowerCase()
       // Check if the name appears in the context (it should be filtered)
-      if (context.toLowerCase().includes('record(s) matched') && !context.toLowerCase().includes(name)) {
+      if (!context.toLowerCase().includes(name)) {
         return { ok: false, issue: `Question asks about "${match[1]}" but results don't seem filtered` }
       }
     }
@@ -122,7 +126,7 @@ export function quickCheck(
   }
 
   // Check 4: Empty results
-  if (context.includes('0 record(s) matched') || context.includes('No matching records')) {
+  if (context.includes('No matching records') || context.trim() === '') {
     return { ok: true, issue: 'No records found — this may be correct or may indicate a query issue' }
   }
 

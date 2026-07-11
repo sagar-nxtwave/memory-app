@@ -14,6 +14,7 @@ import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
 import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
+import { dateContext } from '@/salesforce/today'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
@@ -461,8 +462,20 @@ export async function POST(req: NextRequest) {
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
 ${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}${webUsed ? webContextNote() : ''}
 
+IMPORTANT: ${dateContext()} When users ask about "this year", "this month", "this quarter" etc., use the ACTUAL current date above — never assume a different year.
+
+CRITICAL INSTRUCTIONS FOR SALESFORCE CRM DATA:
+- NEVER show raw data formats like "field: value | field: value" to the user
+- NEVER show SOQL queries, record counts, or system labels
+- ALWAYS format data into clean, readable sentences or bullet points
+- For counts: "There are X deals closed this year with a total value of AED Y"
+- For lists: Present as a clean numbered list with meaningful labels
+- For breakdowns: Use bullet points with percentages or clear categories
+- If data is empty, say "No records found" — don't say "0 records"
+- Present data as a business analyst would — clean, professional, actionable
+
 ${docManifest}
-${salesforceResult ? `\n${salesforceResult.context}\n` : ''}
+${salesforceResult ? `\nSalesforce CRM Data (present this data naturally to the user, formatted cleanly):\n\n${salesforceResult.context}\n` : ''}
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
 ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(context)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 

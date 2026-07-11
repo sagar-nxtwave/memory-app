@@ -24,6 +24,7 @@
     "@types/bcryptjs": "^2.4.6",
     "adm-zip": "^0.5.18",
     "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.42.0",
     "mammoth": "^1.12.0",

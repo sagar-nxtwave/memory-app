@@ -47,13 +47,23 @@ function formatResult(result: { records: Record<string, unknown>[]; totalSize: n
     const { attributes, ...fields } = r
     void attributes
     return Object.entries(fields)
-      .map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .filter(([k]) => k !== 'attributes')
+      .map(([k, v]) => {
+        const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+        let val = v
+        if (typeof val === 'object' && val !== null) {
+          if ((val as Record<string, unknown>).Name) {
+            val = (val as Record<string, unknown>).Name
+          } else {
+            val = JSON.stringify(val)
+          }
+        }
+        return val == null ? '' : `${cleanKey}: ${val}`
+      })
+      .filter(([, v]) => v !== '')
       .join(' | ')
   })
-  const more = result.records.length > 50
-    ? `\n… (${result.records.length - 50} more rows not shown)`
-    : (!result.done ? '\n… (more rows exist beyond this page)' : '')
-  return `${result.totalSize} record(s) matched.\n${rows.join('\n')}${more}`
+  return rows.join('\n')
 }
 
 const SPEC_EXECUTOR_PROMPT = `You convert a user's question into a JSON specification for a Salesforce query. Do NOT write SOQL directly — write a structured spec.

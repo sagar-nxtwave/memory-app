@@ -1,6 +1,7 @@
 import { TOOL_CATALOG, type ToolDefinition } from './tools'
 import { validateToolMatch, type ValidatedToolMatch, ToolMatchSchema } from './schemas'
 import { chatJsonStructured } from '@/lib/ai/structured'
+import { todayStr, dateContext } from './today'
 
 // Build the tool catalog description for the LLM
 function buildToolCatalogText(): string {
@@ -12,7 +13,7 @@ function buildToolCatalogText(): string {
   }).join('\n\n')
 }
 
-const TOOL_MATCHER_PROMPT = `You are a CRM tool matcher. Today's date is July 11, 2026. Given a user's question, pick the BEST pre-built tool to answer it. You must ALWAYS pick a tool — never ask for clarification. Pick the closest match even if it's not perfect.
+const TOOL_MATCHER_PROMPT = `You are a CRM tool matcher. ${dateContext()} Given a user's question, pick the BEST pre-built tool to answer it. You must ALWAYS pick a tool — never ask for clarification. Pick the closest match even if it's not perfect.
 
 Available tools:
 ${buildToolCatalogText()}

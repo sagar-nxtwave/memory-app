@@ -23,20 +23,35 @@ export interface ToolDefinition {
 
 function formatResult(result: SoqlResult, maxRows: number = 50): string {
   if (result.records.length === 0) {
-    if (/count\s*\(\s*\)/i.test(JSON.stringify(result))) return `Result: ${result.totalSize}`
+    if (/count\s*\(\s*\)/i.test(JSON.stringify(result))) return `${result.totalSize}`
     return 'No matching records found.'
   }
   const rows = result.records.slice(0, maxRows).map((r) => {
     const { attributes, ...fields } = r as Record<string, unknown>
     void attributes
     return Object.entries(fields)
-      .map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .filter(([k]) => k !== 'attributes')
+      .map(([k, v]) => {
+        // Clean up field names — remove __c, __r suffixes
+        const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+        let val = v
+        if (typeof val === 'object' && val !== null) {
+          // Handle nested objects (like Account.Name)
+          if ((val as Record<string, unknown>).Name) {
+            val = (val as Record<string, unknown>).Name
+          } else {
+            val = JSON.stringify(val)
+          }
+        }
+        return val == null ? '' : `${cleanKey}: ${val}`
+      })
+      .filter(([k]) => k !== '')
       .join(' | ')
   })
   const more = result.records.length > maxRows
-    ? `\n… (${result.records.length - maxRows} more rows not shown)`
-    : (!result.done ? '\n… (more rows exist beyond this page)' : '')
-  return `${result.totalSize} record(s) matched.\n${rows.join('\n')}${more}`
+    ? `\n… and ${result.records.length - maxRows} more`
+    : ''
+  return rows.join('\n')
 }
 
 const MONTH_MAP: Record<string, number> = {
@@ -96,7 +111,7 @@ function dateFilter(field: string, period?: string): string {
   return ''
 }
 
-const SALESFORCE_NOTE = 'SALESFORCE LIVE CRM DATA (queried just now — authoritative, use these exact figures)\n\n'
+const SALESFORCE_NOTE = ''
 
 // Tool 1: get-sales-summary
 const getSalesSummary: ToolDefinition = {
@@ -118,7 +133,7 @@ const getSalesSummary: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -141,7 +156,7 @@ const getSalesByBuilding: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -167,7 +182,7 @@ const getSalesByCommunity: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -190,7 +205,7 @@ const getSalesByPerson: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -211,7 +226,7 @@ const getSalesByChannel: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -232,7 +247,7 @@ const getPipeline: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -262,7 +277,7 @@ const getRecentDeals: ToolDefinition = {
       const result = await soql(query)
       console.log(`[salesforce:tool] get-recent-deals result: ${result.totalSize} records`)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch (err) {
       console.error(`[salesforce:tool] get-recent-deals failed:`, err)
       return null
@@ -285,7 +300,7 @@ const lookupCustomer: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -303,7 +318,7 @@ const getUnitCount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -323,12 +338,18 @@ const getCancellations: ToolDefinition = {
     let where = "WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED', 'TRANSFERED')"
     if (type === 'cancelled') where = "WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')"
     else if (type === 'transferred') where = "WHERE Order_Stattus__c = 'TRANSFERED'"
-    where += dateFilter('CloseDate', period)
-    const query = `SELECT Name, StageName, Order_Stattus__c, Amount, CloseDate, Building_Community__c FROM Opportunity ${where} ORDER BY CloseDate DESC LIMIT 50`
+    const dateClause = dateFilter('CloseDate', period)
     try {
-      const result = await soql(query)
-      const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const countQuery = `SELECT COUNT(Id) cnt FROM Opportunity ${where}${dateClause}`
+      const countResult = await soql(countQuery)
+      const count = countResult.records[0]?.cnt ?? countResult.totalSize
+      const detailQuery = `SELECT Name, StageName, Order_Stattus__c, Amount, CloseDate, Building_Community__c FROM Opportunity ${where}${dateClause} ORDER BY CloseDate DESC LIMIT 50`
+      const detailResult = await soql(detailQuery)
+      let details = ''
+      if (detailResult.records.length > 0) {
+        details = '\n\nDetails:\n' + formatResult(detailResult)
+      }
+      return { context: `Total: ${count}${details}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -349,7 +370,7 @@ const getSalesByBedroom: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -372,7 +393,7 @@ const getSalesByAccount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -397,7 +418,7 @@ const getAvgDealValue: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -420,7 +441,7 @@ const getLostDeals: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -467,7 +488,7 @@ const getLeadsBySource: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -483,7 +504,7 @@ const getAccountsSummary: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -528,7 +549,7 @@ const getTasksOpen: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -551,7 +572,7 @@ const getCaseBreakdownByType: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -574,7 +595,7 @@ const getCaseBreakdownByStatus: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -597,7 +618,7 @@ const getCaseBreakdownByPriority: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -618,7 +639,7 @@ const getPropertyByCommunity: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -641,7 +662,7 @@ const getCaseCount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -667,7 +688,7 @@ const getSalesByMonth: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -688,7 +709,7 @@ const getWinRate: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -711,7 +732,7 @@ const getSalesBySource: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -732,7 +753,7 @@ const getPropertyStatusBreakdown: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -753,7 +774,7 @@ const getPropertyByType: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -780,7 +801,7 @@ const getInventoryPricing: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -801,7 +822,7 @@ const getCaseBreakdownByOrigin: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -824,7 +845,7 @@ const getCaseCountByEservice: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -845,7 +866,7 @@ const getCaseCountByRecordType: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -866,7 +887,7 @@ const getLeadsConversion: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -887,7 +908,7 @@ const getMortgageStatus: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -910,7 +931,7 @@ const getMilestoneStatus: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -933,7 +954,7 @@ const getSalesByAgency: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -956,7 +977,7 @@ const getSalesByAgent: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -977,7 +998,7 @@ const getBookingTrend: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -998,7 +1019,7 @@ const getTopCustomersByTransaction: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1014,7 +1035,7 @@ const getAccountByType: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1039,7 +1060,7 @@ const getCancellationsByCommunity: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1063,7 +1084,7 @@ const getContactByAccount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1083,7 +1104,7 @@ const getContactByName: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1099,7 +1120,7 @@ const getContactsSummary: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1123,7 +1144,7 @@ const getLeadByAccount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1143,7 +1164,7 @@ const getLeadByName: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1164,7 +1185,7 @@ const getLeadByStatus: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1190,7 +1211,7 @@ const getTasksByAccount: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1210,7 +1231,7 @@ const getTasksByCase: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1233,7 +1254,7 @@ const getTasksByOwner: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1254,7 +1275,7 @@ const getTasksByStatus: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1273,7 +1294,7 @@ const getTasksOverdue: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1294,7 +1315,7 @@ const getTasksByPriority: ToolDefinition = {
     try {
       const result = await soql(query)
       const body = formatResult(result)
-      return { context: `${SALESFORCE_NOTE}SOQL: ${query}\n\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
