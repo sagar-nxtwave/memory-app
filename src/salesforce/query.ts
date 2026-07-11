@@ -8,6 +8,7 @@ import { getToolByName, type ToolResult } from './tools'
 import { executeAdHocSpec } from './spec-executor'
 import { validateFollowUp } from './schemas'
 import { recordMetric, recordError, type QueryMetric } from './observability'
+import { verifyAnswer, quickCheck } from './verifier'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -120,7 +121,24 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
     const directResult = await directFallback(query)
     if (directResult) {
       console.log('[salesforce] direct fallback returned result (no LLM needed)')
-      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'high', method: 'direct', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+
+      // ── REAL-TIME VERIFICATION ──
+      const quick = quickCheck(query, directResult.context, 'direct')
+      if (!quick.ok) {
+        console.log('[salesforce] quick check flagged issue:', quick.issue)
+      }
+      const verification = await verifyAnswer(query, null, directResult.context, 'direct')
+      console.log(`[salesforce] verification score: ${verification.score}/100 (${verification.confidence})`)
+      if (verification.issues.length > 0) {
+        console.log('[salesforce] verification issues:', verification.issues)
+      }
+
+      // If verification says clarify, and we have a refined answer, use it
+      if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
+        return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: verification.confidence, method: 'direct', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
       return directResult
     }
   }
@@ -157,7 +175,23 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
       const result = await tool.execute(enrichedParams)
       if (result) {
         console.log('[salesforce] tool returned result successfully')
-        recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: match.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+
+        // ── REAL-TIME VERIFICATION ──
+        const quick = quickCheck(query, result.context, 'tool')
+        if (!quick.ok) {
+          console.log('[salesforce] quick check flagged issue:', quick.issue)
+        }
+        const verification = await verifyAnswer(query, null, result.context, `tool:${match.tool}`)
+        console.log(`[salesforce] verification score: ${verification.score}/100 (${verification.confidence})`)
+        if (verification.issues.length > 0) {
+          console.log('[salesforce] verification issues:', verification.issues)
+        }
+
+        if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
+          return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
+        }
+
+        recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
         return result
       }
       console.log('[salesforce] tool returned null, trying fallback')
@@ -170,7 +204,19 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
     const fallback = await executeAdHocSpec(query)
     if (fallback) {
       console.log('[salesforce] ad-hoc spec returned result')
-      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: match.confidence, method: 'ad-hoc', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+
+      // ── REAL-TIME VERIFICATION ──
+      const verification = await verifyAnswer(query, null, fallback.context, 'ad-hoc')
+      console.log(`[salesforce] verification score: ${verification.score}/100 (${verification.confidence})`)
+      if (verification.issues.length > 0) {
+        console.log('[salesforce] verification issues:', verification.issues)
+      }
+
+      if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
+        return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'ad-hoc', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
       return fallback
     }
   }
@@ -179,7 +225,19 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
   console.log('[salesforce] all methods exhausted, attempting keyword-based catch-all')
   const catchAll = await catchAllFallback(query)
   if (catchAll) {
-    recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: 'low', method: 'catch-all', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+
+    // ── REAL-TIME VERIFICATION ──
+    const verification = await verifyAnswer(query, null, catchAll.context, 'catch-all')
+    console.log(`[salesforce] verification score: ${verification.score}/100 (${verification.confidence})`)
+    if (verification.issues.length > 0) {
+      console.log('[salesforce] verification issues:', verification.issues)
+    }
+
+    if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
+      return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
+    }
+
+    recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'catch-all', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
     return catchAll
   }
 
