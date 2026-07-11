@@ -78,7 +78,14 @@ Rules:
 23. For "booking trend" or "bookings by month" → get-booking-trend.
 24. For "cancellations by community" → get-cancellations-by-community.
 25. For "compare years" or "year over year" or "2024 vs 2025" → compare-years.
-26. NEVER ask for clarification — always try to answer with the best available tool.
+26. For "cases for deal X" or "support tickets for deal" → get-cases-for-deal.
+27. For "tasks for deal X" or "activities for deal" → get-tasks-for-deal.
+28. For "payment details", "financial breakdown", "DLD fees", "deposit status" → get-deal-financials.
+29. For "lead conversion time", "days to convert leads", "conversion rate by source" → get-lead-conversion-timeline.
+30. For "deals with filter", "search deals in community", "find deals with bedroom" → get-deals-filtered.
+31. For "advisor performance", "salesperson ranking", "best advisor", "leaderboard" → get-advisor-performance.
+32. For "timeline for deal", "key dates", "booking to handover" → get-deal-timeline.
+33. NEVER ask for clarification — always try to answer with the best available tool.
 
 Respond with ONLY JSON:
 {

@@ -1321,7 +1321,238 @@ const getTasksByPriority: ToolDefinition = {
   }
 }
 
-// Tool 55: compare-years
+// Tool 55: get-cases-for-deal
+const getCasesForDeal: ToolDefinition = {
+  name: 'get-cases-for-deal',
+  description: 'Get support cases linked to a specific deal/opportunity. Use for "cases for deal X", "support tickets for this sale", "any issues with this deal".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number (e.g. "TS LXT-5-515")', required: true },
+  ],
+  keywords: ['cases for deal', 'support for deal', 'issues with deal', 'tickets for opportunity', 'case for sale'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    // Step 1: Find the opportunity ID
+    const oppResult = await soql(`SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%' LIMIT 1`)
+    if (oppResult.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const oppId = oppResult.records[0].Id
+    // Step 2: Find cases linked via Opportunity_Name__c or New_Opportunity__c
+    try {
+      const r1 = await soql(`SELECT CaseNumber, Subject, Status, Priority, Type, CreatedDate FROM Case WHERE Opportunity_Name__c = '${oppId}' ORDER BY CreatedDate DESC LIMIT 20`)
+      if (r1.records.length > 0) return { context: `Cases for deal "${dealName}":\n${formatResult(r1)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const r2 = await soql(`SELECT CaseNumber, Subject, Status, Priority, Type, CreatedDate FROM Case WHERE New_Opportunity__c = '${oppId}' ORDER BY CreatedDate DESC LIMIT 20`)
+      if (r2.records.length > 0) return { context: `Cases for deal "${dealName}":\n${formatResult(r2)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `No cases found for deal "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 56: get-tasks-for-deal
+const getTasksForDeal: ToolDefinition = {
+  name: 'get-tasks-for-deal',
+  description: 'Get tasks/activities linked to a specific deal/opportunity. Use for "tasks for deal X", "activities for this sale", "what happened with this deal".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['tasks for deal', 'activities for deal', 'what happened with deal', 'follow up on deal', 'calls for deal'],
+  execute: async (params) => {
+    const dealName = (params.deal_name as string).replace(/'/g, "")
+    // Step 1: Find the opportunity ID
+    const oppResult = await soql(`SELECT Id FROM Opportunity WHERE Name LIKE '%${dealName}%' LIMIT 1`)
+    if (oppResult.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const oppId = oppResult.records[0].Id
+    // Step 2: Find tasks linked to this opportunity
+    try {
+      const result = await soql(`SELECT Subject, Status, Priority, ActivityDate, Type, Description FROM Task WHERE WhatId = '${oppId}' ORDER BY ActivityDate DESC LIMIT 20`)
+      if (result.records.length === 0) return { context: `No tasks found for deal "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Tasks for deal "${dealName}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 57: get-deal-financials
+const getDealFinancials: ToolDefinition = {
+  name: 'get-deal-financials',
+  description: 'Get full financial breakdown for a deal. Use for "payment details for deal X", "financial summary", "DLD fees", "deposit status", "how much paid".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['financial', 'payment', 'DLD', 'deposit', 'fees', 'how much paid', 'outstanding', 'receipt', 'financial breakdown'],
+  execute: async (params) => {
+    const dealName = params.deal_name as string
+    const query = `SELECT Name, Amount, Net_Amount__c, cm_Cash_Amount__c, DLD_Amount__c, DLD_Received__c, DLD_Balance__c, DP_Amount__c, DP_Received__c, DP_Balance__c, Service_Fees__c, Service_Fee_Amount__c, Service_Fee_Outstanding__c, Authority_Fees__c, Mortgage_Amount_AED__c, Total_Payments__c, Receipt_On_Account_Amount__c, Down_payment_receipt_amount__c, Security_Cheque_Amount__c, Late_Payment_Fees__c FROM Opportunity WHERE Name LIKE '%${dealName.replace(/'/g, "")}%' LIMIT 1`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const r = result.records[0]
+      const lines: string[] = []
+      lines.push(`Financial Summary: ${r.Name}`)
+      lines.push(`  Deal Amount: AED ${Number(r.Amount ?? 0).toLocaleString()}`)
+      lines.push(`  Net Amount: AED ${Number(r.Net_Amount__c ?? 0).toLocaleString()}`)
+      lines.push(`  Cash Amount: AED ${Number(r.cm_Cash_Amount__c ?? 0).toLocaleString()}`)
+      lines.push(`  DLD: AED ${Number(r.DLD_Amount__c ?? 0).toLocaleString()} (Received: ${Number(r.DLD_Received__c ?? 0).toLocaleString()}, Balance: ${Number(r.DLD_Balance__c ?? 0).toLocaleString()})`)
+      lines.push(`  Down Payment: AED ${Number(r.DP_Amount__c ?? 0).toLocaleString()} (Received: ${Number(r.DP_Received__c ?? 0).toLocaleString()}, Balance: ${Number(r.DP_Balance__c ?? 0).toLocaleString()})`)
+      lines.push(`  Service Fees: ${Number(r.Service_Fees__c ?? 0).toLocaleString()} (Amount: AED ${Number(r.Service_Fee_Amount__c ?? 0).toLocaleString()}, Outstanding: AED ${Number(r.Service_Fee_Outstanding__c ?? 0).toLocaleString()})`)
+      lines.push(`  Authority Fees: AED ${Number(r.Authority_Fees__c ?? 0).toLocaleString()}`)
+      lines.push(`  Mortgage: AED ${Number(r.Mortgage_Amount_AED__c ?? 0).toLocaleString()}`)
+      lines.push(`  Total Paid: AED ${Number(r.Total_Payments__c ?? 0).toLocaleString()}`)
+      lines.push(`  Receipts on Account: AED ${Number(r.Receipt_On_Account_Amount__c ?? 0).toLocaleString()}`)
+      lines.push(`  Security Cheque: AED ${Number(r.Security_Cheque_Amount__c ?? 0).toLocaleString()}`)
+      lines.push(`  Late Payment Fees: AED ${Number(r.Late_Payment_Fees__c ?? 0).toLocaleString()}`)
+      return { context: lines.join('\n'), citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 58: get-lead-conversion-timeline
+const getLeadConversionTimeline: ToolDefinition = {
+  name: 'get-lead-conversion-timeline',
+  description: 'Get lead conversion stats and timeline. Use for "how long to convert leads", "lead conversion time", "average days to convert", "lead conversion rate by source".',
+  params: [
+    { name: 'period', type: 'string', description: 'Time period', required: false },
+  ],
+  keywords: ['lead conversion time', 'conversion timeline', 'days to convert', 'lead conversion rate', 'how fast leads convert'],
+  execute: async (params) => {
+    const period = params.period as string | undefined
+    const dateClause = dateFilter('CreatedDate', period)
+    const where = dateClause ? `WHERE ${dateClause.slice(5)}` : ''
+    const query = `SELECT COUNT(Id) total, SUM(CASE WHEN IsConverted = true THEN 1 ELSE 0 END) converted FROM Lead ${where}`
+    try {
+      const result = await soql(query)
+      const r = result.records[0]
+      const total = (r?.total as number) ?? 0
+      const converted = (r?.converted as number) ?? 0
+      const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0'
+
+      // Get conversion by source
+      const sourceQuery = `SELECT LeadSource src, COUNT(Id) total, SUM(CASE WHEN IsConverted = true THEN 1 ELSE 0 END) converted FROM Lead WHERE LeadSource != null ${dateClause} GROUP BY LeadSource ORDER BY COUNT(Id) DESC LIMIT 10`
+      const sourceResult = await soql(sourceQuery)
+      const sourceLines = sourceResult.records.map((sr: Record<string, unknown>) => {
+        const srcTotal = (sr.total as number) ?? 0
+        const srcConverted = (sr.converted as number) ?? 0
+        const srcRate = srcTotal > 0 ? ((srcConverted / srcTotal) * 100).toFixed(1) : '0'
+        return `  ${sr.src}: ${srcConverted}/${srcTotal} (${srcRate}%)`
+      })
+
+      return {
+        context: `Lead Conversion Summary:\n  Total: ${total} | Converted: ${converted} | Rate: ${rate}%\n\nBy Source:\n${sourceLines.join('\n') || '  No source data'}`,
+        citation: { documentName: 'Salesforce (live CRM)' }
+      }
+    } catch { return null }
+  }
+}
+
+// Tool 59: get-deals-filtered (multi-filter composite)
+const getDealsFiltered: ToolDefinition = {
+  name: 'get-deals-filtered',
+  description: 'Search deals with multiple filters at once. Use for "deals in Hayat with 3 bedrooms this year", "villas sold by Ahmed in 2025", "pending deals in Address Grand Downtown".',
+  params: [
+    { name: 'community', type: 'string', description: 'Community/location filter', required: false },
+    { name: 'bedroom', type: 'string', description: 'Bedroom count filter (e.g. "3", "2", "studio")', required: false },
+    { name: 'period', type: 'string', description: 'Time period', required: false },
+    { name: 'stage', type: 'string', description: 'Stage filter (won, lost, pending, all)', required: false },
+    { name: 'salesperson', type: 'string', description: 'Salesperson name filter', required: false },
+    { name: 'limit', type: 'number', description: 'Max results', required: false },
+  ],
+  keywords: ['deals with filter', 'search deals', 'find deals', 'filtered deals', 'specific deals'],
+  execute: async (params) => {
+    const community = params.community as string | undefined
+    const bedroom = params.bedroom as string | undefined
+    const period = params.period as string | undefined
+    const stage = (params.stage as string) || 'all'
+    const salesperson = params.salesperson as string | undefined
+    const limit = (params.limit as number) || 20
+
+    const conditions: string[] = []
+    if (community) conditions.push(`Building_Community__c LIKE '%${community.replace(/'/g, "")}%'`)
+    if (bedroom) {
+      // Map common bedroom terms
+      const b = bedroom.toLowerCase()
+      if (b === 'studio' || b === '0') conditions.push("(Sales_Room__c = 'Studio' OR CM_No_of_Bedrooms__c = 'Studio')")
+      else if (b === '1' || b === '1br' || b === '1 bedroom') conditions.push("(Sales_Room__c = '1' OR CM_No_of_Bedrooms__c = '1')")
+      else if (b === '2' || b === '2br' || b === '2 bedroom') conditions.push("(Sales_Room__c = '2' OR CM_No_of_Bedrooms__c = '2')")
+      else if (b === '3' || b === '3br' || b === '3 bedroom') conditions.push("(Sales_Room__c = '3' OR CM_No_of_Bedrooms__c = '3')")
+      else if (b === '4' || b === '4br' || b === '4 bedroom') conditions.push("(Sales_Room__c = '4' OR CM_No_of_Bedrooms__c = '4')")
+      else if (b === '5' || b === '5br' || b === '5 bedroom') conditions.push("(Sales_Room__c = '5' OR CM_No_of_Bedrooms__c = '5')")
+      else conditions.push(`(Sales_Room__c = '${bedroom.replace(/'/g, "")}' OR CM_No_of_Bedrooms__c = '${bedroom.replace(/'/g, "")}')`)
+    }
+    if (salesperson) conditions.push(`cm_Sales_Person__r.Name LIKE '%${salesperson.replace(/'/g, "")}%'`)
+    if (stage === 'won') conditions.push('IsWon = true')
+    else if (stage === 'lost') conditions.push('IsClosed = true AND IsWon = false')
+    else if (stage === 'pending') conditions.push('IsClosed = false')
+
+    const dateClause = dateFilter('CloseDate', period)
+    if (dateClause) conditions.push(dateClause.slice(5))
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const query = `SELECT Name, StageName, Amount, CloseDate, Building_Community__c, Sales_Room__c, cm_Sales_Person__r.Name FROM Opportunity ${where} ORDER BY CloseDate DESC LIMIT ${limit}`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: 'No deals match the specified filters.', citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Filtered deals (${result.totalSize} total):\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 60: get-advisor-performance
+const getAdvisorPerformance: ToolDefinition = {
+  name: 'get-advisor-performance',
+  description: 'Get sales advisor performance metrics. Use for "advisor performance", "salesperson ranking", "who is the best advisor", "advisor leaderboard".',
+  params: [
+    { name: 'period', type: 'string', description: 'Time period', required: false },
+    { name: 'limit', type: 'number', description: 'Max advisors to return', required: false },
+  ],
+  keywords: ['advisor performance', 'salesperson ranking', 'best advisor', 'leaderboard', 'advisor leaderboard', 'top advisor'],
+  execute: async (params) => {
+    const period = params.period as string | undefined
+    const limit = (params.limit as number) || 10
+    let where = "WHERE cm_Sales_Person__r.Name != null AND IsWon = true"
+    where += dateFilter('CloseDate', period)
+    const query = `SELECT cm_Sales_Person__r.Name advisor, COUNT(Id) deals, SUM(Amount) revenue, AVG(Amount) avgDeal FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    try {
+      const result = await soql(query)
+      const body = formatResult(result)
+      return { context: `Advisor Performance:\n${body}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 61: get-deal-timeline
+const getDealTimeline: ToolDefinition = {
+  name: 'get-deal-timeline',
+  description: 'Get key dates/milestones for a deal. Use for "timeline for deal X", "key dates", "booking to handover timeline", "deal milestones".',
+  params: [
+    { name: 'deal_name', type: 'string', description: 'Deal/opportunity name or number', required: true },
+  ],
+  keywords: ['timeline', 'milestones', 'key dates', 'booking date', 'handover date', 'deal progress'],
+  execute: async (params) => {
+    const dealName = params.deal_name as string
+    const query = `SELECT Name, CreatedDate, Property_Booked_Date__c, Order_Date__c, SPA_Signed_Date__c, SPA_Printed_Date__c, Target_Handover_Date__c, Official_Handover_Date__c, Handover_Completion_Date__c, Title_Deed_Reg_Date__c, CloseDate, StageName FROM Opportunity WHERE Name LIKE '%${dealName.replace(/'/g, "")}%' LIMIT 1`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No deal found matching "${dealName}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const r = result.records[0]
+      const lines: string[] = [`Timeline for: ${r.Name} (${r.StageName})`]
+      const dates: [string, unknown][] = [
+        ['Created', r.CreatedDate],
+        ['Booked', r.Property_Booked_Date__c],
+        ['Order Date', r.Order_Date__c],
+        ['SPA Signed', r.SPA_Signed_Date__c],
+        ['SPA Printed', r.SPA_Printed_Date__c],
+        ['Close Date', r.CloseDate],
+        ['Target Handover', r.Target_Handover_Date__c],
+        ['Official Handover', r.Official_Handover_Date__c],
+        ['Handover Complete', r.Handover_Completion_Date__c],
+        ['Title Deed Reg', r.Title_Deed_Reg_Date__c],
+      ]
+      for (const [label, val] of dates) {
+        if (val) lines.push(`  ${label}: ${String(val).slice(0, 10)}`)
+      }
+      return { context: lines.join('\n'), citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 55 (renumbered): compare-years
 const compareYears: ToolDefinition = {
   name: 'compare-years',
   description: 'Compare sales metrics between two years. Use for "compare 2024 and 2025", "year over year", "yoy comparison", "how did we do last year vs this year".',
@@ -1454,6 +1685,14 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getTasksByStatus,
   getTasksOverdue,
   getTasksByPriority,
+  // Cross-object & enhanced tools (55-61)
+  getCasesForDeal,
+  getTasksForDeal,
+  getDealFinancials,
+  getLeadConversionTimeline,
+  getDealsFiltered,
+  getAdvisorPerformance,
+  getDealTimeline,
   compareYears,
 ]
 

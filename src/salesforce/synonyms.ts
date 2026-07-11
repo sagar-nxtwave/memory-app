@@ -186,6 +186,27 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   'vs': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between periods' },
   'versus': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between periods' },
   'last year vs this year': { field: 'CloseDate', object: 'Opportunity', description: 'comparison between last year and this year' },
+
+  // Cross-object
+  'cases for deal': { field: 'Opportunity_Name__c', object: 'Case', description: 'cases linked to a deal' },
+  'support for deal': { field: 'Opportunity_Name__c', object: 'Case', description: 'support cases for a deal' },
+  'tasks for deal': { field: 'WhatId', object: 'Task', description: 'tasks linked to a deal' },
+  'activities for deal': { field: 'WhatId', object: 'Task', description: 'activities for a deal' },
+
+  // Financial
+  'payment details': { field: 'Total_Payments__c', object: 'Opportunity', description: 'payment breakdown' },
+  'DLD fees': { field: 'DLD_Amount__c', object: 'Opportunity', description: 'DLD authority fees' },
+  'deposit': { field: 'DP_Amount__c', object: 'Opportunity', description: 'down payment' },
+  'outstanding': { field: 'Service_Fee_Outstanding__c', object: 'Opportunity', description: 'outstanding amount' },
+
+  // Advisor
+  'advisor performance': { field: 'cm_Sales_Person__r.Name', object: 'Opportunity', description: 'advisor ranking' },
+  'leaderboard': { field: 'cm_Sales_Person__r.Name', object: 'Opportunity', description: 'advisor ranking' },
+
+  // Timeline
+  'timeline': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'deal timeline' },
+  'milestones': { field: 'Target_Handover_Date__c', object: 'Opportunity', description: 'deal milestones' },
+  'key dates': { field: 'Property_Booked_Date__c', object: 'Opportunity', description: 'important dates for a deal' },
 }
 
 // Resolve user terms to field names and values

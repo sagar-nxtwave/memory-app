@@ -356,8 +356,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     return formatDirectResult(result, 'Property_Inventory__c')
   }
 
-  // Case queries — "all cases" returns count + records
-  if (q.includes('case') || q.includes('cases') || q.includes('support') || q.includes('service')) {
+  // Case queries — "all cases" returns count + records — BUT skip cross-object queries ("cases for deal X")
+  if ((q.includes('case') || q.includes('cases') || q.includes('support') || q.includes('service')) && !q.includes('for deal') && !q.includes('for opportunity') && !q.includes('for this')) {
     if (q.includes('list') || q.includes('show') || q.includes('all') || q.includes('top')) {
       const countResult = await soql(`SELECT COUNT(Id) cnt FROM Case`)
       const listResult = await soql(`SELECT CaseNumber, Subject, Status, Type, Priority, CreatedDate FROM Case ORDER BY CreatedDate DESC LIMIT ${limit}`)
@@ -388,8 +388,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     return formatDirectResult(result, 'Case')
   }
 
-  // Lead queries
-  if (q.includes('lead') || q.includes('leads') || q.includes('prospect') || q.includes('prospects')) {
+  // Lead queries — BUT skip conversion rate queries (those go to tool matcher)
+  if ((q.includes('lead') || q.includes('leads') || q.includes('prospect') || q.includes('prospects')) && !q.includes('conversion') && !q.includes('convert')) {
     if (q.includes('source') || q.includes('where') || q.includes('channel')) {
       const result = await soql(`SELECT LeadSource, COUNT(Id) cnt FROM Lead WHERE LeadSource != null GROUP BY LeadSource ORDER BY COUNT(Id) DESC`)
       return formatDirectResult(result, 'Lead')
@@ -418,8 +418,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     return formatDirectResult(result, 'Account')
   }
 
-  // Task/activity queries
-  if (q.includes('task') || q.includes('tasks') || q.includes('activity') || q.includes('activities') || q.includes('todo') || q.includes('to-do')) {
+  // Task/activity queries — BUT skip cross-object queries ("tasks for deal X")
+  if ((q.includes('task') || q.includes('tasks') || q.includes('activity') || q.includes('activities') || q.includes('todo') || q.includes('to-do')) && !q.includes('for deal') && !q.includes('for opportunity') && !q.includes('for this')) {
     if (q.includes('open') || q.includes('pending') || q.includes('overdue')) {
       const result = await soql(`SELECT Subject, Status, Priority, ActivityDate FROM Task WHERE Status != 'Completed' ORDER BY ActivityDate ASC LIMIT ${limit}`)
       return formatDirectResult(result, 'Task')
@@ -440,8 +440,8 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     }
   }
 
-  // Bedroom/unit type queries
-  if (q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) {
+  // Bedroom/unit type queries — BUT skip multi-filter queries ("deals in X with 3 bedrooms")
+  if ((q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) && !q.includes(' in ') && !q.includes('deals in')) {
     const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }

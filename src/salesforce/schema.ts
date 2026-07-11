@@ -57,7 +57,7 @@ Case — support/service cases.
 // Objects the planner is allowed to query — used to validate generated SOQL.
 export const ALLOWED_OBJECTS = [
   'Opportunity', 'Account', 'Contact', 'Lead', 'Task', 'Case',
-  'Opportunity_Property__c', 'Property_Inventory__c',
+  'Opportunity_Property__c', 'Property_Inventory__c', 'User',
 ]
 
 // Curated semantic hints per object — maps everyday words to the CORRECT field when the live
