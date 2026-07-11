@@ -19,7 +19,13 @@ const DOCUMENTS_ONLY: Intent = { salesforce: false, documents: true, web: false 
 export async function classifyIntent(query: string): Promise<Intent> {
   try {
     const raw = await chatJson(intentRouterPrompt(), query)
-    const parsed = JSON.parse(raw) as Partial<Intent>
+    // Try to extract JSON from the response even if wrapped in text
+    const jsonMatch = raw.match(/\{[^}]*"salesforce"[^}]*\}/)
+    if (!jsonMatch) {
+      console.error('[intentRouter] no JSON found in response:', raw.slice(0, 200))
+      return DOCUMENTS_ONLY
+    }
+    const parsed = JSON.parse(jsonMatch[0]) as Partial<Intent>
     const intent: Intent = {
       salesforce: parsed.salesforce === true,
       documents: parsed.documents === true,

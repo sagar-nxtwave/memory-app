@@ -49,4 +49,10 @@ migrate-db.mjs
 .windsurf/
 .agents/
 
+# Salesforce credentials (contains access tokens)
+Salesforce.txt
+
+# Test results (contains live data)
+stress-test-results.txt
+
 .vercel

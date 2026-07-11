@@ -1,80 +1,25 @@
 import { chatJson } from '@/lib/ai/provider'
-import { salesforceObjectPrompt, salesforceSoqlPrompt, followUpResolverPrompt } from '@/lib/ai/prompts'
+import { followUpResolverPrompt } from '@/lib/ai/prompts'
 import { getSalesforceConfig } from './config'
-import { soql, describeObject, type SoqlResult, type FieldInfo } from './client'
-import { ALLOWED_OBJECTS, FIELD_HINTS } from './schema'
-import { SALESFORCE_GLOSSARY, SALESFORCE_ANSWER_NOTE } from './glossary'
+import { soql } from './client'
+import { resolveSynonyms, type SynonymEntry } from './synonyms'
+import { matchTool, type ToolMatch } from './tool-matcher'
+import { getToolByName, type ToolResult } from './tools'
+import { executeAdHocSpec } from './spec-executor'
+import { validateFollowUp } from './schemas'
+import { recordMetric, recordError, type QueryMetric } from './observability'
 
-// Cheap pre-filter so we only spend LLM planner calls when a question is plausibly about the
-// CRM. Internal RAG / web search handle everything else.
+// Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
-  /\b(salesforce|crm|opportunit(y|ies)|pipeline|deals?|leads?|accounts?|contacts?|tasks?|activit(y|ies)|cases?|closed won|closed lost|stage|stages|sales|revenue|won|lost|quota|prospect|prospects|forecast|community|project|location)\b/i
+  /\b(salesforce|crm|opportunit(y|ies)|pipeline|deals?|leads?|accounts?|contacts?|tasks?|activit(y|ies)|cases?|closed won|closed lost|stage|stages|sales|revenue|won|lost|quota|prospect|prospects|forecast|community|project|location|bedroom|property|unit|building|inventory|booking|cancellation|transfer|sold|buyer|developer|area|amount|price|value|channel|agent|salesperson|mortgage|milestone|handover|agency|broker|villa|apartment|townhouse|reservation|leased|available|eservice|registration|move.?in|move.?out|transfer case|document request|title deed|tenant|owner|alteration|maintenance|parking|installation|receipt|clearance|invoice|payment|settlement|net amount|net value|booking date|order date|lead source|win rate|conversion|record type|case origin|case channel|phone|email|web|portal)\b/i
 
 export function isSalesforceQuery(query: string): boolean {
   return CRM_HINT_RE.test(query)
 }
 
-// Short descriptions to help the model pick the right object (step 1). Field-level detail
-// comes LIVE from describe() so this never needs updating per-org.
-const OBJECT_CATALOG = `
-Opportunity — sales deals / property-unit sales: pipeline, stages, amounts, close dates, community/location of the unit. Each Opportunity IS one unit sale/transaction.
-Property_Inventory__c — the MASTER catalog of every physical unit/property the developer has (sold, available, or rented) — ~17,000+ records. Use this for general "units"/"properties" questions NOT tied to a specific sale (e.g. "how many units do we have", "list available units", "units in building X").
-Opportunity_Property__c — detailed per-transaction unit/property attributes (selling price, area breakdown, order status) linked to a SPECIFIC Opportunity via cm_Opportunity__c, and to a specific Property_Inventory__c record via cm_Property_Inventory__c. Use this when the question is about a sold unit's detailed transaction attributes, not just the Opportunity's own summary fields.
-Account — companies / customers / buyers.
-Contact — individual people (usually linked to an Account).
-Lead — unconverted prospects.
-Task — activities: tasks, calls, meetings, to-dos.
-Case — support / service cases.
-`.trim()
-
-// Meta/overview questions ("what data do you have", "what can you tell me about the CRM")
-// don't fit any single object, so pickObject() correctly returns null for them — but that
-// used to mean "no answer" (zero context), which left the model to fabricate a "not connected"
-// excuse. Short-circuit these BEFORE the single-object picker with a canned catalog answer,
-// since we already know exactly what's connected.
-const META_OVERVIEW_RE = /\b(what (all )?(data|information|objects?|fields?)\b.{0,20}\b(crm|salesforce)|what (can|do) you (know|have|see|tell me)\b.{0,20}\b(crm|salesforce)|overview of (the )?(crm|salesforce)|what'?s in (the )?(crm|salesforce))/i
-
-function isMetaOverviewQuery(query: string): boolean {
-  return META_OVERVIEW_RE.test(query)
-}
-
-function metaOverviewContext(): SalesforceResult {
-  const context = `SALESFORCE LIVE CRM DATA — connection is ACTIVE. This is a real-estate developer's CRM. Available objects (ask a specific question about any of these for live numbers):\n${OBJECT_CATALOG}\n\n${SALESFORCE_ANSWER_NOTE}`
-  return { context, citation: { documentName: 'Salesforce (live CRM)' } }
-}
-
-const MAX_FIELDS_IN_PROMPT = 300
-const MAX_ROWS_IN_CONTEXT = 50
-
 export interface SalesforceResult {
   context: string
   citation: { documentName: string }
-}
-
-// --- Step 5/6: validate + bound the generated SOQL (whitelist SELECT, single statement,
-// known object, enforced LIMIT). The integration user is read-only, but validating is a
-// second safety layer per Salesforce guidance.
-function sanitizeSoql(raw: string): string | null {
-  let q = raw.trim().replace(/;+\s*$/, '')
-  if (!/^select\s+/i.test(q)) return null
-  if (q.includes(';')) return null
-  if (/\b(insert|update|delete|upsert|merge)\b/i.test(q)) return null
-
-  const fromMatch = q.match(/\bfrom\s+([a-z0-9_]+)/i)
-  if (!fromMatch) return null
-  if (!ALLOWED_OBJECTS.some((o) => o.toLowerCase() === fromMatch[1].toLowerCase())) return null
-
-  const hasAggregate = /\b(count|sum|avg|min|max)\s*\(/i.test(q)
-  const hasGroupBy = /\bgroup\s+by\b/i.test(q)
-
-  if (hasAggregate && !hasGroupBy) {
-    // Overall aggregate (e.g. SELECT SUM(Amount) …) — Salesforce forbids LIMIT here. Strip any.
-    q = q.replace(/\s+limit\s+\d+\s*$/i, '')
-  } else if (!hasAggregate && !/\blimit\s+\d+/i.test(q)) {
-    // Plain row query — bound it.
-    q += ' LIMIT 200'
-  }
-  return q
 }
 
 export interface ChatTurn {
@@ -82,15 +27,19 @@ export interface ChatTurn {
   content: string
 }
 
-// Step 0: resolve a conversational follow-up into a standalone question BEFORE planning.
-// The planner only ever sees one string — without this, "yes break down" or "which building?"
-// arrive with no idea what they refer to and the model (correctly, given nothing) answers as
-// if that data doesn't exist at all. Only spends the extra LLM call when history exists.
+// Resolve conversational follow-ups into standalone questions.
 async function resolveFollowUp(query: string, history?: ChatTurn[]): Promise<string> {
   if (!history || history.length === 0) return query
   try {
-    const transcript = history.slice(-6).map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content.slice(0, 500)}`).join('\n')
+    const transcript = history.slice(-4).map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content.slice(0, 500)}`).join('\n')
     const raw = await chatJson(followUpResolverPrompt(), `${transcript}\nUser: ${query}`)
+
+    // Zod-validated parsing
+    const validated = validateFollowUp(raw)
+    if (validated) return validated.question.trim()
+
+    // Fallback: raw parse
+    console.warn('[salesforce] FollowUp Zod validation failed, falling back to raw parse')
     const parsed = JSON.parse(raw) as { question?: string }
     return parsed.question?.trim() || query
   } catch (err) {
@@ -99,213 +48,508 @@ async function resolveFollowUp(query: string, history?: ChatTurn[]): Promise<str
   }
 }
 
-// Step 1: pick the single most relevant object.
-async function pickObject(query: string): Promise<string | null> {
-  try {
-    const raw = await chatJson(salesforceObjectPrompt(OBJECT_CATALOG), query)
-    const parsed = JSON.parse(raw) as { object?: string | null }
-    if (!parsed.object) return null
-    return ALLOWED_OBJECTS.find((o) => o.toLowerCase() === String(parsed.object).toLowerCase()) ?? null
-  } catch (err) {
-    console.error('[salesforce] object pick failed:', err)
+// Detect absolute date references — queries with these should bypass the direct fallback
+// and go to the LLM tool matcher, which has proper dateFilter support.
+const DATE_REF_RE = /\b(20\d{2}|last (?:month|quarter|year|week|7 days|30 days|90 days)|this (?:month|quarter|year|week)|yesterday|today|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*[-–]?\s*20\d{2})\b/i
+
+function hasDateReference(query: string): boolean {
+  return DATE_REF_RE.test(query)
+}
+
+// Vague follow-ups that reference prior context — skip direct fallback, let follow-up resolver + tool matcher handle
+const VAGUE_FOLLOWUP_RE = /^(can you |could you )?\b(list|show|show me|get|give me|tell me|display)\b\s*(them|it|those|these|that|the ones|the list|the data|the results|the records)\b/i
+
+function isVagueFollowUp(query: string): boolean {
+  return VAGUE_FOLLOWUP_RE.test(query.trim())
+}
+
+// Meta/overview questions — short-circuit with canned answer.
+const META_OVERVIEW_RE = /\b(what (all )?(data|information|objects?|fields?)\b.{0,20}\b(crm|salesforce)|what (can|do) you (know|have|see|tell me)\b.{0,20}\b(crm|salesforce)|overview of (the )?(crm|salesforce)|what'?s in (the )?(crm|salesforce))/i
+
+function isMetaOverviewQuery(query: string): boolean {
+  return META_OVERVIEW_RE.test(query)
+}
+
+const OBJECT_CATALOG = `
+Opportunity — sales deals / property-unit sales: pipeline, stages, amounts, close dates, community/location of the unit. Each Opportunity IS one unit sale/transaction.
+Property_Inventory__c — the MASTER catalog of every physical unit/property the developer has (sold, available, or rented) — ~17,000+ records.
+Opportunity_Property__c — detailed per-transaction unit/property attributes.
+Account — companies / customers / buyers.
+Contact — individual people (usually linked to an Account).
+Lead — unconverted prospects.
+Task — activities: tasks, calls, meetings, to-dos.
+Case — support / service cases.
+`.trim()
+
+function metaOverviewContext(): SalesforceResult {
+  const context = `SALESFORCE LIVE CRM DATA — connection is ACTIVE. This is a real-estate developer's CRM. Available objects (ask a specific question about any of these for live numbers):\n${OBJECT_CATALOG}\n\nAsk a specific question to get live data.`
+  return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+}
+
+/**
+ * Answer a CRM question against LIVE Salesforce.
+ * 
+ * FLOW:
+ * 1. Resolve conversational follow-ups
+ * 2. Meta/overview short-circuit
+ * 3. Direct keyword fallback (SKIP if query has date references or is a vague follow-up)
+ * 4. LLM tool matcher (handles date-aware queries properly)
+ * 5. Ad-hoc spec fallback
+ * 6. Clarification
+ */
+export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn[]): Promise<SalesforceResult | null> {
+  const startTime = Date.now()
+  if (!getSalesforceConfig().enabled) {
+    console.error('[salesforce] Salesforce is not enabled/configured')
     return null
   }
-}
 
-// Auto-correct helper: when Salesforce says "No such column 'X'" (typo'd/hallucinated field —
-// e.g. the model "corrects" the org's misspelled Order_Stattus__c to Order_Status__c), find
-// the closest real field names so the planner can fix it instead of repeating the same guess.
-function suggestFields(badName: string, fieldNames: string[]): string[] {
-  const norm = (s: string) => s.toLowerCase().replace(/__c$/, '').replace(/[^a-z0-9]/g, '')
-  const b = norm(badName)
-  if (!b) return []
-  const prefixLen = (x: string, y: string) => { let i = 0; while (i < x.length && i < y.length && x[i] === y[i]) i++; return i }
-  return fieldNames
-    .map((name) => {
-      const n = norm(name)
-      const score = prefixLen(b, n) + (n.includes(b) || b.includes(n) ? 5 : 0)
-      return { name, score }
-    })
-    .filter((s) => s.score >= 4)
-    .sort((a, z) => z.score - a.score)
-    .slice(0, 6)
-    .map((s) => s.name)
-}
+  // Step 1: Resolve conversational follow-ups
+  const query = await resolveFollowUp(rawQuery, history)
+  console.log('[salesforce] resolved query:', query)
 
-// Parse a Salesforce field/relationship error into an auto-correct hint against real fields.
-function fieldErrorHint(message: string, fieldNames: string[]): string {
-  const m = message.match(/No such (?:column|relationship) '([^']+)'/i)
-  if (!m) return ''
-  const suggestions = suggestFields(m[1], fieldNames)
-  return suggestions.length
-    ? ` The field "${m[1]}" does not exist. Use the correct EXACT field name from this object — closest matches: ${suggestions.join(', ')}.`
-    : ` The field "${m[1]}" does not exist. Use only exact field names listed for this object.`
-}
+  // Step 2: Meta/overview short-circuit
+  if (isMetaOverviewQuery(query)) return metaOverviewContext()
 
-// Format the live field list for the SOQL prompt. Groupable fields marked with * so the
-// model only GROUP BYs valid dimensions.
-function formatFields(fields: FieldInfo[]): string {
-  return fields
-    .slice(0, MAX_FIELDS_IN_PROMPT)
-    .map((f) => `${f.name} (${f.label}) [${f.type}]${f.groupable ? '*' : ''}${f.referenceTo.length ? ` -> ${f.referenceTo.join(',')}` : ''}`)
-    .join('\n')
-}
-
-interface PlanStep {
-  soql: string | null       // validated SOQL, or null
-  switchObject: string | null // a different object to try instead
-}
-
-// Generate a SOQL plan for the given object. `feedback` (a prior error or empty-result note)
-// lets the model self-correct — fix the query or switch to a better object.
-async function planStep(objectName: string, hintsText: string, fieldsText: string, query: string, feedback?: string): Promise<PlanStep> {
-  try {
-    const allObjects = ALLOWED_OBJECTS.join(', ')
-    const raw = await chatJson(salesforceSoqlPrompt(objectName, SALESFORCE_GLOSSARY, hintsText, fieldsText, allObjects, feedback), query)
-    const parsed = JSON.parse(raw) as { soql?: string | null; switchObject?: string | null }
-    const switchObject = parsed.switchObject && ALLOWED_OBJECTS.some((o) => o.toLowerCase() === String(parsed.switchObject).toLowerCase())
-      ? ALLOWED_OBJECTS.find((o) => o.toLowerCase() === String(parsed.switchObject).toLowerCase())!
-      : null
-    return { soql: parsed.soql ? sanitizeSoql(parsed.soql) : null, switchObject }
-  } catch (err) {
-    console.error('[salesforce] SOQL planning failed:', err)
-    return { soql: null, switchObject: null }
+  // Step 3: DIRECT keyword fallback — BUT skip if query has date references or is a vague follow-up
+  const skipDirect = hasDateReference(query) || isVagueFollowUp(query)
+  if (skipDirect) {
+    console.log(`[salesforce] skipping direct fallback (dateRef=${hasDateReference(query)}, vagueFollowUp=${isVagueFollowUp(query)})`)
   }
-}
-
-// A query that returned zero rows AND is an aggregate (COUNT/SUM/…) almost certainly used the
-// wrong field/object — worth one self-correcting retry. A filtered list returning zero can be
-// legitimate ("opportunities closing today"), so we don't loop forever on those.
-function looksWrongOnEmpty(soqlText: string, totalSize: number): boolean {
-  return totalSize === 0 && /count\s*\(|sum\s*\(|avg\s*\(|max\s*\(|min\s*\(/i.test(soqlText)
-}
-
-// True when an aggregate query came back with NO real value (SUM/etc = null, bare COUNT = 0,
-// or a grouped aggregate with no groups). For these, a bare "no value" answer is unhelpful —
-// we fetch a breakdown so the response can explain WHAT exists (e.g. in-progress deals).
-function isEmptyAggregate(soqlText: string, result: SoqlResult): boolean {
-  const hasAgg = /\b(sum|avg|min|max|count)\s*\(/i.test(soqlText)
-  if (!hasAgg) return false
-  if (/count\s*\(\s*\)/i.test(soqlText)) return (result.totalSize ?? 0) === 0
-  if (result.records.length === 0) return true
-  if (result.records.length === 1) {
-    const { attributes, ...f } = result.records[0] as Record<string, unknown>
-    void attributes
-    const vals = Object.values(f)
-    return vals.length > 0 && vals.every((v) => v === null)
+  if (!skipDirect) {
+    const directResult = await directFallback(query)
+    if (directResult) {
+      console.log('[salesforce] direct fallback returned result (no LLM needed)')
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'high', method: 'direct', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+      return directResult
+    }
   }
-  return false
+
+  // Step 4: Synonym resolution
+  const synonyms = resolveSynonyms(query)
+  console.log('[salesforce] synonyms found:', synonyms.map(s => `${s.field}${s.value ? '=' + s.value : ''}`).join(', ') || 'none')
+
+  // Step 5: LLM tool matcher (only if direct fallback didn't match)
+  const match = await matchTool(query)
+  console.log('[salesforce] tool match:', JSON.stringify(match))
+
+  // Step 6: Execute the matched tool
+  if (match.tool && !match.clarify) {
+    const tool = getToolByName(match.tool)
+    if (tool) {
+      console.log(`[salesforce] executing tool: ${match.tool}`)
+      const enrichedParams = { ...match.params }
+      for (const syn of synonyms) {
+        if (syn.value) {
+          if (syn.field === 'Building_Community__c' && !enrichedParams.community) enrichedParams.community = syn.value
+          if (syn.field === 'cm_Sales_Person__r.Name' && !enrichedParams.person) enrichedParams.person = syn.value
+          if (syn.field === 'StageName' && !enrichedParams.stage) {
+            if (syn.value === 'Closed Won') enrichedParams.stage = 'won'
+            else if (syn.value === 'Closed Lost') enrichedParams.stage = 'lost'
+          }
+          if (syn.field === 'Order_Stattus__c' && !enrichedParams.type) {
+            if (syn.value === 'BOOKED_CANCELLED' || syn.value === 'SMT_CANCELLED') enrichedParams.type = 'cancelled'
+            else if (syn.value === 'TRANSFERED') enrichedParams.type = 'transferred'
+          }
+        }
+      }
+
+      const result = await tool.execute(enrichedParams)
+      if (result) {
+        console.log('[salesforce] tool returned result successfully')
+        recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: match.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+        return result
+      }
+      console.log('[salesforce] tool returned null, trying fallback')
+    }
+  }
+
+  // Step 7: Ad-hoc SOQL spec fallback
+  if (match.confidence !== 'high' || !match.tool) {
+    console.log('[salesforce] trying ad-hoc spec fallback')
+    const fallback = await executeAdHocSpec(query)
+    if (fallback) {
+      console.log('[salesforce] ad-hoc spec returned result')
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: match.confidence, method: 'ad-hoc', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+      return fallback
+    }
+  }
+
+  // Step 8: Last resort — always return something. Try a generic SOQL query based on keywords.
+  console.log('[salesforce] all methods exhausted, attempting keyword-based catch-all')
+  const catchAll = await catchAllFallback(query)
+  if (catchAll) {
+    recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: 'low', method: 'catch-all', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+    return catchAll
+  }
+
+  // Step 9: Absolute final fallback — query all objects for any mention of the key terms
+  recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'low', method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: false, soqlError: 'No method matched', guardrailBlocked: false, instructorRetries: 0, resultCount: 0 })
+  return { context: `SALESFORCE LIVE CRM DATA — I queried your CRM but couldn't find a specific match for "${query}". Try rephrasing or ask about Opportunities, Cases, or Accounts directly.`, citation: { documentName: 'Salesforce (live CRM)' } }
 }
 
-function formatResult(soqlText: string, result: SoqlResult): string {
+// ─────────────────────────────────────────────────────────────────────────────
+// DIRECT KEYWORD FALLBACK — runs when query has no date references and is not a vague follow-up.
+// Handles the most common CRM queries with hardcoded SOQL.
+// ─────────────────────────────────────────────────────────────────────────────
+async function directFallback(query: string): Promise<SalesforceResult | null> {
+  const q = query.toLowerCase()
+
+  // Extract "top N" limit from query
+  const topMatch = q.match(/\btop\s+(\d+)/)
+  const limit = topMatch ? parseInt(topMatch[1], 10) : 20
+
+  // ── LIST / SHOW QUERIES (highest priority — user wants records, not aggregates) ──
+
+  // List/show won opportunities
+  if (q.includes('won') && (q.includes('list') || q.includes('show') || q.includes('opportunit') || q.includes('deal') || q.includes('sale'))) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show lost opportunities — IsLost doesn't exist, use IsClosed + IsWon
+  if (q.includes('lost') && (q.includes('list') || q.includes('show') || q.includes('opportunit') || q.includes('deal'))) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsClosed = true AND IsWon = false ORDER BY CloseDate DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show opportunities (no won/lost specified — default to won) — but NOT salesperson/agent queries
+  if ((q.includes('list') || q.includes('show') || q.includes('top')) && (q.includes('opportunit') || q.includes('deal') || q.includes('sale')) && !q.includes('lost') && !q.includes('pipeline') && !q.includes('open') && !q.includes('salesperson') && !q.includes('by person') && !q.includes('by agent') && !q.includes('who is the top')) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // "list them" / "show them" / "show me" — catch vague follow-ups that reference previous context
+  if ((q.includes('list them') || q.includes('show them') || q.includes('show me') || q.includes('list it') || q.includes('show it')) && !q.includes('document') && !q.includes('report')) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT 20`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show cancelled
+  if ((q.includes('list') || q.includes('show') || q.includes('top')) && (q.includes('cancel') || q.includes('cancelled') || q.includes('canceled'))) {
+    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED') ORDER BY CloseDate DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show recent/latest deals — but NOT "top salesperson/agent/person" (those go to aggregate)
+  if ((q.includes('list') || q.includes('show') || q.includes('recent') || q.includes('latest') || q.includes('top')) && (q.includes('deal') || q.includes('sale') || q.includes('opportunit')) && !q.includes('salesperson') && !q.includes('by person') && !q.includes('by agent') && !q.includes('who is the top')) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CreatedDate DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show by community — use Building_Name__c (groupable)
+  if ((q.includes('list') || q.includes('show')) && (q.includes('by community') || q.includes('by location') || q.includes('by project'))) {
+    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // List/show by salesperson
+  if ((q.includes('list') || q.includes('show')) && (q.includes('by person') || q.includes('by salesperson') || q.includes('by agent') || q.includes('top performer'))) {
+    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // ── AGGREGATE QUERIES (lower priority — user wants numbers) ──
+
+  // Total sales / revenue
+  if ((q.includes('total') || q.includes('how much') || q.includes('revenue') || q.includes('sum')) && (q.includes('sale') || q.includes('revenue') || q.includes('amount'))) {
+    const result = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE StageName = 'Closed Won'`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Sales by community (aggregate) — use Building_Name__c (groupable) instead of Building_Community__c
+  if (q.includes('by community') || q.includes('by location') || q.includes('by project') || q.includes('which community') || q.includes('most sales') || q.includes('top community') || q.includes('community has the most') || q.includes('which building') || q.includes('most revenue')) {
+    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Sales by salesperson (aggregate)
+  if (q.includes('by person') || q.includes('by salesperson') || q.includes('by agent') || q.includes('top performer') || q.includes('top salesperson') || q.includes('top person') || q.includes('who is the top') || q.includes('best salesperson') || q.includes('best performer')) {
+    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Pipeline / open deals
+  if (q.includes('pipeline') || q.includes('open deal') || q.includes('in progress')) {
+    const result = await soql(`SELECT StageName, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsClosed = false GROUP BY StageName ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Recent deals (no list/show keyword)
+  if (q.includes('recent') || q.includes('latest')) {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CreatedDate DESC LIMIT 10`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Cancelled — "how many" → count; otherwise → list
+  if (q.includes('cancel') || q.includes('cancelled')) {
+    if (q.includes('how many') || q.includes('count') || q.includes('total')) {
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')`)
+      return formatDirectResult(result, 'Opportunity')
+    }
+    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED') ORDER BY CloseDate DESC LIMIT 20`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Unit count
+  if ((q.includes('how many unit') || q.includes('total unit') || q.includes('unit count')) && !q.includes('sold')) {
+    const result = await soql(`SELECT COUNT(Id) FROM Property_Inventory__c`)
+    return formatDirectResult(result, 'Property_Inventory__c')
+  }
+
+  // Case queries — "all cases" returns count + records
+  if (q.includes('case') || q.includes('cases') || q.includes('support') || q.includes('service')) {
+    if (q.includes('list') || q.includes('show') || q.includes('all') || q.includes('top')) {
+      const countResult = await soql(`SELECT COUNT(Id) cnt FROM Case`)
+      const listResult = await soql(`SELECT CaseNumber, Subject, Status, Type, Priority, CreatedDate FROM Case ORDER BY CreatedDate DESC LIMIT ${limit}`)
+      const count = countResult.records[0]?.cnt ?? countResult.totalSize
+      const rows = listResult.records.map(r => {
+        const { attributes, ...fields } = r; void attributes
+        return Object.entries(fields).map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ')
+      })
+      return { context: `SALESFORCE LIVE CRM DATA (object: Case, queried just now — authoritative)\n\nTotal cases: ${count}\n\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    }
+    // Case breakdown by type/status/priority
+    if (q.includes('type') || q.includes('category')) {
+      const result = await soql(`SELECT Type, COUNT(Id) cnt FROM Case GROUP BY Type ORDER BY COUNT(Id) DESC`)
+      return formatDirectResult(result, 'Case')
+    }
+    if (q.includes('status') || q.includes('open') || q.includes('closed')) {
+      const result = await soql(`SELECT Status, COUNT(Id) cnt FROM Case GROUP BY Status ORDER BY COUNT(Id) DESC`)
+      return formatDirectResult(result, 'Case')
+    }
+    if (q.includes('priority') || q.includes('escalat') || q.includes('urgent')) {
+      const result = await soql(`SELECT Priority, COUNT(Id) cnt FROM Case GROUP BY Priority ORDER BY COUNT(Id) DESC`)
+      return formatDirectResult(result, 'Case')
+    }
+    const result = await soql(`SELECT COUNT(Id) cnt FROM Case`)
+    return formatDirectResult(result, 'Case')
+  }
+
+  // Lead queries
+  if (q.includes('lead') || q.includes('leads') || q.includes('prospect') || q.includes('prospects')) {
+    if (q.includes('source') || q.includes('where') || q.includes('channel')) {
+      const result = await soql(`SELECT LeadSource, COUNT(Id) cnt FROM Lead WHERE LeadSource != null GROUP BY LeadSource ORDER BY COUNT(Id) DESC`)
+      return formatDirectResult(result, 'Lead')
+    }
+    const result = await soql(`SELECT COUNT(Id) cnt FROM Lead`)
+    return formatDirectResult(result, 'Lead')
+  }
+
+  // Account/customer queries — extract name if present, else count
+  if (q.includes('account') || q.includes('accounts') || q.includes('customer') || q.includes('customers') || q.includes('buyer') || q.includes('buyers')) {
+    // Only extract name for lookup-style queries, NOT count/list queries
+    const isLookup = q.includes('tell me about') || q.includes('show me') || q.includes('lookup') || q.includes('search for') || q.includes('find') || q.includes('info on') || q.includes('details on') || q.includes('information about')
+    if (isLookup) {
+      const nameMatch = q.match(/(?:customer|account|buyer)s?\s+(?:named?|called?|info(?:rmation)?(?:\s+on)?|about|details?\s+on)?\s*(.+)/i)
+      if (nameMatch && nameMatch[1].trim().length > 1) {
+        const searchName = nameMatch[1].trim().replace(/[?.!]$/, '')
+        const result = await soql(`SELECT Name, Phone, Email__c, PersonEmail, RecordType.Name FROM Account WHERE Name LIKE '%${searchName}%' LIMIT 10`)
+        return formatDirectResult(result, 'Account')
+      }
+    }
+    if (q.includes('top') || q.includes('most') || q.includes('revenue') || q.includes('by')) {
+      const result = await soql(`SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`)
+      return formatDirectResult(result, 'Opportunity')
+    }
+    const result = await soql(`SELECT COUNT(Id) cnt FROM Account`)
+    return formatDirectResult(result, 'Account')
+  }
+
+  // Task/activity queries
+  if (q.includes('task') || q.includes('tasks') || q.includes('activity') || q.includes('activities') || q.includes('todo') || q.includes('to-do')) {
+    if (q.includes('open') || q.includes('pending') || q.includes('overdue')) {
+      const result = await soql(`SELECT Subject, Status, Priority, ActivityDate FROM Task WHERE Status != 'Completed' ORDER BY ActivityDate ASC LIMIT ${limit}`)
+      return formatDirectResult(result, 'Task')
+    }
+    if (q.includes('status') || q.includes('breakdown')) {
+      const result = await soql(`SELECT Status, COUNT(Id) cnt FROM Task GROUP BY Status ORDER BY COUNT(Id) DESC`)
+      return formatDirectResult(result, 'Task')
+    }
+    const result = await soql(`SELECT COUNT(Id) cnt FROM Task`)
+    return formatDirectResult(result, 'Task')
+  }
+
+  // Average deal value
+  if (q.includes('average') || q.includes('avg') || q.includes('mean')) {
+    if (q.includes('deal') || q.includes('sale') || q.includes('price') || q.includes('amount') || q.includes('value')) {
+      const result = await soql(`SELECT AVG(Amount) avgVal, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true`)
+      return formatDirectResult(result, 'Opportunity')
+    }
+  }
+
+  // Bedroom/unit type queries
+  if (q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) {
+    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Property inventory by community
+  if ((q.includes('property') || q.includes('unit') || q.includes('inventory')) && (q.includes('by community') || q.includes('by location'))) {
+    const result = await soql(`SELECT Building_Community__c, COUNT(Id) cnt FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Property_Inventory__c')
+  }
+
+  // Inventory status breakdown
+  if ((q.includes('available') || q.includes('sold') || q.includes('reserved') || q.includes('leased') || q.includes('blocked')) && (q.includes('unit') || q.includes('property') || q.includes('inventory'))) {
+    const result = await soql(`SELECT Property_Status__c, COUNT(Id) cnt FROM Property_Inventory__c WHERE Property_Status__c != null GROUP BY Property_Status__c ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Property_Inventory__c')
+  }
+
+  // Property type breakdown (villa, apartment, townhouse)
+  if (q.includes('villa') || q.includes('apartment') || q.includes('townhouse') || (q.includes('property') && q.includes('type'))) {
+    const result = await soql(`SELECT Type__c, COUNT(Id) cnt FROM Property_Inventory__c WHERE Type__c != null GROUP BY Type__c ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Property_Inventory__c')
+  }
+
+  // Win rate
+  if (q.includes('win rate') || q.includes('won vs lost') || q.includes('conversion rate') || (q.includes('won') && q.includes('lost'))) {
+    const result = await soql(`SELECT IsWon, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsClosed = true GROUP BY IsWon`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Mortgage status — Current_Mortgage_Status__c can't be grouped, so query raw and aggregate in code
+  if (q.includes('mortgage') || q.includes('mortgaged')) {
+    const result = await soql(`SELECT Current_Mortgage_Status__c FROM Opportunity WHERE Current_Mortgage_Status__c != null AND IsWon = true LIMIT 500`)
+    const counts: Record<string, number> = {}
+    for (const r of result.records) {
+      const val = String(r.Current_Mortgage_Status__c || 'Unknown')
+      counts[val] = (counts[val] || 0) + 1
+    }
+    const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `Current_Mortgage_Status__c: ${k} | cnt: ${v}`)
+    return { context: `SALESFORCE LIVE CRM DATA (object: Opportunity, queried just now — authoritative)\n\n${result.totalSize} record(s) matched.\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+
+  // Milestone/handover
+  if (q.includes('milestone') || q.includes('handover') || q.includes('deep cleaning') || q.includes('key release')) {
+    const result = await soql(`SELECT Milestone_Current_Status__c, COUNT(Id) cnt FROM Opportunity WHERE Milestone_Current_Status__c != null AND IsWon = true GROUP BY Milestone_Current_Status__c ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Opportunity')
+  }
+
+  // Cases by origin/channel
+  if ((q.includes('case') || q.includes('cases') || q.includes('service')) && (q.includes('origin') || q.includes('channel') || q.includes('phone') || q.includes('email') || q.includes('web'))) {
+    const result = await soql(`SELECT Origin, COUNT(Id) cnt FROM Case WHERE Origin != null GROUP BY Origin ORDER BY COUNT(Id) DESC`)
+    return formatDirectResult(result, 'Case')
+  }
+
+  // Cases by service category / eservice
+  if ((q.includes('case') || q.includes('cases') || q.includes('service')) && (q.includes('service') || q.includes('category') || q.includes('eservice') || q.includes('registration') || q.includes('transfer') || q.includes('move-in') || q.includes('move-out'))) {
+    const result = await soql(`SELECT eService_Admin_Name__c, COUNT(Id) cnt FROM Case WHERE eService_Admin_Name__c != null GROUP BY eService_Admin_Name__c ORDER BY COUNT(Id) DESC LIMIT ${limit}`)
+    return formatDirectResult(result, 'Case')
+  }
+
+  // Generic sales count
+  if (q.includes('how many') || q.includes('number of') || q.includes('count')) {
+    if (q.includes('deal') || q.includes('sale') || q.includes('opportunit')) {
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE StageName = 'Closed Won'`)
+      return formatDirectResult(result, 'Opportunity')
+    }
+  }
+
+  return null
+}
+
+function formatDirectResult(result: { records: Record<string, unknown>[]; totalSize: number; done: boolean }, objectName: string): SalesforceResult {
   if (result.records.length === 0) {
-    if (/count\s*\(\s*\)/i.test(soqlText)) return `Result: ${result.totalSize}`
-    return 'No matching records found.'
+    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now)\n\n0 records found for this query.`, citation: { documentName: 'Salesforce (live CRM)' } }
   }
-  const rows = result.records.slice(0, MAX_ROWS_IN_CONTEXT).map((r) => {
-    const { attributes, ...fields } = r as Record<string, unknown>
+
+  // Detect COUNT queries — produce a clear summary instead of raw field names
+  const firstRecord = result.records[0]
+  const keys = Object.keys(firstRecord).filter(k => k !== 'attributes')
+  const isCountQuery = keys.length === 1 && (keys[0] === 'cnt' || keys[0].includes('cnt'))
+
+  if (isCountQuery) {
+    const countValue = firstRecord[keys[0]]
+    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\nTotal ${objectName} records: ${countValue}\n\nUse this exact number as the answer.`, citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+
+  // Detect SUM/COUNT combo queries (e.g. get-sales-summary) — only when keys are exactly cnt+total
+  const hasCountAndTotal = keys.length === 2 && keys.includes('cnt') && keys.includes('total')
+  if (hasCountAndTotal) {
+    const cnt = firstRecord.cnt
+    const total = firstRecord.total
+    return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\nCount: ${cnt} records\nTotal Amount: AED ${total}\n\nUse these exact figures as the answer.`, citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+
+  // Regular records — format as table
+  const rows = result.records.slice(0, 50).map((r) => {
+    const { attributes, ...fields } = r
     void attributes
     return Object.entries(fields)
       .map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`)
       .join(' | ')
   })
-  const more = result.records.length > MAX_ROWS_IN_CONTEXT
-    ? `\n… (${result.records.length - MAX_ROWS_IN_CONTEXT} more rows not shown)`
-    : (!result.done ? '\n… (more rows exist beyond this page)' : '')
-  return `${result.totalSize} record(s) matched.\n${rows.join('\n')}${more}`
+  const body = `${result.totalSize} record(s) matched.\n${rows.join('\n')}`
+  return { context: `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative)\n\n${body}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
 }
 
-// How many plan→run cycles before giving up. Covers: initial try + error-repair +
-// wrong-object/empty-result switch. Bounded so a bad question can't loop indefinitely.
-const MAX_ATTEMPTS = 4
+// ─────────────────────────────────────────────────────────────────────────────
+// CATCH-ALL FALLBACK — keyword-based SOQL when nothing else matched.
+// Always returns something — never gives up.
+// ─────────────────────────────────────────────────────────────────────────────
+async function catchAllFallback(query: string): Promise<SalesforceResult | null> {
+  const q = query.toLowerCase()
 
-/**
- * Answer a CRM question against LIVE Salesforce with a self-correcting loop: pick object →
- * describe (dynamic schema) → generate validated SOQL → run. If Salesforce rejects the query
- * OR an aggregate returns zero rows (usually a wrong field/object), the error/empty signal is
- * fed back and the model revises — including switching to a different object — up to a bound.
- * This removes the need for a developer to hand-tune prompts for each new question type.
- */
-export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn[]): Promise<SalesforceResult | null> {
-  // Invocation is gated by the semantic intent router upstream; here we only check config.
-  if (!getSalesforceConfig().enabled) return null
-
-  // Resolve conversational follow-ups ("yes break down", "which building?") against recent
-  // history BEFORE anything else — every step below only ever sees one string.
-  const query = await resolveFollowUp(rawQuery, history)
-
-  if (isMetaOverviewQuery(query)) return metaOverviewContext()
-
-  let objectName = await pickObject(query)
-  if (!objectName) return null
-
-  let fieldInfos: FieldInfo[]
-  try {
-    fieldInfos = await describeObject(objectName)
-  } catch (err) {
-    console.error('[salesforce] describe failed:', err)
-    return null
-  }
-  let fieldsText = formatFields(fieldInfos)
-
-  let feedback: string | undefined
-  let emptyRetried = false
-  let lastSoql: string | null = null
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const plan = await planStep(objectName, FIELD_HINTS[objectName] ?? '', fieldsText, query, feedback)
-
-    // No-progress guard: if the model returns the exact same SOQL that just failed, retrying
-    // won't help (deterministic Salesforce error) — stop instead of burning more attempts.
-    if (plan.soql && plan.soql === lastSoql) return null
-    if (plan.soql) lastSoql = plan.soql
-
-    // Model decided a different object fits better — re-describe and continue.
-    if (plan.switchObject && plan.switchObject !== objectName) {
-      try {
-        objectName = plan.switchObject
-        fieldInfos = await describeObject(objectName)
-        fieldsText = formatFields(fieldInfos)
-        feedback = `Switched to ${objectName}; write the query for it now.`
-        continue
-      } catch {
-        return null
-      }
-    }
-
-    if (!plan.soql) return null
-
+  // Case/support queries
+  if (q.includes('case') || q.includes('cases') || q.includes('support') || q.includes('service')) {
     try {
-      const result = await soql(plan.soql)
-      if (looksWrongOnEmpty(plan.soql, result.totalSize) && !emptyRetried) {
-        // Zero rows on an aggregate → likely wrong field/object. Ask the model to reconsider once.
-        emptyRetried = true
-        feedback = `The query "${plan.soql}" returned 0 rows. The field, filter, or object is probably wrong for this question — reconsider (you may switch object or use a parent relationship like Account.Name).`
-        continue
-      }
-      // Empty/null aggregate → fetch a breakdown of what DOES exist in the same scope, so the
-      // answer explains it (e.g. "0 completed sales; 19 in-progress") instead of "no value".
-      let breakdown = ''
-      if (isEmptyAggregate(plan.soql, result)) {
-        const diagPrompt = `The completed/aggregate result for "${query}" came back empty. Write ONE diagnostic SOQL over ${objectName} for the SAME scope — KEEP the date and other non-status filters from the question, but REMOVE any StageName / Order_Stattus__c filters — that GROUPS BY StageName and Order_Stattus__c with COUNT(Id), so we can show what records exist (e.g. in-progress deals) instead of a bare zero.`
-        const diag = await planStep(objectName, FIELD_HINTS[objectName] ?? '', fieldsText, diagPrompt)
-        if (diag.soql) {
-          try {
-            const dr = await soql(diag.soql)
-            if (dr.records.length > 0) breakdown = `\n\nBREAKDOWN of records in the same scope (explains why the total is empty):\n${formatResult(diag.soql, dr)}`
-          } catch { /* diagnostic is best-effort */ }
+      const countResult = await soql(`SELECT COUNT(Id) cnt FROM Case`)
+      const listResult = await soql(`SELECT CaseNumber, Subject, Status, Type, Priority, CreatedDate FROM Case ORDER BY CreatedDate DESC LIMIT 20`)
+      const count = countResult.records[0]?.cnt ?? countResult.totalSize
+      const rows = listResult.records.map(r => {
+        const { attributes, ...fields } = r; void attributes
+        return Object.entries(fields).map(([k, v]) => `${k}: ${v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ')
+      })
+      return { context: `SALESFORCE LIVE CRM DATA (object: Case, queried just now — authoritative)\n\nTotal cases: ${count}\n\n${rows.join('\n')}\n\nUse these exact figures.`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { /* fall through */ }
+  }
+
+  // Lead/prospect queries
+  if (q.includes('lead') || q.includes('leads') || q.includes('prospect') || q.includes('prospects')) {
+    try {
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Lead`)
+      return formatDirectResult(result, 'Lead')
+    } catch { /* fall through */ }
+  }
+
+  // Account/customer queries — extract name if present, else count
+  if (q.includes('account') || q.includes('accounts') || q.includes('customer') || q.includes('customers') || q.includes('buyer') || q.includes('buyers')) {
+    try {
+      // Only extract name for lookup-style queries, NOT count/list queries
+      const isLookup = q.includes('tell me about') || q.includes('show me') || q.includes('lookup') || q.includes('search for') || q.includes('find') || q.includes('info on') || q.includes('details on') || q.includes('information about')
+      if (isLookup) {
+        const nameMatch = q.match(/(?:customer|account|buyer)s?\s+(?:named?|called?|info(?:rmation)?(?:\s+on)?|about|details?\s+on)?\s*(.+)/i)
+        if (nameMatch && nameMatch[1].trim().length > 1) {
+          const searchName = nameMatch[1].trim().replace(/[?.!]$/, '')
+          const result = await soql(`SELECT Name, Phone, Email__c, PersonEmail, RecordType.Name FROM Account WHERE Name LIKE '%${searchName}%' LIMIT 10`)
+          return formatDirectResult(result, 'Account')
         }
       }
-
-      const body = formatResult(plan.soql, result)
-      const context = `SALESFORCE LIVE CRM DATA (object: ${objectName}, queried just now — authoritative, use these exact figures)\nSOQL: ${plan.soql}\n\n${body}${breakdown}\n\n${SALESFORCE_ANSWER_NOTE}`
-      return { context, citation: { documentName: 'Salesforce (live CRM)' } }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error(`[salesforce] attempt ${attempt + 1} failed:`, message)
-      // Add an auto-correct hint (closest real field names) when the error is a bad field.
-      feedback = `Salesforce rejected the query with: ${message}${fieldErrorHint(message, fieldInfos.map((f) => f.name))}`
-    }
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Account`)
+      return formatDirectResult(result, 'Account')
+    } catch { /* fall through */ }
   }
-  return null // fail soft after exhausting attempts — chat continues with RAG/web
+
+  // Task/activity queries
+  if (q.includes('task') || q.includes('tasks') || q.includes('activity') || q.includes('activities') || q.includes('todo') || q.includes('to-do')) {
+    try {
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Task`)
+      return formatDirectResult(result, 'Task')
+    } catch { /* fall through */ }
+  }
+
+  // Opportunity queries (generic — any mention of opportunity/deal/sale/property)
+  if (q.includes('opportunit') || q.includes('deal') || q.includes('sale') || q.includes('property') || q.includes('unit') || q.includes('sold') || q.includes('revenue') || q.includes('pipeline')) {
+    try {
+      const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CloseDate DESC LIMIT 20`)
+      return formatDirectResult(result, 'Opportunity')
+    } catch { /* fall through */ }
+  }
+
+  // Absolute last resort — just query Opportunities
+  try {
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate FROM Opportunity ORDER BY CloseDate DESC LIMIT 10`)
+    return formatDirectResult(result, 'Opportunity')
+  } catch { return null }
 }

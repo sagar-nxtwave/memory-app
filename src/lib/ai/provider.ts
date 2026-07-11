@@ -3,7 +3,9 @@
 // product with no OpenRouter equivalent. Everything else that could hit the Mistral account
 // directly (chat, extraction, embeddings) has been moved to OpenRouter specifically to avoid
 // depending on that account's (free-tier) rate limits.
-if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set')
+if (!process.env.OPENROUTER_API_KEY) {
+  console.warn('[provider] OPENROUTER_API_KEY is not set — LLM calls will fail at runtime')
+}
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 

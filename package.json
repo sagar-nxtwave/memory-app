@@ -11,7 +11,10 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "eval:rag": "node scripts/eval-rag.mjs"
+    "eval:rag": "node scripts/eval-rag.mjs",
+    "eval:golden": "npx tsx --env-file=.env.local src/eval/run-eval.ts",
+    "eval:redteam": "npx tsx --env-file=.env.local src/eval/run-redteam.ts",
+    "eval:live": "npx tsx --env-file=.env.local src/eval/run-live-test.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
@@ -26,6 +29,7 @@
     "mammoth": "^1.12.0",
     "next": "16.2.9",
     "next-auth": "^5.0.0-beta.31",
+    "openai": "^6.46.0",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "postal-mime": "^2.7.5",
@@ -34,7 +38,8 @@
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -46,6 +51,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "promptfoo": "^0.121.18",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

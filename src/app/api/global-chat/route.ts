@@ -11,7 +11,7 @@ import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
-import { answerSalesforceQuery } from '@/salesforce'
+import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 
@@ -266,7 +266,7 @@ export async function POST(req: NextRequest) {
     // Threshold internal citations by rerank relevance (same rule as per-space chat) so a
     // loosely keyword-matched chunk isn't cited when the real answer came from Salesforce/
     // tabular data. Explicit @-mentions always pass through.
-    const INTERNAL_RELEVANCE_MIN = 0.3
+    const INTERNAL_RELEVANCE_MIN = 0.2
     const rerankedScored = await rerankWithScores(content, rawChunks, 8)
     const reranked = hasMentionedDocs
       ? rerankedScored.map((r) => r.item)
@@ -293,9 +293,12 @@ export async function POST(req: NextRequest) {
   if (!skipRetrieval && intent.web) {
     const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: 8 })
     if (merged.webUsed) {
-      contextText = merged.context
-      citations = merged.citations
-      webUsed = true
+      const hasInternalItems = merged.context.includes('[INT-')
+      if (hasInternalItems) {
+        contextText = merged.context
+        citations = merged.citations
+        webUsed = true
+      }
     }
   }
 
@@ -320,7 +323,7 @@ export async function POST(req: NextRequest) {
   // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
   // questions. If EVERY source came back empty, try Salesforce once as a last resort before
   // giving up — high-level executive questions must not silently fail on one bad classification.
-  if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0) {
+  if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0 && isSalesforceQuery(content)) {
     const fallback = await answerSalesforceQuery(content, sfHistory)
     if (fallback) {
       salesforceResult = fallback

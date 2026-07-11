@@ -1,4 +1,5 @@
 import { getSalesforceConfig, type SalesforceConfig } from './config'
+import { validateSOQL } from './guardrails'
 
 // Thin Salesforce REST client: OAuth client_credentials token (cached in-memory) + read-only
 // SOQL queries + object describe (for dynamic field discovery). Auto-refreshes the token once
@@ -59,6 +60,13 @@ export interface SoqlResult {
 
 /** Execute a read-only SOQL query. Throws on query errors so the caller can self-repair. */
 export async function soql(query: string): Promise<SoqlResult> {
+  // Guardrail: validate query before execution
+  const guardrail = validateSOQL(query)
+  if (!guardrail.safe) {
+    console.error(`[salesforce:guardrail] BLOCKED: ${guardrail.reason} | Query: ${query.slice(0, 200)}`)
+    throw new Error(`SOQL guardrail blocked: ${guardrail.reason}`)
+  }
+
   const res = await authedGet(`/query?q=${encodeURIComponent(query)}`)
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)

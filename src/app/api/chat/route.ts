@@ -13,7 +13,7 @@ import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
-import { answerSalesforceQuery } from '@/salesforce'
+import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
@@ -343,11 +343,23 @@ export async function POST(req: NextRequest) {
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory) : null
 
+  // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
+  // user's current message is a vague follow-up ("can you do it?", "do it", "run it", "yes"),
+  // treat it as a Salesforce query even if the intent classifier didn't flag it.
+  if (!salesforceResult && conversationHistory.length > 0) {
+    const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant')
+    const isFollowUp = /^(can you |could you |please |yes|sure|go ahead|do it|run it|execute it|go for it)/i.test(content.trim())
+    if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
+      console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
+      salesforceResult = await answerSalesforceQuery(content, conversationHistory)
+    }
+  }
+
   // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
   // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
   // answer came entirely from Salesforce/tabular data (e.g. "how many unconverted leads"
   // wrongly citing unrelated uploaded docs). Explicit @-mentions always pass through.
-  const INTERNAL_RELEVANCE_MIN = 0.3
+  const INTERNAL_RELEVANCE_MIN = 0.2
   const rerankedScored = await rerankWithScores(content, rawChunks, crossSpace ? 8 : 5)
   const reranked = hasMentions
     ? rerankedScored.map((r) => r.item)
@@ -393,9 +405,12 @@ export async function POST(req: NextRequest) {
     }))
     const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
     if (merged.webUsed) {
-      context = merged.context
-      citations = merged.citations
-      webUsed = true
+      const hasInternalItems = merged.context.includes('[INT-')
+      if (hasInternalItems) {
+        context = merged.context
+        citations = merged.citations
+        webUsed = true
+      }
     }
   }
 
@@ -404,7 +419,7 @@ export async function POST(req: NextRequest) {
   // source came back empty, don't just answer "not in documents" — try Salesforce once as a
   // last resort before giving up. High-level executive questions must not silently fail just
   // because one classification call guessed wrong; this is the client's top complaint.
-  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
+  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0 && isSalesforceQuery(content)) {
     const fallback = await answerSalesforceQuery(content, conversationHistory)
     if (fallback) {
       salesforceResult = fallback
