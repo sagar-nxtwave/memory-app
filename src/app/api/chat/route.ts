@@ -15,6 +15,7 @@ import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
 import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
 import { dateContext } from '@/salesforce/today'
+import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
@@ -508,6 +509,23 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
         for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
           fullContent += chunk
           send({ type: 'delta', content: chunk })
+        }
+
+        // Post-generation hallucination check — compares the composed prose against the
+        // raw Salesforce data it was supposed to summarize. Can't un-stream what the user
+        // already saw, but this logs every occurrence so we can track/fix hallucination
+        // rate over time, and catches the "fabricated community/customer name" class of bug.
+        if (salesforceResult) {
+          const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
+          const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
+          if (!validation.valid || !listCheck.valid) {
+            console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
+              question: content.slice(0, 200),
+              issues: [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])],
+              hallucinatedTerms: validation.hallucinatedTerms,
+              hallucinatedNumbers: validation.hallucinatedNumbers,
+            })
+          }
         }
 
         const [assistantMsg] = await db

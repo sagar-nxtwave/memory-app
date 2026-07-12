@@ -12,6 +12,7 @@ import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
 import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
+import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
 
@@ -415,6 +416,19 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
         for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), conversationHistory)) {
           fullContent += chunk
           send({ type: 'delta', content: chunk })
+        }
+
+        if (salesforceResult) {
+          const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
+          const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
+          if (!validation.valid || !listCheck.valid) {
+            console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
+              question: content.slice(0, 200),
+              issues: [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])],
+              hallucinatedTerms: validation.hallucinatedTerms,
+              hallucinatedNumbers: validation.hallucinatedNumbers,
+            })
+          }
         }
 
         const [assistantMsg] = await db

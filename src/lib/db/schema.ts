@@ -299,6 +299,42 @@ export const spaceVisits = pgTable('space_visits', {
   visitedAt: timestamp('visited_at').notNull().defaultNow(),
 })
 
+// ── Salesforce RAG ────────────────────────────────────────────────────────
+// Fallback for questions that don't match any pre-built tool. Each row is one
+// Salesforce record (Opportunity, Property_Inventory__c, Case, Account, etc.)
+// flattened into searchable text + embedding. Re-indexed on a schedule since
+// Salesforce data changes; not meant to replace live SOQL for anything the
+// tool catalog already covers.
+export const salesforceChunks = pgTable(
+  'salesforce_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    objectName: text('object_name').notNull(), // e.g. 'Opportunity', 'Property_Inventory__c'
+    recordId: text('record_id').notNull(), // Salesforce record Id
+    content: text('content').notNull(), // flattened "Field: Value | Field: Value" text
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull(),
+    embedding: vector('embedding', { dimensions: 1024 }),
+    indexedAt: timestamp('indexed_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('salesforce_chunks_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
+    index('salesforce_chunks_object_idx').on(table.objectName),
+    index('salesforce_chunks_record_idx').on(table.recordId),
+  ]
+)
+
+// Tracks indexing runs — lets the indexer resume/incrementally update instead
+// of re-pulling all objects every time, and gives visibility into freshness.
+export const salesforceIndexRuns = pgTable('salesforce_index_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  objectName: text('object_name').notNull(),
+  recordsIndexed: integer('records_indexed').notNull().default(0),
+  status: text('status').notNull().default('running'), // running | completed | failed
+  error: text('error'),
+  startedAt: timestamp('started_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+})
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   spaces: many(spaces),

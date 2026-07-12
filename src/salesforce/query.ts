@@ -15,6 +15,7 @@ import { compressContext, quickCompress } from './context-compression'
 import { understandQuery, quickUnderstand, type UnderstoodQuery } from './query-understanding'
 import { executeReActLoop, needsReActLoop } from './react-loop'
 import { maskSensitiveData } from './privacy-filter'
+import { ragFallback } from './rag-searcher'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -359,7 +360,26 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
     return catchAll
   }
 
-  // Step 9: Absolute final fallback — query all objects for any mention of the key terms
+  // Step 9: RAG fallback — semantic search over indexed Salesforce data. Catches questions
+  // no tool/spec/keyword-match covers (e.g. ad-hoc cross-field breakdowns) by searching
+  // actual indexed records instead of giving up or asking the user to clarify.
+  console.log('[salesforce] tool/spec/catch-all exhausted, trying RAG semantic search')
+  const ragResult = await ragFallback(query)
+  if (ragResult) {
+    const verification = await verifyAnswer(query, null, ragResult.context, 'rag')
+    console.log(`[salesforce] RAG verification score: ${verification.score}/100 (${verification.confidence})`)
+    if (verification.issues.length > 0) {
+      console.log('[salesforce] RAG verification issues:', verification.issues)
+    }
+
+    if (verification.score >= 25) {
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: verification.confidence, method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+      return ragResult
+    }
+    console.log('[salesforce] RAG result too low confidence, falling through to final message')
+  }
+
+  // Step 10: Absolute final fallback — query all objects for any mention of the key terms
   recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'low', method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: false, soqlError: 'No method matched', guardrailBlocked: false, instructorRetries: 0, resultCount: 0 })
   return { context: `I couldn't find a specific match for "${query}" in the CRM. Could you rephrase your question or ask about sales, properties, cases, or customers directly?`, citation: { documentName: 'Salesforce (live CRM)' } }
 }
