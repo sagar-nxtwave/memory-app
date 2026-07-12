@@ -52,6 +52,9 @@ migrate-db.mjs
 # Salesforce credentials (contains access tokens)
 Salesforce.txt
 
+# Salesforce MCP JWT Bearer Flow certificate/private key (sensitive)
+/certs/
+
 # Test results (contains live data)
 stress-test-results.txt
 
