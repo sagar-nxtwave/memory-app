@@ -13,7 +13,7 @@ import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem } from '@/web-search'
-import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
+import { answerSalesforceQuery } from '@/salesforce'
 import { dateContext } from '@/salesforce/today'
 import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
@@ -417,11 +417,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
-  // questions (e.g. "how many deals closed this year" not flagged as salesforce). If EVERY
-  // source came back empty, don't just answer "not in documents" — try Salesforce once as a
-  // last resort before giving up. High-level executive questions must not silently fail just
-  // because one classification call guessed wrong; this is the client's top complaint.
-  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0 && isSalesforceQuery(content)) {
+  // questions (e.g. "how many deals closed this year", or a bare project/community name with
+  // no verb like "Address Grand Downtown"). If EVERY source came back empty, don't just answer
+  // "not in documents" — try Salesforce once as a last resort before giving up. High-level
+  // executive questions must not silently fail just because one classification call guessed
+  // wrong; this is the client's top complaint. Deliberately NOT gated behind a keyword regex
+  // anymore — a regex can never recognize an arbitrary project/customer name, so "try Salesforce
+  // whenever everything else came up empty" is the safer default for a CRM-first tool.
+  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
     const fallback = await answerSalesforceQuery(content, conversationHistory)
     if (fallback) {
       salesforceResult = fallback

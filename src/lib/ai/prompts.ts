@@ -179,9 +179,10 @@ Return ONLY JSON: { "salesforce": bool, "documents": bool, "web": bool }
 
 Rules:
 - The company's OWN sales/customers/deals/units/pipeline/CRM metrics → "salesforce": true. (e.g. "how much sale happened last month", "show me the units purchased", "top accounts", "pipeline by stage" — ALL salesforce.)
+- Bare names, phrases, or proper nouns with NO other context (e.g. just "Address Grand Downtown", "Alton", "Anil Pardesi") are very likely a project/community/customer name the user wants looked up in the CRM — set "salesforce": true for these too, even without an explicit verb like "show" or "compare". This is a real-estate CRM tool — sales/property/community data is the PRIMARY thing users ask about.
 - The user's uploaded files / "this contract" / "summarize the report" / document contents → "documents": true.
 - Set "web": true ONLY when answering genuinely requires CURRENT or EXTERNAL public information (news, live prices, other companies, latest releases, general facts). NEVER set web=true merely because internal data might be missing — web is a LAST RESORT, not a default.
-- More than one may be true. At least one must be true. If unsure between internal options, prefer "documents".
+- More than one may be true. At least one must be true. If unsure between internal options, prefer "salesforce" — this is a CRM-first tool, and it is far worse to miss a real CRM answer than to make an extra Salesforce lookup that comes back empty.
 - Output raw JSON only, no markdown.`
 }
 

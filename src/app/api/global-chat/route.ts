@@ -11,7 +11,7 @@ import { formatDateTime } from '@/lib/utils/date'
 import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/lib/utils/queryFilters'
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
-import { answerSalesforceQuery, isSalesforceQuery } from '@/salesforce'
+import { answerSalesforceQuery } from '@/salesforce'
 import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
@@ -323,9 +323,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
-  // questions. If EVERY source came back empty, try Salesforce once as a last resort before
-  // giving up — high-level executive questions must not silently fail on one bad classification.
-  if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0 && isSalesforceQuery(content)) {
+  // questions, or a bare project/community/customer name with no verb. If EVERY source came
+  // back empty, try Salesforce once as a last resort before giving up — high-level executive
+  // questions must not silently fail on one bad classification. Deliberately not gated behind
+  // a keyword regex — a regex can never recognize an arbitrary project/customer name.
+  if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0) {
     const fallback = await answerSalesforceQuery(content, sfHistory)
     if (fallback) {
       salesforceResult = fallback

@@ -396,8 +396,20 @@ const TEST_RECORD_AND = " AND Amount != 1 AND CloseDate < 2032-01-01 AND cm_Sale
 // DIRECT KEYWORD FALLBACK — runs when query has no date references and is not a vague follow-up.
 // Handles the most common CRM queries with hardcoded SOQL.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Detects a likely proper-noun entity (project/community/customer name) in the ORIGINAL
+// (not lowercased) query — e.g. "Address Grand Downtown", "Anil Pardesi". Used to stop generic
+// keyword patterns (like "total sales") from swallowing a specific name and running an
+// unfiltered aggregate instead of letting the tool-matcher/synonym layer handle it properly.
+const CAPITALIZED_ENTITY_RE = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/
+
+function hasLikelyEntityName(query: string): boolean {
+  return CAPITALIZED_ENTITY_RE.test(query)
+}
+
 async function directFallback(query: string): Promise<SalesforceResult | null> {
   const q = query.toLowerCase()
+  const hasEntity = hasLikelyEntityName(query)
 
   // Extract "top N" limit from query
   const topMatch = q.match(/\btop\s+(\d+)/)
@@ -461,8 +473,10 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // ── AGGREGATE QUERIES (lower priority — user wants numbers) ──
 
-  // Total sales / revenue
-  if ((q.includes('total') || q.includes('how much') || q.includes('revenue') || q.includes('sum')) && (q.includes('sale') || q.includes('revenue') || q.includes('amount'))) {
+  // Total sales / revenue — but NOT if the query contains a likely project/community/customer
+  // name (e.g. "how much is Address Grand Downtown sale") — in that case, fall through to the
+  // tool-matcher/synonym layer instead of running an unfiltered aggregate that discards the name.
+  if (!hasEntity && (q.includes('total') || q.includes('how much') || q.includes('revenue') || q.includes('sum')) && (q.includes('sale') || q.includes('revenue') || q.includes('amount'))) {
     const result = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE StageName = 'Closed Won'`)
     return formatDirectResult(result, 'Opportunity')
   }

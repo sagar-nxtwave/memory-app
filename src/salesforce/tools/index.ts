@@ -154,18 +154,21 @@ function dateFilter(field: string, period?: string): string {
 // Tool 1: get-sales-summary
 const getSalesSummary: ToolDefinition = {
   name: 'get-sales-summary',
-  description: 'Get total sales count and revenue for a time period. Use for "how many deals", "total revenue", "how much did we sell", "what was the total amount".',
+  description: 'Get total sales count and revenue for a time period, optionally filtered to a specific project/community. Use for "how many deals", "total revenue", "how much did we sell", "what was the total amount", "how much is X sale" (where X is a project name).',
   params: [
     { name: 'period', type: 'string', description: 'Time period — relative ("this month", "last quarter", "this year") or absolute ("2026", "jan 2026")', required: false, examples: ['this month', 'last quarter', 'this year', '2026', 'jan 2026', 'last 30 days'] },
     { name: 'stage', type: 'string', description: 'Filter by stage ("won", "lost", "all")', required: false, examples: ['won', 'lost', 'all'] },
+    { name: 'community', type: 'string', description: 'Filter to a specific project/community/building name', required: false },
   ],
   keywords: ['how many deals', 'total revenue', 'total sales', 'how much', 'total amount', 'revenue', 'total'],
   execute: async (params) => {
     const period = params.period as string | undefined
     const stage = (params.stage as string) || 'won'
+    const community = params.community as string | undefined
     let where = 'WHERE IsClosed = true'
     if (stage === 'won') where += ' AND IsWon = true'
     else if (stage === 'lost') where += ' AND IsWon = false'
+    if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     where += dateFilter('CloseDate', period)
     const query = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where}`
     try {
@@ -214,7 +217,7 @@ const getSalesByCommunity: ToolDefinition = {
     const community = params.community as string | undefined
     const limit = (params.limit as number) || 10
     let where = "WHERE Building_Name__c != null AND StageName = 'Closed Won'"
-    if (community) where += ` AND Building_Name__c = '${community}'`
+    if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     where += dateFilter('CloseDate', period)
     const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC LIMIT ${limit}`
     try {
@@ -280,7 +283,7 @@ const getPipeline: ToolDefinition = {
   execute: async (params) => {
     const community = params.community as string | undefined
     let where = "WHERE IsClosed = false"
-    if (community) where += ` AND Building_Community__c = '${community}'`
+    if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     const query = `SELECT StageName, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY StageName ORDER BY COUNT(Id) DESC`
     try {
       const result = await soql(query)
@@ -693,7 +696,7 @@ const getPropertyByCommunity: ToolDefinition = {
   execute: async (params) => {
     const community = params.community as string | undefined
     let where = 'WHERE Building_Community__c != null'
-    if (community) where += ` AND Building_Community__c = '${community}'`
+    if (community) where += ` AND Building_Community__c LIKE '%${community}%'`
     const query = `SELECT Building_Community__c, COUNT(Id) cnt FROM Property_Inventory__c ${where} GROUP BY Building_Community__c ORDER BY COUNT(Id) DESC`
     try {
       const result = await soql(query)
@@ -827,7 +830,7 @@ const getPropertyStatusBreakdown: ToolDefinition = {
   execute: async (params) => {
     const community = params.community as string | undefined
     let where = 'WHERE Property_Status__c != null'
-    if (community) where += ` AND Building_Community__c = '${community}'`
+    if (community) where += ` AND Building_Community__c LIKE '%${community}%'`
     const query = `SELECT Property_Status__c, COUNT(Id) cnt FROM Property_Inventory__c ${where} GROUP BY Property_Status__c ORDER BY COUNT(Id) DESC`
     try {
       const result = await soql(query)
@@ -874,7 +877,7 @@ const getInventoryPricing: ToolDefinition = {
     const type = params.type as string | undefined
     let where = 'WHERE Selling_Price__c != null'
     if (status) where += ` AND Property_Status__c = '${status}'`
-    if (community) where += ` AND Building_Community__c = '${community}'`
+    if (community) where += ` AND Building_Community__c LIKE '%${community}%'`
     if (type) where += ` AND Type__c = '${type}'`
     const query = `SELECT AVG(Selling_Price__c) avgPrice, AVG(Selling_Price_Per_Sq_Ft__c) avgPricePerSqFt, COUNT(Id) cnt FROM Property_Inventory__c ${where}`
     try {
@@ -2567,7 +2570,7 @@ const getOppPropertyAggregate: ToolDefinition = {
     if (!field) return { context: `Unknown metric "${metric}". Available: ${Object.keys(fieldMap).join(', ')}`, citation: { documentName: 'Salesforce (live CRM)' } }
     const aggFn = agg === 'sum' ? 'SUM' : agg === 'min' ? 'MIN' : agg === 'max' ? 'MAX' : agg === 'count' ? 'COUNT' : 'AVG'
     let where = `WHERE ${field} != null`
-    if (community) where += ` AND Opportunity_Name__r.Building_Community__c = '${community}'`
+    if (community) where += ` AND Opportunity_Name__r.Building_Community__c LIKE '%${community}%'`
     const query = `SELECT ${aggFn}(${field}) val, COUNT(Id) cnt FROM Opportunity_Property__c ${where}`
     try {
       const result = await soql(query)

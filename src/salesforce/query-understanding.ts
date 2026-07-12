@@ -4,6 +4,7 @@
 
 import { chatJson } from '@/lib/ai/provider'
 import { todayStr, currentYear } from './today'
+import { soql } from './client'
 
 export interface UnderstoodQuery {
   // The corrected, clear version of what the user is asking
@@ -29,19 +30,54 @@ export interface UnderstoodQuery {
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
-const QUERY_UNDERSTANDING_PROMPT = `You are a CRM query understanding engine for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
+// Live-fetched, cached list of real project/community/building names — replaces a
+// hand-maintained hardcoded list that went stale (missing real communities like
+// "Address Grand Downtown", which caused the LLM to mis-parse or drop them as it had no
+// anchor telling it these were real project names). Cached for 1 hour since this rarely
+// changes and a live SOQL call on every single question would add unnecessary latency.
+let knownProjectsCache: { names: string[]; fetchedAt: number } | null = null
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+
+async function getKnownProjectsList(): Promise<string> {
+  const now = Date.now()
+  if (knownProjectsCache && now - knownProjectsCache.fetchedAt < CACHE_TTL_MS) {
+    return knownProjectsCache.names.join(', ')
+  }
+
+  try {
+    const [communities, buildings] = await Promise.all([
+      soql(`SELECT Building_Community__c FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c`),
+      soql(`SELECT Building_Name__c FROM Opportunity WHERE Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') GROUP BY Building_Name__c`),
+    ])
+    const names = new Set<string>()
+    for (const r of communities.records) {
+      const v = (r as Record<string, unknown>).Building_Community__c
+      if (typeof v === 'string') names.add(v)
+    }
+    for (const r of buildings.records) {
+      const v = (r as Record<string, unknown>).Building_Name__c
+      if (typeof v === 'string') names.add(v)
+    }
+    knownProjectsCache = { names: Array.from(names), fetchedAt: now }
+    return knownProjectsCache.names.join(', ')
+  } catch (err) {
+    console.warn('[query-understand] failed to fetch live project list, using stale/empty cache:', err)
+    return knownProjectsCache?.names.join(', ') ?? ''
+  }
+}
+
+function buildQueryUnderstandingPrompt(knownProjects: string): string {
+  return `You are a CRM query understanding engine for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
 Your job: Take a raw user question (possibly with typos, grammar errors, vague references, or conversation context) and produce a CLEAR, STRUCTURED understanding of what the user wants.
 
-KNOWN PROJECTS/COMMUNITIES at Nshama:
-Town Square, Alton, Kaya, Safi, Noor, Hayat, Maha, Reem, Camden, Lexington, Hyde, Pulse, Villanova, Dubai Residence Complex, Mira, Mudon, Remraam, Arabella, Serena, Furjan, Town Square Apartments, Zaha, etc.
-
-KNOWN BUILDINGS: TS-01 through TS-XX (Town Square), ALT-01 (Alton), KAYA-01 (Kaya), SAF-01 (Safi), etc.
+KNOWN PROJECTS/COMMUNITIES/BUILDINGS at Nshama (live list from Salesforce — this is the authoritative source, not exhaustive naming conventions):
+${knownProjects || '(list unavailable — infer from context)'}
 
 RULES:
 1. CORRECT typos: "cmpare" → "compare", "20205" → "2025", "sellign" → "selling"
 2. UNDERSTAND intent: What is the user really asking for?
-3. EXTRACT entities: project names, customer names, dates, salesperson names
+3. EXTRACT entities: project names, customer names, dates, salesperson names. A multi-word capitalized phrase (e.g. "Address Grand Downtown") is very likely a full project/community name — extract it as ONE entity, don't split off words like "Address" as unrelated.
 4. RESOLVE vague references from conversation history: "this project" → actual project name, "them" → actual entities
 5. INFER year: "this year" → ${CURRENT_YEAR}, "last year" → ${CURRENT_YEAR - 1}, "this month" → current month
 6. If user explicitly says "2024 and 2025", KEEP those years — don't add 2026
@@ -73,6 +109,7 @@ Respond with ONLY JSON:
   "needsContext": false,
   "missingContext": null
 }`
+}
 
 /**
  * Understand a raw user query — corrects grammar, extracts intent, resolves references.
@@ -93,7 +130,8 @@ export async function understandQuery(
   }
 
   try {
-    const raw = await chatJson(QUERY_UNDERSTANDING_PROMPT, input)
+    const knownProjects = await getKnownProjectsList()
+    const raw = await chatJson(buildQueryUnderstandingPrompt(knownProjects), input)
 
     // Parse — chatJson returns string, parse it
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
