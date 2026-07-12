@@ -13,6 +13,9 @@ import { NextRequest, NextResponse } from 'next/server'
 const LOGIN_URL = process.env.SALESFORCE_LOGIN_URL!
 const CLIENT_ID = process.env.SALESFORCE_MCP_CLIENT_ID!
 const CLIENT_SECRET = process.env.SALESFORCE_MCP_CLIENT_SECRET!
+// PKCE code_verifier — must match the code_challenge embedded in the authorization URL
+// (this External Client App enforces PKCE, confirmed via "missing required code challenge" error).
+const PKCE_VERIFIER = process.env.SALESFORCE_MCP_PKCE_VERIFIER!
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code')
@@ -36,6 +39,7 @@ export async function GET(req: NextRequest) {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       redirect_uri: redirectUri,
+      code_verifier: PKCE_VERIFIER,
     })
     const tokenRes = await fetch(`${LOGIN_URL}/services/oauth2/token`, {
       method: 'POST',
