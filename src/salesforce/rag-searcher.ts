@@ -1,10 +1,9 @@
-// Salesforce RAG searcher — semantic search over indexed Salesforce records
-// (salesforce_chunks). Used as a fallback when the tool matcher can't find an exact
-// tool match: instead of asking the user to clarify, we search actual indexed data
-// and let the LLM compose an answer from real records it can see.
+// Salesforce RAG searcher — semantic search over indexed Salesforce records (Pinecone).
+// Used as a fallback when the tool matcher can't find an exact tool match: instead of
+// asking the user to clarify, we search actual indexed data and let the LLM compose an
+// answer from real records it can see.
 import { generateEmbedding } from '@/lib/ai/provider'
-import { db } from '@/lib/db'
-import { sql } from 'drizzle-orm'
+import { getSalesforceIndex } from './pinecone-client'
 import type { ToolResult } from './tools'
 
 export interface RagSearchResult {
@@ -26,26 +25,23 @@ export async function searchSalesforceData(
   const queryEmbedding = await generateEmbedding(query)
   if (!queryEmbedding || queryEmbedding.length === 0) return []
 
-  const vectorLiteral = `[${queryEmbedding.join(',')}]`
+  const index = getSalesforceIndex()
+  const response = await index.query({
+    vector: queryEmbedding,
+    topK: limit,
+    includeMetadata: true,
+    ...(opts.objectName ? { filter: { objectName: { $eq: opts.objectName } } } : {}),
+  })
 
-  const objectFilter = opts.objectName ? sql`AND object_name = ${opts.objectName}` : sql``
-
-  const rows = await db.execute(sql`
-    SELECT object_name, record_id, content, 1 - (embedding <=> ${vectorLiteral}::vector) AS similarity
-    FROM salesforce_chunks
-    WHERE embedding IS NOT NULL ${objectFilter}
-    ORDER BY embedding <=> ${vectorLiteral}::vector
-    LIMIT ${limit}
-  `)
-
-  const results = rows as unknown as { object_name: string; record_id: string; content: string; similarity: number }[]
-
-  return results.map((r) => ({
-    objectName: String(r.object_name),
-    recordId: String(r.record_id),
-    content: String(r.content),
-    similarity: Number(r.similarity),
-  }))
+  return (response.matches ?? []).map((m) => {
+    const metadata = (m.metadata ?? {}) as { objectName?: string; recordId?: string; content?: string }
+    return {
+      objectName: metadata.objectName ?? 'Unknown',
+      recordId: metadata.recordId ?? m.id,
+      content: metadata.content ?? '',
+      similarity: m.score ?? 0,
+    }
+  })
 }
 
 /**
