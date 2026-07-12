@@ -16,6 +16,7 @@ import { understandQuery, quickUnderstand, type UnderstoodQuery } from './query-
 import { executeReActLoop, needsReActLoop } from './react-loop'
 import { maskSensitiveData } from './privacy-filter'
 import { ragFallback } from './rag-searcher'
+import { answerViaMcp } from './mcp-query'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -117,6 +118,28 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
   if (!getSalesforceConfig().enabled) {
     console.error('[salesforce] Salesforce is not enabled/configured')
     return null
+  }
+
+  // MCP mode — bypasses the entire tool-matcher/synonym/RAG pipeline below and answers
+  // via Salesforce's own Platform MCP tools instead (see mcp-query.ts). Toggle with
+  // SALESFORCE_USE_MCP=true in env. Tools + Pinecone RAG remain fully intact and unused
+  // while this is on — flip the flag off to instantly revert to the previous pipeline.
+  if (process.env.SALESFORCE_USE_MCP === 'true') {
+    console.log('[salesforce] MCP mode enabled — routing to answerViaMcp()')
+    const result = await answerViaMcp(rawQuery, history)
+    recordMetric({
+      timestamp: new Date().toISOString(),
+      question: rawQuery,
+      toolMatched: 'mcp',
+      confidence: result ? 'high' : 'low',
+      method: 'tool',
+      latencyMs: Date.now() - startTime,
+      soqlSuccess: !!result,
+      guardrailBlocked: false,
+      instructorRetries: 0,
+      resultCount: result ? 1 : 0,
+    })
+    return result
   }
 
   // Step 0: QUERY UNDERSTANDING — LLM "thinking" step
