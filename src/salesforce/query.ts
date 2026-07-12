@@ -369,8 +369,8 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
 // NOTE: SOQL doesn't support NOT(...) well; use individual AND conditions
 // ─────────────────────────────────────────────────────────────────────────────
 // SOQL-safe test record filter — mirrors isTestOpportunity() logic for direct fallback queries
-// NOTE: SOQL LIKE is case-insensitive; NOT LIKE with year prefix blocks all 2032 dates
-const TEST_RECORD_AND = " AND Amount != 1 AND NOT (CloseDate >= 2032-01-01 AND CloseDate <= 2032-12-31) AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
+// NOTE: SOQL doesn't support NOT (cond AND cond) — use separate AND NOT clauses instead
+const TEST_RECORD_AND = " AND Amount != 1 AND CloseDate < 2032-01-01 AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIRECT KEYWORD FALLBACK — runs when query has no date references and is not a vague follow-up.
