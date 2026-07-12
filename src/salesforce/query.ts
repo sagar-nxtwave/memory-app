@@ -113,7 +113,11 @@ function metaOverviewContext(): SalesforceResult {
  * 5. Ad-hoc spec fallback
  * 6. Clarification
  */
-export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn[]): Promise<SalesforceResult | null> {
+export async function answerSalesforceQuery(
+  rawQuery: string,
+  history?: ChatTurn[],
+  onMcpStep?: (step: { action: string; detail: string }) => void
+): Promise<SalesforceResult | null> {
   const startTime = Date.now()
   if (!getSalesforceConfig().enabled) {
     console.error('[salesforce] Salesforce is not enabled/configured')
@@ -126,7 +130,7 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
   // while this is on — flip the flag off to instantly revert to the previous pipeline.
   if (process.env.SALESFORCE_USE_MCP === 'true') {
     console.log('[salesforce] MCP mode enabled — routing to answerViaMcp()')
-    const result = await answerViaMcp(rawQuery, history)
+    const result = await answerViaMcp(rawQuery, history, onMcpStep)
     recordMetric({
       timestamp: new Date().toISOString(),
       question: rawQuery,

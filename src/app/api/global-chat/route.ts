@@ -315,7 +315,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, sfHistory) : null
+  // mcpStepsLog captures each MCP tool call/SOQL query (when MCP mode is on) so they can be
+  // surfaced in the "thinking process" UI — see emission near the stream start below.
+  const mcpStepsLog: { action: string; detail: string }[] = []
+  const onMcpStep = (step: { action: string; detail: string }) => mcpStepsLog.push(step)
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, sfHistory, onMcpStep) : null
   // Note: thinking steps for Salesforce are emitted inside the stream start block above
   if (salesforceResult) {
     const sfCitation = salesforceResult.citation
@@ -328,7 +332,7 @@ export async function POST(req: NextRequest) {
   // questions must not silently fail on one bad classification. Deliberately not gated behind
   // a keyword regex — a regex can never recognize an arbitrary project/customer name.
   if (!intent.salesforce && !tabularResult && !webUsed && contextText.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content, sfHistory)
+    const fallback = await answerSalesforceQuery(content, sfHistory, onMcpStep)
     if (fallback) {
       salesforceResult = fallback
       if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
@@ -412,6 +416,12 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
           if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
           if (intent.documents) emitStep('Searching documents for relevant content...')
           if (intent.web) emitStep('Searching the web for supplementary information...')
+        }
+
+        // Surface each MCP tool call/SOQL query as its own thinking step — makes the
+        // Salesforce MCP reasoning auditable instead of a black box (client-requested).
+        for (const s of mcpStepsLog) {
+          emitStep(s.action === 'soqlQuery' ? `SOQL: ${s.detail}` : `MCP tool: ${s.action}(${s.detail})`)
         }
 
         let fullContent = ''

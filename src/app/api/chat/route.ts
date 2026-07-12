@@ -343,7 +343,11 @@ export async function POST(req: NextRequest) {
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory) : null
+  // mcpStepsLog captures each MCP tool call/SOQL query (when MCP mode is on) so they can be
+  // surfaced in the "thinking process" UI — see emission near the stream start below.
+  const mcpStepsLog: { action: string; detail: string }[] = []
+  const onMcpStep = (step: { action: string; detail: string }) => mcpStepsLog.push(step)
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, onMcpStep) : null
 
   // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
   // user's current message is a vague follow-up ("can you do it?", "do it", "run it", "yes"),
@@ -353,7 +357,7 @@ export async function POST(req: NextRequest) {
     const isFollowUp = /^(can you |could you |please |yes|sure|go ahead|do it|run it|execute it|go for it)/i.test(content.trim())
     if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
       console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
-      salesforceResult = await answerSalesforceQuery(content, conversationHistory)
+      salesforceResult = await answerSalesforceQuery(content, conversationHistory, onMcpStep)
     }
   }
 
@@ -425,7 +429,7 @@ export async function POST(req: NextRequest) {
   // anymore — a regex can never recognize an arbitrary project/customer name, so "try Salesforce
   // whenever everything else came up empty" is the safer default for a CRM-first tool.
   if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content, conversationHistory)
+    const fallback = await answerSalesforceQuery(content, conversationHistory, onMcpStep)
     if (fallback) {
       salesforceResult = fallback
       if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
@@ -506,6 +510,12 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
           if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
           if (intent.documents) emitStep('Searching documents for relevant content...')
           if (intent.web) emitStep('Searching the web for supplementary information...')
+        }
+
+        // Surface each MCP tool call/SOQL query as its own thinking step — makes the
+        // Salesforce MCP reasoning auditable instead of a black box (client-requested).
+        for (const s of mcpStepsLog) {
+          emitStep(s.action === 'soqlQuery' ? `SOQL: ${s.detail}` : `MCP tool: ${s.action}(${s.detail})`)
         }
 
         let fullContent = ''

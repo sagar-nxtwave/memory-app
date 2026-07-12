@@ -77,7 +77,16 @@ For "finish" action, the "answer" field MUST contain the final response to the u
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
 }
 
-export async function answerViaMcp(query: string, history?: ChatTurn[]): Promise<SalesforceResult | null> {
+export interface McpStepInfo {
+  action: string
+  detail: string // the SOQL query (for soqlQuery), SOSL (for find), or params summary for other tools
+}
+
+export async function answerViaMcp(
+  query: string,
+  history?: ChatTurn[],
+  onStep?: (step: McpStepInfo) => void
+): Promise<SalesforceResult | null> {
   const startTime = Date.now()
   try {
     const systemPrompt = await buildSystemPrompt()
@@ -116,6 +125,12 @@ export async function answerViaMcp(query: string, history?: ChatTurn[]): Promise
         steps.push({ thought, action, observation: finalAnswer })
         break
       }
+
+      // Surface the exact tool call (and SOQL/SOSL text if present) to the caller so it can
+      // be shown in the UI's "thinking process" — this is what makes MCP's reasoning
+      // transparent/auditable instead of a black box.
+      const detail = typeof params.q === 'string' ? params.q : JSON.stringify(params)
+      onStep?.({ action, detail })
 
       let observation: string
       try {
