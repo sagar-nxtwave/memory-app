@@ -319,6 +319,21 @@ export const salesforceIndexRuns = pgTable('salesforce_index_runs', {
   completedAt: timestamp('completed_at'),
 })
 
+// Business Glossary — editable business-term-to-schema mappings (e.g. "Customer" ->
+// Account/Contact, "Unit" -> Opportunity.Name pattern) that get injected into the MCP/
+// tool-matcher prompts so the LLM understands the client's own terminology. Distinct from
+// the auto-extracted per-field definitions in data/llm-rules.json (those are read-only,
+// client-provided; this table is what the client/team can add to via Settings). Stored in
+// the DB (not a JSON file) since Vercel's serverless filesystem doesn't persist writes.
+export const glossaryTerms = pgTable('glossary_terms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  term: text('term').notNull(), // business term, e.g. "Customer", "Unit"
+  mapsTo: text('maps_to').notNull(), // schema mapping, e.g. "Account or Contact"
+  explanation: text('explanation').notNull(), // when/how to apply this mapping
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   spaces: many(spaces),

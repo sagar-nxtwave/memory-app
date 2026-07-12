@@ -124,26 +124,34 @@ export async function answerSalesforceQuery(
     return null
   }
 
-  // MCP mode — bypasses the entire tool-matcher/synonym/RAG pipeline below and answers
-  // via Salesforce's own Platform MCP tools instead (see mcp-query.ts). Toggle with
-  // SALESFORCE_USE_MCP=true in env. Tools + Pinecone RAG remain fully intact and unused
-  // while this is on — flip the flag off to instantly revert to the previous pipeline.
+  // 3-TIER FALLBACK ARCHITECTURE (Level 1: MCP → Level 2: 100+ tools → Level 3: Pinecone RAG)
+  // Toggle with SALESFORCE_USE_MCP=true in env. When MCP is enabled, it's tried FIRST since
+  // it has direct access to live Salesforce with the business glossary built in. If MCP
+  // genuinely finds nothing relevant (foundInCrm: false) or errors, we fall through to the
+  // existing tools+RAG pipeline below instead of giving up — this is the fix for cases like
+  // "who is customer of Safi v-6" where one lookup strategy fails but another (tools/RAG)
+  // might succeed. Flip SALESFORCE_USE_MCP=false to skip MCP entirely and go straight to
+  // tools+RAG (the previous, pre-MCP behavior).
   if (process.env.SALESFORCE_USE_MCP === 'true') {
-    console.log('[salesforce] MCP mode enabled — routing to answerViaMcp()')
-    const result = await answerViaMcp(rawQuery, history, onMcpStep)
+    console.log('[salesforce] MCP mode enabled — trying answerViaMcp() first (Level 1)')
+    const mcpResult = await answerViaMcp(rawQuery, history, onMcpStep)
     recordMetric({
       timestamp: new Date().toISOString(),
       question: rawQuery,
       toolMatched: 'mcp',
-      confidence: result ? 'high' : 'low',
+      confidence: mcpResult?.foundInCrm ? 'high' : 'low',
       method: 'tool',
       latencyMs: Date.now() - startTime,
-      soqlSuccess: !!result,
+      soqlSuccess: !!mcpResult,
       guardrailBlocked: false,
       instructorRetries: 0,
-      resultCount: result ? 1 : 0,
+      resultCount: mcpResult?.foundInCrm ? 1 : 0,
     })
-    return result
+
+    if (mcpResult && mcpResult.foundInCrm) {
+      return mcpResult
+    }
+    console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')
   }
 
   // Step 0: QUERY UNDERSTANDING — LLM "thinking" step

@@ -7,32 +7,27 @@
 import { chatJson } from '@/lib/ai/provider'
 import { getMcpToolCatalogText, callMcpTool } from './mcp-client'
 import { todayStr, currentYear } from './today'
+import { getBusinessGlossaryText } from './business-glossary'
 import type { SalesforceResult, ChatTurn } from './query'
 
 const MAX_STEPS = 8
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
-const KNOWN_OBJECTS = `
-Opportunity — sales deals / property-unit sales: pipeline, stages, amounts, close dates. Each Opportunity IS one unit sale/transaction.
-  - Building_Name__c: the project/building name for THIS object (groupable in GROUP BY)
-  - Building_Community__c: also exists on Opportunity but is LESS reliably populated and CANNOT be used in GROUP BY (Salesforce platform restriction on this object) — prefer Building_Name__c for Opportunity queries/grouping
-  - Account.Name: the customer/buyer name (traverse via relationship, e.g. SELECT Account.Name FROM Opportunity)
-  - cm_Sales_Person__r.Name: the salesperson
-  - IsWon, IsClosed, StageName: deal status fields ("sales" = IsWon = true, unless asked about pipeline/lost/all)
-Property_Inventory__c — the MASTER catalog of every physical unit/property (sold, available, rented) — ~17,000+ records.
-  - Building_Community__c: THIS is the reliable, 100%-populated community/project field (52 distinct real values) — use THIS object+field for "list all communities" style questions, NOT Opportunity
-  - Property_Status__c: Available/Sold/Booked/Blocked/Reserved/Leased
-  - Selling_Price__c, Selling_Price_Per_Sq_Ft__c: pricing fields
-Account — companies / customers / buyers.
-Contact — individual people (usually linked to an Account).
-Lead — unconverted prospects.
-Task — activities: tasks, calls, meetings, to-dos.
-Case — support / service cases.
+// Object-level cheat sheet for query mechanics (GROUP BY restrictions, relationship
+// traversal syntax) — distinct from the business glossary below, which covers WHAT the
+// fields/terms MEAN, not SOQL syntax quirks.
+const SOQL_MECHANICS = `
+Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit sale/transaction.
+  - Building_Name__c is groupable in GROUP BY; Building_Community__c on THIS object is NOT (Salesforce platform restriction) — use Building_Name__c for Opportunity-side grouping
+  - Traverse to customer via Account.Name, to salesperson via cm_Sales_Person__r.Name
+Property_Inventory__c — the MASTER catalog of every physical unit/property (sold, available, rented).
+  - Building_Community__c IS groupable here (100%-populated, 52 distinct real values) — use THIS object+field for "list all communities"
 `.trim()
 
 async function buildSystemPrompt(): Promise<string> {
   const toolCatalog = await getMcpToolCatalogText()
+  const glossary = await getBusinessGlossaryText(['Account', 'Opportunity', 'Property_Inventory__c', 'Case'])
   return `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
 You have DIRECT access to Salesforce's own live data tools (via Salesforce's official MCP server). Your job is to answer the user's question by calling these tools as needed, then composing a clear, natural-language answer.
@@ -40,8 +35,10 @@ You have DIRECT access to Salesforce's own live data tools (via Salesforce's off
 AVAILABLE TOOLS:
 ${toolCatalog}
 
-KNOWN OBJECTS AND FIELDS (use this instead of spending steps on getObjectSchema for these — it's already correct and tested):
-${KNOWN_OBJECTS}
+SOQL MECHANICS (query-construction rules, tested and correct — use instead of spending steps on getObjectSchema for these):
+${SOQL_MECHANICS}
+
+${glossary}
 
 DATA QUALITY — ALWAYS EXCLUDE TEST/PLACEHOLDER RECORDS:
 - Opportunity: Amount = 1, CloseDate = 2032-12-28, cm_Sales_Person__r.Name = 'Salesforce Admin' are test/dummy records — filter these out in your WHERE clause
@@ -50,14 +47,15 @@ DATA QUALITY — ALWAYS EXCLUDE TEST/PLACEHOLDER RECORDS:
 SOQL GUIDANCE:
 - Always include a WHERE clause and LIMIT to keep queries efficient
 - For "how much/total" style questions, use COUNT(Id) and SUM(Amount) in one query
-- For fuzzy name matching (project/community names the user typed casually), use LIKE '%name%' not exact =
+- For fuzzy name matching (project/community/unit codes the user typed casually), use LIKE '%name%' not exact =
 
 RULES:
 1. Think step-by-step — break complex questions into sub-tasks
 2. Call ONE tool at a time, wait for the result, then decide the next step
-3. Maximum ${MAX_STEPS} tool calls — be efficient. Prefer using the KNOWN OBJECTS info above over calling getObjectSchema when it already answers your question.
-4. If a tool returns no data or an error, try a different query/approach before giving up
+3. Maximum ${MAX_STEPS} tool calls — be efficient. Prefer the SOQL MECHANICS and BUSINESS TERMINOLOGY above over calling getObjectSchema when they already answer your question.
+4. If a tool returns no data, TRY THE BUSINESS TERMINOLOGY MAPPING ABOVE FIRST before giving up — e.g. if searching for a unit code in Property_Inventory__c returns nothing, try Opportunity.Name instead (per the "Unit / Property code" glossary entry above) before telling the user it doesn't exist.
 5. ALWAYS finish with a clear, natural-language answer — NEVER return raw JSON, raw SOQL result objects, or tool output verbatim as your final answer. If you're running low on steps, compose the best answer you can from what you have rather than dumping raw data.
+6. If the question asks about something genuinely NOT in Salesforce (e.g. a company's industry/website/background — see the glossary entry on this), say so plainly in your answer and set "foundInCrm": false so the system can offer other sources. Do NOT cite Salesforce as your source when you found nothing relevant.
 
 CRITICAL — NEVER HALLUCINATE DATA:
 - Reproduce ONLY the exact values returned by tools — names, counts, amounts, dates
@@ -70,10 +68,11 @@ RESPONSE FORMAT — respond with ONLY one JSON object per step:
   "thought": "What I'm reasoning about and why",
   "action": "<tool-name>" | "finish",
   "params": { "<param-name>": "<value>", ... },
-  "answer": null | "If action is 'finish', compose the final answer here"
+  "answer": null | "If action is 'finish', compose the final answer here",
+  "foundInCrm": true | false
 }
 
-For "finish" action, the "answer" field MUST contain the final response to the user.
+For "finish" action, the "answer" field MUST contain the final response to the user, and "foundInCrm" MUST be true if you found real, relevant Salesforce data, or false if the CRM genuinely has nothing relevant to this question (not just "the exact search term didn't match" — try alternate lookups per the glossary before concluding this).
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
 }
 
@@ -82,11 +81,15 @@ export interface McpStepInfo {
   detail: string // the SOQL query (for soqlQuery), SOSL (for find), or params summary for other tools
 }
 
+export interface McpAnswerResult extends SalesforceResult {
+  foundInCrm: boolean
+}
+
 export async function answerViaMcp(
   query: string,
   history?: ChatTurn[],
   onStep?: (step: McpStepInfo) => void
-): Promise<SalesforceResult | null> {
+): Promise<McpAnswerResult | null> {
   const startTime = Date.now()
   try {
     const systemPrompt = await buildSystemPrompt()
@@ -102,6 +105,7 @@ export async function answerViaMcp(
     const steps: { thought: string; action: string; observation: string }[] = []
     let input = `Question: ${fullQuestion}\n\nReason about the first step to answer this question.`
     let finalAnswer: string | null = null
+    let foundInCrm = true // default optimistic — only set false when the LLM explicitly says so
 
     for (let stepNum = 0; stepNum < MAX_STEPS; stepNum++) {
       const raw = await chatJson(systemPrompt, input)
@@ -122,6 +126,7 @@ export async function answerViaMcp(
 
       if (action === 'finish' || answer) {
         finalAnswer = answer || 'No answer composed'
+        if (typeof decision.foundInCrm === 'boolean') foundInCrm = decision.foundInCrm
         steps.push({ thought, action, observation: finalAnswer })
         break
       }
@@ -150,23 +155,27 @@ export async function answerViaMcp(
       // a clean natural-language answer from what was gathered, instead of returning raw
       // tool output/JSON (which happened before this safety net was added).
       console.log('[mcp-query] max steps reached without finish — forcing final answer composition')
-      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation.slice(0, 1500)}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>"}`
+      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation.slice(0, 1500)}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
       try {
         const raw = await chatJson(systemPrompt, composePrompt)
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
         finalAnswer = String((parsed as { answer?: string }).answer || '') || null
+        if (typeof (parsed as { foundInCrm?: boolean }).foundInCrm === 'boolean') {
+          foundInCrm = (parsed as { foundInCrm: boolean }).foundInCrm
+        }
       } catch (err) {
         console.warn('[mcp-query] final answer composition failed:', err)
       }
       if (!finalAnswer) {
         finalAnswer = `I gathered some data but couldn't fully compose an answer to "${query}". Please try rephrasing or asking a more specific question.`
+        foundInCrm = false
       }
     }
 
-    console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms)`)
-    return { context: finalAnswer, citation: { documentName: 'Salesforce (live CRM via MCP)' } }
+    console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms), foundInCrm=${foundInCrm}`)
+    return { context: finalAnswer, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm }
   } catch (err) {
     console.error('[mcp-query] failed:', err)
-    return { context: `I encountered an error querying Salesforce via MCP: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'Salesforce (live CRM via MCP)' } }
+    return { context: `I encountered an error querying Salesforce via MCP: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm: false }
   }
 }
