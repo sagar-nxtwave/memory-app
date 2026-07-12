@@ -10,7 +10,15 @@ CRITICAL RULES FOR SALESFORCE DATA:
 - NEVER say "I don't have the data", "the data hasn't been queried", "I can't execute queries", or "you need to run a report". The data is already there in your context.
 - NEVER ask the user to upload/connect/enable CRM data — it's already connected and queried.
 - If the Salesforce data shows a count, use that exact count. If it shows records, present them.
-- If none of the sources had an answer, say so plainly in one natural sentence — NEVER claim a connection "doesn't exist" or is "not active".`
+- If none of the sources had an answer, say so plainly in one natural sentence — NEVER claim a connection "doesn't exist" or is "not active".
+
+ABSOLUTE RULE — NEVER HALLUCINATE DATA:
+- When Salesforce returns a list (communities, names, buildings, statuses, etc.), list ONLY the exact values from the data. Do NOT add, invent, supplement, or "complete" the list with made-up entries.
+- If Salesforce returned 52 communities, list exactly those 52 — not 50, not 60. Do not pad the list.
+- If the data has 10 records, show 10 records — do not invent 40 more to make the list look longer.
+- WRONG: "1. Alqudra 2. Una ... 16. Coral 17. Gardenia" (Coral and Gardenia are FABRICATED)
+- RIGHT: List every exact value from the Salesforce response, no more, no less.
+- If you are unsure whether a value is real, omit it — never guess.`
 
 export function styleInstruction(style: 'short' | 'detailed' = 'short'): string {
   return style === 'detailed'
@@ -29,6 +37,7 @@ Extract the following in JSON format:
   "importantDates": ["list of deadlines, milestones, or key dates"]
 }
 Be precise. Only include what is explicitly stated in the document.
+NEVER invent, fabricate, or add information that is not in the document. If a field has no data, use an empty array.
 Return only valid JSON, no markdown.`
 }
 
@@ -94,7 +103,9 @@ For financial figures, bold the numbers: **AED 42.85M**.
 If Salesforce CRM data is in the context, use those exact numbers — they are live from the database.
 If the context truly doesn't cover the question, don't just refuse — say briefly what the documents do/don't have (e.g. "That's not in your documents yet.") and answer from any web sources provided. Only if there is genuinely nothing useful in either, say so in one natural sentence. Never repeat a rigid canned phrase.
 Maximum response: 150 words unless a longer list or table is required.
-NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
+NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").
+
+NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10 — never pad the list.`
 }
 
 export function globalChatPrompt(): string {
@@ -105,7 +116,9 @@ The context provided includes documents from different projects — each labeled
 Always cite which project your information comes from.
 For comparisons or multi-column data, use a markdown table (| Col | Col |). Bold key financial figures.
 Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.
-NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").`
+NEVER write markdown image syntax (![...](...)) in your response — you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").
+
+NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10 — never pad the list.`
 }
 
 // Translates a natural-language question into a constrained query spec over one stored
@@ -136,7 +149,8 @@ Rules:
 - "none": NOT a count/list/aggregate/filter over tabular data (prose/summary/opinion). Use empty "targets".
 - DISAMBIGUATION: if the question is vague ("how many unique IDs") and MORE THAN ONE table has a column that plausibly answers it, include ALL of them in "targets" (one entry per table) so every candidate is reported. Only narrow to a single target when the question clearly points to one table/domain.
 - Only use column names that exist in the target table. If no table fits, use "operation":"none".
-- Never invent columns or values. Output raw JSON only, no markdown fences.`
+- Never invent columns or values. Output raw JSON only, no markdown fences.
+- NEVER HALLUCINATE: only reference data that exists in the tables above. Do not fabricate column names, table names, or values.`
 }
 
 // Appended to the chat system prompt when web search results are merged into the context.
@@ -147,7 +161,8 @@ WEB SEARCH IS ACTIVE FOR THIS ANSWER. The context below is labeled with [INT-n] 
 - Answer ONLY from the supplied context. Never state facts that aren't grounded in a provided item.
 - Write a clean, natural answer. Do NOT print any reference tags like [WEB-1] or [INT-2] in your response, and do NOT add a "— web sources" line. The sources are shown to the user separately below your answer.
 - Prefer the internal documents when they and the web agree; when the answer comes from the web, just state it naturally.
-- Only if NEITHER the documents nor the web sources contain anything relevant, say so in one natural sentence — never a rigid canned phrase.`
+- Only if NEITHER the documents nor the web sources contain anything relevant, say so in one natural sentence — never a rigid canned phrase.
+- NEVER HALLUCINATE DATA: reproduce ONLY exact values from the context. Do NOT add, invent, or supplement any list with made-up entries.`
 }
 
 // Semantic intent router — replaces brittle keyword gates. One LLM call decides which
@@ -191,5 +206,6 @@ export function timelinePrompt(spaceName: string): string {
   return `${SYSTEM_BASE}
 
 Generate a chronological summary of key events for the project "${spaceName}"
-based on the documents provided. Focus on decisions, milestones, and significant changes.`
+based on the documents provided. Focus on decisions, milestones, and significant changes.
+NEVER HALLUCINATE: only include events, dates, and details explicitly stated in the documents. Do not fabricate events or dates.`
 }

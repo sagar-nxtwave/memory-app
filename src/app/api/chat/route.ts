@@ -492,6 +492,18 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
       try {
         send({ type: 'start', userMessageId: userMsg.id })
 
+        const steps: string[] = []
+        const emitStep = (step: string) => { steps.push(step); send({ type: 'thinking', step, index: steps.length }) }
+
+        if (skipRetrieval) {
+          emitStep('Processing your message...')
+        } else {
+          emitStep('Understanding your question...')
+          if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
+          if (intent.documents) emitStep('Searching documents for relevant content...')
+          if (intent.web) emitStep('Searching the web for supplementary information...')
+        }
+
         let fullContent = ''
         for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
           fullContent += chunk

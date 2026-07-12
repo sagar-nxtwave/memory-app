@@ -346,31 +346,55 @@ export const EXTRACT_MODEL = process.env.OPENROUTER_EXTRACT_MODEL ?? CHAT_MODEL
  * the response must be parseable JSON. Throws on failure or unparseable output.
  */
 export async function chatJson(systemPrompt: string, userMessage: string): Promise<string> {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: openRouterHeaders(),
-    body: JSON.stringify({
-      model: EXTRACT_MODEL,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error(`OpenRouter error ${res.status}: ${err}`)
+  const maxRetries = 2
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 60000) // 60s timeout for JSON mode
+      
+      const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: openRouterHeaders(),
+        body: JSON.stringify({
+          model: EXTRACT_MODEL,
+          max_tokens: 2048,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+        }),
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+      
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText)
+        // Retry on rate limit (429) or server errors (5xx)
+        if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000
+          console.log(`[provider] retry ${attempt + 1}/${maxRetries} after ${delay}ms (status=${res.status})`)
+          await new Promise(r => setTimeout(r, delay))
+          continue
+        }
+        throw new Error(`OpenRouter error ${res.status}: ${err}`)
+      }
+      
+      const data = await res.json()
+      const raw = data.choices?.[0]?.message?.content ?? ''
+      // response_format: json_object is a best-effort instruction, not an enforced guarantee
+      // on every model OpenRouter proxies — some wrap the JSON in a ```json ... ``` fence
+      // anyway (seen intermittently, not on every call for the same model/input). Strip it.
+      const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+      return fenceMatch ? fenceMatch[1] : raw
+    } catch (err) {
+      if (attempt === maxRetries) throw err
+      const delay = Math.pow(2, attempt) * 1000
+      console.log(`[provider] retry ${attempt + 1}/${maxRetries} after ${delay}ms (error)`)
+      await new Promise(r => setTimeout(r, delay))
+    }
   }
-
-  const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content ?? ''
-  // response_format: json_object is a best-effort instruction, not an enforced guarantee
-  // on every model OpenRouter proxies — some wrap the JSON in a ```json ... ``` fence
-  // anyway (seen intermittently, not on every call for the same model/input). Strip it.
-  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
-  return fenceMatch ? fenceMatch[1] : raw
+  throw new Error('chatJson failed after retries')
 }
 
 // Whisper transcription via OpenRouter — routed through OUR backend instead of the browser
@@ -408,26 +432,50 @@ export async function chat(
   userMessage: string,
   history: { role: 'user' | 'assistant'; content: string }[] = []
 ): Promise<string> {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: openRouterHeaders(),
-    body: JSON.stringify({
-      model: CHAT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error(`OpenRouter error ${res.status}: ${err}`)
+  const maxRetries = 2
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 60000) // 60s timeout
+      
+      const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: openRouterHeaders(),
+        body: JSON.stringify({
+          model: CHAT_MODEL,
+          max_tokens: 4096,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history,
+            { role: 'user', content: userMessage },
+          ],
+        }),
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+      
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText)
+        // Retry on rate limit (429) or server errors (5xx)
+        if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000
+          console.log(`[provider] retry ${attempt + 1}/${maxRetries} after ${delay}ms (status=${res.status})`)
+          await new Promise(r => setTimeout(r, delay))
+          continue
+        }
+        throw new Error(`OpenRouter error ${res.status}: ${err}`)
+      }
+      
+      const data = await res.json()
+      return data.choices?.[0]?.message?.content ?? ''
+    } catch (err) {
+      if (attempt === maxRetries) throw err
+      const delay = Math.pow(2, attempt) * 1000
+      console.log(`[provider] retry ${attempt + 1}/${maxRetries} after ${delay}ms (error)`)
+      await new Promise(r => setTimeout(r, delay))
+    }
   }
-
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content ?? ''
+  throw new Error('chat failed after retries')
 }
 
 export async function* chatStream(
@@ -440,6 +488,7 @@ export async function* chatStream(
     headers: openRouterHeaders(),
     body: JSON.stringify({
       model: CHAT_MODEL,
+      max_tokens: 4096,
       stream: true,
       messages: [
         { role: 'system', content: systemPrompt },

@@ -13,6 +13,8 @@ import { todayStr, currentYear, dateContext } from './today'
 import { expandQuery } from './query-expansion'
 import { compressContext, quickCompress } from './context-compression'
 import { understandQuery, quickUnderstand, type UnderstoodQuery } from './query-understanding'
+import { executeReActLoop, needsReActLoop } from './react-loop'
+import { maskSensitiveData } from './privacy-filter'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -69,7 +71,7 @@ function isVagueFollowUp(query: string): boolean {
 }
 
 // Queries that need the tool matcher (not direct fallback)
-const TOOL_MATCHER_EXCLUSIONS_RE = /\b(cancellation rate|cancel percentage|cancel rate|recent cancelled|cancelled deals|individual vs corporate|customer type|account type|top.*customer.*revenue|highest spending|won vs lost|win.?loss|cases by channel|phone vs email|escalated cases?|case escalat|mortgage status|mortgage type|mortgaged vs|active mortgage|cancellation rate by|sales room|bedroom wise|bedroom data|room wise|call inquiries|call channel|phone inquiries|most selling|what selling|best selling|which project|most popular|bedroom.*breakdown|unit type|breakdown by customer|customer names|quarterly|quarter|project.*compare|compare.*project|bedroom.*year|year.*bedroom)\b/i
+const TOOL_MATCHER_EXCLUSIONS_RE = /\b(cancellation rate|cancel percentage|cancel rate|recent cancelled|cancelled deals|individual vs corporate|customer type|account type|top.*customer.*revenue|highest spending|won vs lost|win.?loss|cases by channel|phone vs email|escalated cases?|case escalat|mortgage status|mortgage type|mortgaged vs|active mortgage|cancellation rate by|sales room|bedroom wise|bedroom data|room wise|call inquiries|call channel|phone inquiries|most selling|what selling|best selling|which project|most popular|bedroom.*breakdown|unit type|breakdown by customer|customer names|quarterly|quarter|project.*compare|compare.*project|bedroom.*year|year.*bedroom|communit)\b/i
 
 function needsToolMatcher(query: string): boolean {
   return TOOL_MATCHER_EXCLUSIONS_RE.test(query)
@@ -271,14 +273,46 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
           console.log('[salesforce] verification issues:', verification.issues)
         }
 
-        if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
+        // Only override with refinedAnswer if score is very low AND there's actual data issues
+        // Don't override valid tool results with SOQL suggestions
+        if (verification.recommendation === 'clarify' && verification.refinedAnswer && verification.score < 20) {
+          console.log('[salesforce] verifier override (score=' + verification.score + '), using refinedAnswer')
           return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
         }
 
-        recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
-        return result
+        // If verifier says retry, fall through to ad-hoc/catch-all instead of returning
+        if (verification.recommendation === 'retry' && verification.score < 40) {
+          console.log('[salesforce] verifier recommends retry (score=' + verification.score + '), trying fallback')
+        } else {
+          recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
+          return result
+        }
       }
       console.log('[salesforce] tool returned null, trying fallback')
+    }
+  }
+
+  // Step 6.5: ReAct loop for complex multi-step questions
+  // If the question needs multi-step reasoning, use the ReAct loop
+  if (needsReActLoop(query) || needsReActLoop(rawQuery)) {
+    console.log('[salesforce] question needs multi-step reasoning, using ReAct loop')
+    try {
+      const reactResult = await executeReActLoop(query, history)
+      if (reactResult.finalAnswer && reactResult.confidence !== 'low') {
+        console.log(`[salesforce] ReAct loop completed in ${reactResult.steps.length} steps (${reactResult.totalLatencyMs}ms)`)
+        
+        // Verify the ReAct result
+        const verification = await verifyAnswer(query, null, reactResult.finalAnswer, 'react-loop')
+        console.log(`[salesforce] ReAct verification score: ${verification.score}/100`)
+        
+        if (verification.score >= 40) {
+          recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: 'react-loop', confidence: verification.confidence, method: 'react-loop', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: reactResult.toolsUsed.length })
+          return { context: reactResult.finalAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
+        }
+      }
+      console.log('[salesforce] ReAct loop did not produce confident result, trying fallback')
+    } catch (err) {
+      console.warn('[salesforce] ReAct loop failed:', err)
     }
   }
 
@@ -334,7 +368,9 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
 // DATA QUALITY FILTER — excludes test/placeholder records from results
 // NOTE: SOQL doesn't support NOT(...) well; use individual AND conditions
 // ─────────────────────────────────────────────────────────────────────────────
-const TEST_RECORD_AND = " AND Amount != 1 AND CloseDate != 2032-12-28 AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
+// SOQL-safe test record filter — mirrors isTestOpportunity() logic for direct fallback queries
+// NOTE: SOQL LIKE is case-insensitive; NOT LIKE with year prefix blocks all 2032 dates
+const TEST_RECORD_AND = " AND Amount != 1 AND NOT (CloseDate >= 2032-01-01 AND CloseDate <= 2032-12-31) AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIRECT KEYWORD FALLBACK — runs when query has no date references and is not a vague follow-up.
@@ -346,6 +382,12 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   // Extract "top N" limit from query
   const topMatch = q.match(/\btop\s+(\d+)/)
   const limit = topMatch ? parseInt(topMatch[1], 10) : 20
+
+  // ── COMMUNITY LISTING (highest priority — user wants community names) ──
+  if (q.includes('communit') && (q.includes('list') || q.includes('show') || q.includes('give') || q.includes('all') || q.includes('available') || q.includes('what'))) {
+    const result = await soql(`SELECT Building_Community__c FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c ORDER BY Building_Community__c`)
+    return formatDirectResult(result, 'Property_Inventory__c')
+  }
 
   // ── LIST / SHOW QUERIES (highest priority — user wants records, not aggregates) ──
 
@@ -590,9 +632,39 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     return formatDirectResult(result, 'Case')
   }
 
-  // Generic sales count
+  // Generic sales count — but check for "per/by [dimension]" patterns first
   if (q.includes('how many') || q.includes('number of') || q.includes('count')) {
     if (q.includes('deal') || q.includes('sale') || q.includes('opportunit')) {
+      // "how many deals per/by salesperson/community/agent" → route to aggregate
+      if (q.includes(' per ') || q.includes(' by ') || q.includes('per ') || q.includes('by ')) {
+        if (q.includes('salesperson') || q.includes('person') || q.includes('advisor')) {
+          const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY COUNT(Id) DESC`)
+          return formatDirectResult(result, 'Opportunity')
+        }
+        if (q.includes('community') || q.includes('project') || q.includes('location') || q.includes('building')) {
+          const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt FROM Opportunity WHERE Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC`)
+          return formatDirectResult(result, 'Opportunity')
+        }
+        if (q.includes('agent') || q.includes('broker')) {
+          const result = await soql(`SELECT cm_Agent_Name__r.Name, COUNT(Id) cnt FROM Opportunity WHERE cm_Agent_Name__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Agent_Name__r.Name ORDER BY COUNT(Id) DESC`)
+          return formatDirectResult(result, 'Opportunity')
+        }
+        if (q.includes('month')) {
+          const result = await soql(`SELECT CALENDAR_MONTH(CloseDate) month, COUNT(Id) cnt FROM Opportunity WHERE StageName = 'Closed Won' GROUP BY CALENDAR_MONTH(CloseDate) ORDER BY CALENDAR_MONTH(CloseDate)`)
+          return formatDirectResult(result, 'Opportunity')
+        }
+        if (q.includes('quarter')) {
+          const result = await soql(`SELECT QUARTER(CloseDate) quarter, COUNT(Id) cnt FROM Opportunity WHERE StageName = 'Closed Won' GROUP BY QUARTER(CloseDate) ORDER BY QUARTER(CloseDate)`)
+          return formatDirectResult(result, 'Opportunity')
+        }
+      }
+      // Extract community name from "how many deals in Camden" pattern
+      const communityMatch = q.match(/(?:how many|number of|count)\s+(?:deals?|sales?|opportunit\w*)\s+(?:in|for)\s+(.+?)(?:\?|$)/i)
+      if (communityMatch) {
+        const community = communityMatch[1].trim().replace(/'/g, "")
+        const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%') AND StageName = 'Closed Won'`)
+        return formatDirectResult(result, 'Opportunity')
+      }
       const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE StageName = 'Closed Won'`)
       return formatDirectResult(result, 'Opportunity')
     }
@@ -625,7 +697,7 @@ function formatDirectResult(result: { records: Record<string, unknown>[]; totalS
   }
 
   // Regular records — format as clean table
-  const rows = result.records.slice(0, 50).map((r) => {
+  const rows = result.records.slice(0, 100).map((r) => {
     const { attributes, ...fields } = r
     void attributes
     return Object.entries(fields)
@@ -655,6 +727,19 @@ function formatDirectResult(result: { records: Record<string, unknown>[]; totalS
 // ─────────────────────────────────────────────────────────────────────────────
 async function catchAllFallback(query: string): Promise<SalesforceResult | null> {
   const q = query.toLowerCase()
+
+  // Community/listing queries — catch "give me all the community available" and similar
+  if (q.includes('communit')) {
+    try {
+      const result = await soql(`SELECT Building_Community__c FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c ORDER BY Building_Community__c`)
+      if (result.records && result.records.length > 0) {
+        return formatDirectResult(result, 'Property_Inventory__c')
+      }
+      // Fallback: try by building name
+      const altResult = await soql(`SELECT Building_Name__c FROM Property_Inventory__c WHERE Building_Name__c != null GROUP BY Building_Name__c ORDER BY Building_Name__c`)
+      return formatDirectResult(altResult, 'Property_Inventory__c')
+    } catch { /* fall through */ }
+  }
 
   // Case/support queries
   if (q.includes('case') || q.includes('cases') || q.includes('support') || q.includes('service')) {

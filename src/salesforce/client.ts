@@ -13,43 +13,86 @@ interface TokenState {
 // Module-level cache — a Salesforce access token is valid for the session lifetime, so we
 // reuse it across requests instead of authenticating every call.
 let cached: TokenState | null = null
+let authPromise: Promise<TokenState> | null = null
 
 async function authenticate(config: SalesforceConfig): Promise<TokenState> {
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-  })
-  const res = await fetch(`${config.loginUrl}/services/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error(`Salesforce auth failed ${res.status}: ${err.slice(0, 300)}`)
+  // If another request is already authenticating, wait for it
+  if (authPromise) return authPromise
+  
+  authPromise = (async () => {
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+    })
+    const res = await fetch(`${config.loginUrl}/services/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    })
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText)
+      throw new Error(`Salesforce auth failed ${res.status}: ${err.slice(0, 300)}`)
+    }
+    const data = await res.json()
+    if (!data.access_token) throw new Error('Salesforce auth returned no access_token')
+    const state: TokenState = { accessToken: data.access_token, instanceUrl: data.instance_url ?? config.loginUrl }
+    cached = state
+    return state
+  })()
+  
+  try {
+    return await authPromise
+  } finally {
+    authPromise = null
   }
-  const data = await res.json()
-  if (!data.access_token) throw new Error('Salesforce auth returned no access_token')
-  const state: TokenState = { accessToken: data.access_token, instanceUrl: data.instance_url ?? config.loginUrl }
-  cached = state
-  return state
 }
 
 // GET a Salesforce REST path (relative to /services/data/vXX). Re-auths once on 401.
-async function authedGet(pathAndQuery: string): Promise<Response> {
+// Includes retry with exponential backoff for rate limits (429) and transient errors.
+async function authedGet(pathAndQuery: string, retries = 2): Promise<Response> {
   const config = getSalesforceConfig()
   if (!config.enabled) throw new Error('Salesforce is not configured')
   const base = (token: TokenState) => `${token.instanceUrl}/services/data/v${config.apiVersion}${pathAndQuery}`
 
   let token = cached ?? (await authenticate(config))
-  let res = await fetch(base(token), { headers: { Authorization: `Bearer ${token.accessToken}` } })
-  if (res.status === 401) {
-    cached = null
-    token = await authenticate(config)
-    res = await fetch(base(token), { headers: { Authorization: `Bearer ${token.accessToken}` } })
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      
+      let res = await fetch(base(token), { 
+        headers: { Authorization: `Bearer ${token.accessToken}` },
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+      
+      if (res.status === 401) {
+        cached = null
+        token = await authenticate(config)
+        res = await fetch(base(token), { headers: { Authorization: `Bearer ${token.accessToken}` } })
+      }
+      
+      // Retry on rate limit (429) or server errors (5xx)
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        const retryAfter = res.headers.get('Retry-After')
+        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000
+        console.log(`[salesforce] retry ${attempt + 1}/${retries} after ${delay}ms (status=${res.status})`)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+      
+      return res
+    } catch (err) {
+      if (attempt === retries) throw err
+      const delay = Math.pow(2, attempt) * 1000
+      console.log(`[salesforce] retry ${attempt + 1}/${retries} after ${delay}ms (error)`)
+      await new Promise(r => setTimeout(r, delay))
+    }
   }
-  return res
+  
+  throw new Error('Salesforce request failed after retries')
 }
 
 export interface SoqlResult {

@@ -6,7 +6,7 @@ export interface QueryMetric {
   question: string
   toolMatched: string | null
   confidence: 'high' | 'medium' | 'low'
-  method: 'direct' | 'tool' | 'ad-hoc' | 'catch-all' | 'fallback' | 'expansion'
+  method: 'direct' | 'tool' | 'ad-hoc' | 'catch-all' | 'fallback' | 'expansion' | 'react-loop' | 'eval' | 'production'
   latencyMs: number
   soqlSuccess: boolean
   soqlError?: string

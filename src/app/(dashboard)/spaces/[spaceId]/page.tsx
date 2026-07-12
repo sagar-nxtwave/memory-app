@@ -11,7 +11,7 @@ import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string }
-interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[] }
+interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[] }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number; version: number }
 interface PendingUpload { id: string; file: File; title: string; description: string; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; error?: string }
 interface DocDetail extends Doc {
@@ -326,6 +326,12 @@ export default function SpacePage() {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'start') {
               setMessages((p) => p.map((m) => (m.id === tempUserId ? { ...m, id: event.userMessageId } : m)))
+            } else if (event.type === 'thinking') {
+              setMessages((p) => p.map((m) => {
+                if (m.id !== sid) return m
+                const steps = [...(m.thinkingSteps ?? []), event.step]
+                return { ...m, thinkingSteps: steps }
+              }))
             } else if (event.type === 'delta') {
               accumulated += event.content
             } else if (event.type === 'done') {
@@ -365,7 +371,7 @@ export default function SpacePage() {
     setMessages((p) => [
       ...p,
       { id: tempUserId, role: 'user', content, createdAt: new Date().toISOString() },
-      { id: sid, role: 'assistant', content: '', createdAt: new Date().toISOString() },
+      { id: sid, role: 'assistant', content: '', createdAt: new Date().toISOString(), thinkingSteps: [] },
     ])
     setStreamingMessageId(sid)
 
@@ -391,7 +397,7 @@ export default function SpacePage() {
     setMessages((p) => [
       ...p,
       { id: tempUserId, role: 'user', content: label, createdAt: new Date().toISOString() },
-      { id: sid, role: 'assistant', content: '', createdAt: new Date().toISOString() },
+      { id: sid, role: 'assistant', content: '', createdAt: new Date().toISOString(), thinkingSteps: [] },
     ])
     setStreamingMessageId(sid)
 
@@ -1578,6 +1584,7 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
   const showDots = isStreaming && message.content === ''
   const [displayed, setDisplayed] = useState(message.isTyping ? '' : message.content)
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
+  const [thinkingOpen, setThinkingOpen] = useState(false)
 
   const handleVote = async (v: 'up' | 'down') => {
     const next = vote === v ? null : v
@@ -1629,6 +1636,33 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))
         ) : (
+          <div>
+            {message.thinkingSteps && message.thinkingSteps.length > 0 && (
+              <div className="mb-2">
+                <button
+                  onClick={() => setThinkingOpen((o) => !o)}
+                  className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                  <span className="font-medium">Thinking process</span>
+                  <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
+                </button>
+                {thinkingOpen && (
+                  <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
+                    {message.thinkingSteps.map((step, i) => (
+                      <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           <div className="markdown-body">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -1724,6 +1758,7 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
                 </button>
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

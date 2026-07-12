@@ -1,0 +1,4538 @@
+[
+  {
+    "id": "client-1783840909633-7l55gq",
+    "question": "Who is this customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.633Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-noc9jr",
+    "question": "Is this customer an individual, company, or retail customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-aksrzq",
+    "question": "What is the customer’s registered address?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-n0j6jg",
+    "question": "Which country does the customer live in?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-kb2eik",
+    "question": "What is the customer’s nationality?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-i5fv3b",
+    "question": "How old is the customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-xl65vn",
+    "question": "How many property transactions does this customer have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-nym5gp",
+    "question": "Is this a new customer or an existing customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-1l6gud",
+    "question": "Does this customer have more than one property transaction?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-7bbzfr",
+    "question": "What is the name of the company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-uqq0wo",
+    "question": "Who is the primary contact for this company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-ip8udv",
+    "question": "Who are the other contacts linked to this company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-754uqv",
+    "question": "What is the job title of the primary contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-zvqq17",
+    "question": "What is the mailing address of the company contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-qjuka2",
+    "question": "Show me a short summary of this customer.?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-lwa3tk",
+    "question": "Show me all customers who have more than one opportunity.?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-esoiw9",
+    "question": "How many individual customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-vg0zya",
+    "question": "How many corporate customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-hpcgzi",
+    "question": "How many retail customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-fc0sgu",
+    "question": "Which country has the highest number of customers?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-dikdik",
+    "question": "How many customers are from the UAE?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-fo51wa",
+    "question": "What is the average age of individual customers?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-osz3mw",
+    "question": "How many customers do not have an address?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-uz29bk",
+    "question": "How many corporate accounts do not have a primary contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.634Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909634-h2nd9l",
+    "question": "Which customers have no linked opportunities?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-ybjdon",
+    "question": "What property transaction is linked to this customer?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-p29wqb",
+    "question": "What is the current stage of the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-f8htl0",
+    "question": "Is the sales offer still being prepared?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-bemzr5",
+    "question": "Is the transaction waiting for admin approval?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-qu9gps",
+    "question": "Was the transaction successfully closed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-ica48j",
+    "question": "Was the transaction lost?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-wufr63",
+    "question": "Which building is linked to the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-4l8jzo",
+    "question": "Which community is the property located in?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-6ye4ss",
+    "question": "Who is the salesperson handling this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-z94box",
+    "question": "How did the customer hear about us?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-mzqgek",
+    "question": "Which sales channel brought this customer?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-vnotgk",
+    "question": "What is the transaction amount?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-208wv6",
+    "question": "What is the net amount of the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-w6pdpy",
+    "question": "When was the property booked?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-690q2n",
+    "question": "When was the order created?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-iz825d",
+    "question": "When was the transaction closed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-aykq55",
+    "question": "What is the current mortgage status?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-h57kc0",
+    "question": "Is the property currently mortgaged?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-5gh07c",
+    "question": "Was the mortgage terminated?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-ycwljx",
+    "question": "What is the latest property milestone?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-642jvn",
+    "question": "Has the customer been informed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-eq9a1a",
+    "question": "Has the customer appointment been scheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-rzwuzy",
+    "question": "Is the customer appointment waiting to be rescheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-fhowce",
+    "question": "Has the quality inspection been approved?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-2ua191",
+    "question": "Is there a snag list?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-88m7mg",
+    "question": "Has deep cleaning been completed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-7m9obq",
+    "question": "Has the handover notification been sent?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-qcgfq9",
+    "question": "Has the key-release appointment been scheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-y29s6b",
+    "question": "Has the property handover been completed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-w7x2f5",
+    "question": "Which agency handled this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-fcu873",
+    "question": "Which agent handled this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-62euzj",
+    "question": "Was this a direct sale?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-oeihxk",
+    "question": "Which sales room handled the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-mww2zt",
+    "question": "What is the order status?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-bdce0v",
+    "question": "Give me a short summary of this opportunity.?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-mb336e",
+    "question": "How many opportunities are currently active?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-u4hvnp",
+    "question": "How many opportunities are generating sales offers?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-m5k2s1",
+    "question": "How many opportunities are waiting for admin approval?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-ro81x5",
+    "question": "How many opportunities are Closed Won?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-moiqt5",
+    "question": "How many opportunities are Closed Lost?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-7oxo92",
+    "question": "What is the total value of Closed Won opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-x51k02",
+    "question": "What is the total net amount of Closed Won opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-iuu154",
+    "question": "What is the average opportunity amount?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-6he2en",
+    "question": "Which building has the highest number of transactions?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-5tellf",
+    "question": "Which community has the highest number of sales?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-4ik81v",
+    "question": "Which salesperson has handled the most opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-9uj539",
+    "question": "Which salesperson has the highest sales value?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-acy06i",
+    "question": "Which lead source generated the most opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-4t57bq",
+    "question": "Which sales channel generated the highest-value opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-3jsp3e",
+    "question": "How many direct-sale opportunities do we have?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-oqrbka",
+    "question": "How many opportunities came through agents?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-o6ng2t",
+    "question": "How many opportunities came through social media?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-b074zq",
+    "question": "How many opportunities came through the website?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-r7oeng",
+    "question": "How many opportunities came through referrals?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-2rpd29",
+    "question": "How many customers came through WhatsApp?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-nucfyq",
+    "question": "How many opportunities were booked this month?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-7b6z84",
+    "question": "How many properties were booked this year?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-s20jfv",
+    "question": "What was the total booking value this year?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-awy2ix",
+    "question": "Which month had the highest number of bookings?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-iuvkjj",
+    "question": "Which month had the highest sales value?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-m0ulss",
+    "question": "How many opportunities currently have a valid mortgage?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-ph66sk",
+    "question": "How many opportunities are not mortgaged?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-bul6nk",
+    "question": "How many mortgages have been terminated?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-jgvv6q",
+    "question": "How many properties have completed handover?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-4hi5fc",
+    "question": "How many properties are still waiting for customer orientation?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-4md0x0",
+    "question": "How many properties are waiting for deep cleaning?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-5196yv",
+    "question": "How many properties are blocked by Legal?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-kg0xzg",
+    "question": "How many properties are pending with Projects?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-t1i4qm",
+    "question": "How many key-release appointments are scheduled?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-pbl29v",
+    "question": "How many customer appointments need to be rescheduled?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-yzev7z",
+    "question": "What property reference is linked to this transaction?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-9k8c6n",
+    "question": "What is the order status for this property transaction?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-tri4xg",
+    "question": "What is the order date?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-a07qwl",
+    "question": "What is the plot area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-fg20eb",
+    "question": "What is the total area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-mogajh",
+    "question": "What is the saleable or leasable area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.635Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909635-zircfq",
+    "question": "What is the terrace area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-02niju",
+    "question": "What is the garage area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gr4y4q",
+    "question": "How many parking spaces are included?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-24fwfi",
+    "question": "What is the construction status?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-z453j6",
+    "question": "What is the selling price?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-07gfw5",
+    "question": "What is the net selling price?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-4l6w8f",
+    "question": "What is the net amount?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-1wqrx3",
+    "question": "What is the net amount including VAT?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-x9d5dg",
+    "question": "How much money has been received and cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-q527n8",
+    "question": "What percentage of receipts has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-zahu98",
+    "question": "What percentage of installments has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-4bgz4o",
+    "question": "What percentage of invoices has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-mqhfgf",
+    "question": "Has the customer cleared all installments?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-deh60w",
+    "question": "Has the customer cleared all invoices?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ikho8x",
+    "question": "Is the payment clearance below 50%?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-qxkwxx",
+    "question": "Give me a financial summary of this property transaction.?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-mow7lk",
+    "question": "Give me an area and parking summary of this property transaction.?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-dmj7bp",
+    "question": "Are the order status values on Opportunity and Opportunity Property the same?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-cj80a7",
+    "question": "Are the order dates on Opportunity and Opportunity Property the same?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-aya5mg",
+    "question": "How many transactions have less than 50% receipt clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-1rf149",
+    "question": "How many transactions have 100% installment clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-4ylbqa",
+    "question": "How many transactions have 100% invoice clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-1i48qg",
+    "question": "What is the total cleared receipt amount?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-2h0lrg",
+    "question": "What is the average receipt-clearance percentage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "hard",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-pm2t5v",
+    "question": "What is the average installment-clearance percentage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "hard",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-wj2r8v",
+    "question": "Which transactions have payment clearance below 25%?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ud5rlw",
+    "question": "Which transactions have a high selling price but low payment clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-mvh8ig",
+    "question": "Which properties have more than two parking spaces?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ggk5ky",
+    "question": "What is the average saleable area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-64ywzt",
+    "question": "What is the average total area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-agw5xk",
+    "question": "Which property transaction has the largest plot area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ty2k6s",
+    "question": "Which property transaction has the largest terrace?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-im6muj",
+    "question": "Which property transaction has the largest garage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-3l4o0c",
+    "question": "How many properties are still under construction?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ctdxs0",
+    "question": "How many property transactions have missing construction status?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-b1gv77",
+    "question": "How many records have a different selling price and net selling price?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-uk3cli",
+    "question": "What is the total net amount including VAT?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-pvihgg",
+    "question": "Which transactions have missing order dates?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-kxnd7z",
+    "question": "Which property references appear more than once?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium",
+    "tags": [
+      "opportunity"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-e9oqj1",
+    "question": "What is the current status of this unit?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-rf4pyh",
+    "question": "Is this unit available?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-vi0g9v",
+    "question": "Is this unit reserved?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-44zyn8",
+    "question": "Is this unit booked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-zk83cb",
+    "question": "Is this unit sold?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-93ugy5",
+    "question": "Is this unit blocked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-yi6v7a",
+    "question": "Is this unit online blocked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-w0psfb",
+    "question": "Is this unit leased?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-o5c8ab",
+    "question": "Is this unit for sale or rent?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ocy4u7",
+    "question": "What type of property is this?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-a1x6vs",
+    "question": "Is this a villa, apartment, townhouse, or another type?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-19uoln",
+    "question": "What is the unit configuration?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "hard",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-np1dag",
+    "question": "What view does the unit have?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ewb3hr",
+    "question": "What is the unit position?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gk9q4j",
+    "question": "Which building or project is the unit in?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-w29ytz",
+    "question": "What is the property usage?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-tc6qic",
+    "question": "Is the unit residential?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-5j76sh",
+    "question": "What is the estimated completion date?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-hgsfmn",
+    "question": "What is the base price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-slcq5b",
+    "question": "What is the strategic selling price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-s6kabc",
+    "question": "What is the current selling price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-itlqs0",
+    "question": "What is the selling price per square foot?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-mjz8vm",
+    "question": "What is the DLD total area?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-r21vdn",
+    "question": "Give me a short summary of this inventory unit.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-xqnczz",
+    "question": "Show me available units in this building.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-aw1occ",
+    "question": "Show me available villas.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-rbzce1",
+    "question": "Show me available rental units.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-k5eqjv",
+    "question": "Show me available residential units.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-9deb71",
+    "question": "Show me units that are expected to complete this year.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium",
+    "tags": [
+      "actual"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ju25eu",
+    "question": "How many total inventory units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-beg3op",
+    "question": "How many units are available?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-oezvxy",
+    "question": "How many units are reserved?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-92d1lm",
+    "question": "How many units are booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-zxdjz9",
+    "question": "How many units are sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-r7aj5p",
+    "question": "How many units are blocked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-oia8km",
+    "question": "How many units are online blocked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-w6o2yv",
+    "question": "How many units are leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-6qcrxp",
+    "question": "How many units are for sale?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-a1psn2",
+    "question": "How many units are for rent?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-i2qh6h",
+    "question": "How many commercially blocked units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gfjztz",
+    "question": "How many available sales units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-iukgrs",
+    "question": "How many available rental units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-holi1l",
+    "question": "How many rental units are currently leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-r6l32m",
+    "question": "How many sales units are currently booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-sbs9qo",
+    "question": "How many sales units are currently reserved?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-qmibmd",
+    "question": "How many sales units have already been sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-qlu21u",
+    "question": "How many villas do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-4qzwz8",
+    "question": "How many apartments do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-madz2p",
+    "question": "How many residential units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-51pwch",
+    "question": "How many retail units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-fm2vde",
+    "question": "How many units are available in each building?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-o12z3f",
+    "question": "How many sold units are there in each community or project?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-dgmlzd",
+    "question": "Which building has the most available units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-315yaq",
+    "question": "Which building has the most sold units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-wwgia8",
+    "question": "Which building has the most blocked units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gd5ea7",
+    "question": "Which property type has the most inventory?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-6xf0bb",
+    "question": "What percentage of the inventory is sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-djv95r",
+    "question": "What percentage of the inventory is available?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-hqxez5",
+    "question": "What percentage of rental units are leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-tiqn76",
+    "question": "What percentage of sales inventory is booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-q8ktj7",
+    "question": "How many units are temporarily unavailable?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-almc1t",
+    "question": "How many units are blocked, including online blocked units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-82pqi3",
+    "question": "How many units are available but classified for rent?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-w239a4",
+    "question": "How many units are available but classified for sale?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-axg0ml",
+    "question": "What is the total value of available inventory?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-kqlcyq",
+    "question": "What is the total selling price of sold units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-hgn48b",
+    "question": "What is the average selling price of available units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-6kviec",
+    "question": "What is the average net selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-wfrcad",
+    "question": "What is the average base price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-be7yr2",
+    "question": "What is the average strategic selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-htqj03",
+    "question": "Which unit has the highest selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-pev67g",
+    "question": "Which unit has the lowest selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-sx8jt9",
+    "question": "Which unit has the highest price per square foot?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-jk19wb",
+    "question": "Which building has the highest average selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-h0446y",
+    "question": "Which property type has the highest average price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-pn72pt",
+    "question": "Which unit view has the highest average price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-u8xpjr",
+    "question": "Are corner units more expensive than middle units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-megf0n",
+    "question": "Which units are priced below their base price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-a8aaxn",
+    "question": "Which units are priced above their strategic selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gga6om",
+    "question": "What is the difference between the base price and current selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-lzpplg",
+    "question": "What is the difference between strategic price and selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-obnw1a",
+    "question": "Which available units have a selling price below a given amount?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-rnnld9",
+    "question": "Show me available units with the lowest price per square foot.?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-sx4tzg",
+    "question": "What is the average price per square foot by building?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "hard",
+    "tags": [
+      "inventory"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-1sl2lz",
+    "question": "How many units are expected to complete this year?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-01r240",
+    "question": "How many units are expected to complete next year?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-adxl1j",
+    "question": "Which units are expected to complete this quarter?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-7zpa14",
+    "question": "Which buildings have the most upcoming completions?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-igjs6h",
+    "question": "How many sold units are not yet completed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-zpvw2j",
+    "question": "How many booked units are still under construction?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-qis7sa",
+    "question": "How many available units are already completed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-k39dyx",
+    "question": "Which estimated completion dates have already passed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-czae4v",
+    "question": "Which units do not have an estimated completion date?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-ddx3cg",
+    "question": "Show me sold units with future estimated completion dates.?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium",
+    "tags": [
+      "completion"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-tqsiyy",
+    "question": "How many service requests has this customer raised?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-yg4j0r",
+    "question": "What service requests has this customer raised?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-jr8wdt",
+    "question": "How many Cases are linked to this Opportunity?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-0946f4",
+    "question": "What is the current status of this Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gt4gis",
+    "question": "What type of service request is this?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-3o3rl3",
+    "question": "What is the Case subject?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-35lcql",
+    "question": "What is the eService name?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-jpza3j",
+    "question": "What is the Case record type?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-qw2hol",
+    "question": "How was the Case created?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-yuba7w",
+    "question": "Was the Case created through phone, email, web, or another channel?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-wej3hj",
+    "question": "Who is the customer linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-gpq21c",
+    "question": "Who is the Contact linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-cfiqb5",
+    "question": "Which property transaction is linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-2pxee4",
+    "question": "Give me a short summary of this Case.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-caslo0",
+    "question": "Show me all open Cases for this customer.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-bu3ngg",
+    "question": "Show me all closed Cases for this customer.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-c0c3tp",
+    "question": "Show me all Cases linked to this property transaction.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-71psi5",
+    "question": "Show me all Cases raised through the Contact Centre.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-iqinje",
+    "question": "Show me all Cases raised through email.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-sdgwt6",
+    "question": "Show me all Cases raised through the customer portal.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-dwzmqw",
+    "question": "How many parent Cases do we have?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-sus1ai",
+    "question": "How many parent Cases are open?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-wvf24g",
+    "question": "How many parent Cases are closed?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-4xc9dm",
+    "question": "How many parent Cases are pending?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-2hv1q4",
+    "question": "How many Tenant Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-vxgw6b",
+    "question": "How many Tenant Registration Cases were raised by this customer?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-a3d3oi",
+    "question": "How many Tenant Registration Cases were raised for this property?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909636-rh1w09",
+    "question": "How many Owner and Tenant Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.636Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-lflmoy",
+    "question": "How many Primary Market Transfer Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-o5l8w5",
+    "question": "How many Secondary Market Transfer Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-p9wij4",
+    "question": "How many Mortgage Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-q4k6rq",
+    "question": "How many Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-n390sr",
+    "question": "How many Tenant Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-efo9bg",
+    "question": "How many Owner Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-lun0iu",
+    "question": "How many Move-out requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-m7hv4d",
+    "question": "How many Payment Extension requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-gzjp7q",
+    "question": "How many Payment Plan Change requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-pvl77a",
+    "question": "How many Alteration requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-apjbgk",
+    "question": "How many Alteration Approval Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ycbck2",
+    "question": "How many DLP Maintenance Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-6nm5kj",
+    "question": "How many Title Deed requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ey1n0j",
+    "question": "How many Pre-Title Deed requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-hrsk1t",
+    "question": "How many Pet Registration requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-8fdrhz",
+    "question": "How many Access Card requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-g3ft85",
+    "question": "How many Ejari Renewal requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-mkf5bk",
+    "question": "How many Property Manager requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ocj25a",
+    "question": "How many Property Manager Deactivation requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-93gcb5",
+    "question": "How many legal Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-jdwg0q",
+    "question": "How many Unit Termination Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-3ir1mz",
+    "question": "How many Retail Work Permit requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-scugo4",
+    "question": "How many Permit to Trade requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-8uwo54",
+    "question": "How many Marketing Permit requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-44n523",
+    "question": "How many Document Requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-3ixh6l",
+    "question": "Which service category has the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-v88e3d",
+    "question": "Which customer has raised the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ax9ay1",
+    "question": "Which property transaction has the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-27glh0",
+    "question": "Which channel receives the most Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-jl54om",
+    "question": "Which record type has the highest Case volume?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-10lg72",
+    "question": "How many Cases do not have an Account?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-vswu8j",
+    "question": "How many Cases do not have an Opportunity?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-uiotfk",
+    "question": "How many Cases do not have an eService name?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-xokf0c",
+    "question": "How many Cases have no subject?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-d7meii",
+    "question": "How many parent Cases have no category?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-4ans08",
+    "question": "How many duplicate service requests were raised for the same customer?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-qhiakh",
+    "question": "How many customers raised more than one Tenant Registration Case?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy",
+    "tags": [
+      "case"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-4ajqnk",
+    "question": "Give me a complete summary of this customer.?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-utunzw",
+    "question": "Show me the customer’s profile, property transactions, and service requests.?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-u3m3d4",
+    "question": "How many properties has this customer been involved with?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-gfemrr",
+    "question": "What is the total value of this customer’s transactions?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-odsd3l",
+    "question": "How many successful transactions does this customer have?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-wqq7ma",
+    "question": "How many unsuccessful transactions does this customer have?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-mfvza7",
+    "question": "Which communities has this customer purchased in?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-on8uhb",
+    "question": "Which buildings are linked to this customer?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-k89i2n",
+    "question": "Does this customer have an active mortgage?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ce9clr",
+    "question": "Has any property linked to this customer completed handover?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-4g22pt",
+    "question": "How many Cases has this customer raised?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-rfe8eo",
+    "question": "What are the most common service requests raised by this customer?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "hard",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-vnkz7i",
+    "question": "Does this customer have any open Cases?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-8ayb09",
+    "question": "Does this customer have any outstanding payment-clearance issue?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-9hpste",
+    "question": "Which customer has the highest total transaction value?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-l0rydx",
+    "question": "Which customer has the most booked properties?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-eohbuf",
+    "question": "Which customer has the most service requests?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-s157qo",
+    "question": "Which corporate customer has the most linked Contacts?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-xyxg2b",
+    "question": "Which customers have both sold and active transactions?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-9xi020",
+    "question": "Which customers have properties in more than one community?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "customer"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-wv2cld",
+    "question": "Give me a complete summary of this unit.?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-upnw6r",
+    "question": "What is the current inventory status of the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-0fdsr8",
+    "question": "Is the unit for sale or rent?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-yw4eja",
+    "question": "What is the unit’s current selling price?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-td837j",
+    "question": "What is the unit’s DLD total area?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-1enkgx",
+    "question": "What is the unit view and position?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-qz4t0f",
+    "question": "Is the unit booked, sold, or available?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ytiud1",
+    "question": "Which customer transaction is linked to this unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-z5rijj",
+    "question": "What is the order status of the linked transaction?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ocscy8",
+    "question": "What is the payment-clearance status?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-k3b2g6",
+    "question": "What is the handover milestone?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-i02yuj",
+    "question": "Has the unit completed handover?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ismnk1",
+    "question": "How many service requests were raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-knsgxs",
+    "question": "How many tenant registrations were raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "easy",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-375nxh",
+    "question": "Are there any open Cases for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-1g9xbn",
+    "question": "Has a Move-in request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-j4894i",
+    "question": "Has a Move-out request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-czo1rm",
+    "question": "Has an Alteration request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "hard",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-b6xpar",
+    "question": "Has a Title Deed request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium",
+    "tags": [
+      "unit"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ec7u28",
+    "question": "Which building has more sold units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-bgkrrs",
+    "question": "Which community generated more sales?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-1numj9",
+    "question": "Which salesperson has a higher sales value?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-bt59ge",
+    "question": "Which lead source generated more opportunities?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-14on4r",
+    "question": "Which agency has more Closed Won transactions?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-2l1p2e",
+    "question": "Which building has the highest average price?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-93ac2q",
+    "question": "Which unit type has the highest price per square foot?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-w7jwp0",
+    "question": "Are available units more expensive than booked units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-mx9aia",
+    "question": "Are villas more expensive than apartments?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-h4hnsh",
+    "question": "Do park-view units have a higher average price?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-8mn0ng",
+    "question": "Which year had more property bookings?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-j6n4ow",
+    "question": "Which month had more Closed Won opportunities?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-fzqwqn",
+    "question": "Which service category increased the most this year?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-i4mlgj",
+    "question": "Which Case origin has the highest closure rate?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-yulb2s",
+    "question": "Which customer type raises the most service requests?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-qtjk4a",
+    "question": "Do corporate customers have more opportunities than individual customers?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-5y8q8p",
+    "question": "Which community has the highest number of open Cases?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-cjqoom",
+    "question": "Which property type has the most blocked units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ulefa5",
+    "question": "Which building has the highest number of leased units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-avptce",
+    "question": "Which sales channel has the highest average transaction value?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium",
+    "tags": [
+      "simple"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-6hpudl",
+    "question": "Which Opportunities do not have a building name?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-cxru30",
+    "question": "Which Opportunities do not have a community?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-z91npg",
+    "question": "Which Opportunities have no salesperson?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-q1umph",
+    "question": "Which Opportunities have no lead source?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-0kwzmo",
+    "question": "Which Closed Won Opportunities do not have an order date?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-kbhe2c",
+    "question": "Which Closed Won Opportunities do not have an order status?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-49v7ti",
+    "question": "Which Opportunities have different order statuses from their Opportunity Property records?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-3kyb7n",
+    "question": "Which Opportunities have different order dates from their Opportunity Property records?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-w72ufq",
+    "question": "Which inventory units do not have a status?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-nzgc03",
+    "question": "Which inventory units do not have a property type?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-dspshy",
+    "question": "Which inventory units do not have a selling price?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-ot58tw",
+    "question": "Which inventory units do not have a DLD total area?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-k1x64i",
+    "question": "Which units are marked Available but do not have a price?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-stg5uv",
+    "question": "Which units are marked Sold but do not have a linked transaction?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-xjy9fk",
+    "question": "Which Cases do not have an Account?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-zoxglc",
+    "question": "Which Cases do not have a category?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-c8ae8j",
+    "question": "Which parent Cases have no Subject and no eService name?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-2fi4g9",
+    "question": "Which corporate Accounts do not have a primary Contact?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-xb8si4",
+    "question": "Which Contacts do not have a job title?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  },
+  {
+    "id": "client-1783840909637-dp1pmg",
+    "question": "Which Account records have no country of residence or billing country?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium",
+    "tags": [
+      "data"
+    ],
+    "createdAt": "2026-07-12T07:21:49.637Z",
+    "runCount": 0,
+    "passCount": 0
+  }
+]

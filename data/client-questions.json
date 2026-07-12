@@ -1,0 +1,1902 @@
+[
+  {
+    "question": "Who is this customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this customer an individual, company, or retail customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the customer’s registered address?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which country does the customer live in?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the customer’s nationality?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How old is the customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many property transactions does this customer have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Is this a new customer or an existing customer?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Does this customer have more than one property transaction?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the primary contact for this company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who are the other contacts linked to this company?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the job title of the primary contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the mailing address of the company contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me a short summary of this customer.?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all customers who have more than one opportunity.?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many individual customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many corporate customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many retail customers do we have?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which country has the highest number of customers?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many customers are from the UAE?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the average age of individual customers?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many customers do not have an address?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many corporate accounts do not have a primary contact?",
+    "category": "Customer and Account Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which customers have no linked opportunities?",
+    "category": "Customer and Account Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What property transaction is linked to this customer?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the current stage of the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the sales offer still being prepared?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the transaction waiting for admin approval?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Was the transaction successfully closed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Was the transaction lost?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building is linked to the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which community is the property located in?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the salesperson handling this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How did the customer hear about us?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which sales channel brought this customer?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the transaction amount?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the net amount of the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "When was the property booked?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "When was the order created?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "When was the transaction closed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the current mortgage status?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the property currently mortgaged?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Was the mortgage terminated?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the latest property milestone?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the customer been informed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the customer appointment been scheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the customer appointment waiting to be rescheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the quality inspection been approved?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is there a snag list?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has deep cleaning been completed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the handover notification been sent?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the key-release appointment been scheduled?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the property handover been completed?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which agency handled this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which agent handled this transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Was this a direct sale?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which sales room handled the transaction?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the order status?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me a short summary of this opportunity.?",
+    "category": "Opportunity and Sales Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many opportunities are currently active?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities are generating sales offers?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities are waiting for admin approval?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities are Closed Won?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities are Closed Lost?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the total value of Closed Won opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the total net amount of Closed Won opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average opportunity amount?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the highest number of transactions?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which community has the highest number of sales?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which salesperson has handled the most opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which salesperson has the highest sales value?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which lead source generated the most opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which sales channel generated the highest-value opportunities?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many direct-sale opportunities do we have?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities came through agents?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities came through social media?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities came through the website?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities came through referrals?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many customers came through WhatsApp?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities were booked this month?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties were booked this year?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What was the total booking value this year?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which month had the highest number of bookings?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which month had the highest sales value?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many opportunities currently have a valid mortgage?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many opportunities are not mortgaged?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many mortgages have been terminated?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties have completed handover?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties are still waiting for customer orientation?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties are waiting for deep cleaning?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties are blocked by Legal?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many properties are pending with Projects?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many key-release appointments are scheduled?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many customer appointments need to be rescheduled?",
+    "category": "Opportunity Sales Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What property reference is linked to this transaction?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the order status for this property transaction?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the order date?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the plot area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the total area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the saleable or leasable area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the terrace area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the garage area?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many parking spaces are included?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the construction status?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the selling price?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the net selling price?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the net amount?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the net amount including VAT?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How much money has been received and cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What percentage of receipts has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What percentage of installments has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What percentage of invoices has been cleared?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "Has the customer cleared all installments?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the customer cleared all invoices?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the payment clearance below 50%?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me a financial summary of this property transaction.?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me an area and parking summary of this property transaction.?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Are the order status values on Opportunity and Opportunity Property the same?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Are the order dates on Opportunity and Opportunity Property the same?",
+    "category": "Opportunity Property Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many transactions have less than 50% receipt clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many transactions have 100% installment clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many transactions have 100% invoice clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the total cleared receipt amount?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average receipt-clearance percentage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the average installment-clearance percentage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which transactions have payment clearance below 25%?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which transactions have a high selling price but low payment clearance?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which properties have more than two parking spaces?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average saleable area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average total area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property transaction has the largest plot area?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property transaction has the largest terrace?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property transaction has the largest garage?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many properties are still under construction?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many property transactions have missing construction status?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many records have a different selling price and net selling price?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the total net amount including VAT?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which transactions have missing order dates?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property references appear more than once?",
+    "category": "Opportunity Property Analytical Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the current status of this unit?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit available?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit reserved?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit booked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit sold?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit blocked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit online blocked?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit leased?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this unit for sale or rent?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type of property is this?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is this a villa, apartment, townhouse, or another type?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the unit configuration?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What view does the unit have?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the unit position?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building or project is the unit in?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the property usage?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the unit residential?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the estimated completion date?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the base price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the strategic selling price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the current selling price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the net selling price?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the selling price per square foot?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the DLD total area?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me a short summary of this inventory unit.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me available units in this building.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me available villas.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me available rental units.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me available residential units.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me units that are expected to complete this year.?",
+    "category": "Actual Inventory Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many total inventory units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are available?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are reserved?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are blocked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are online blocked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are for sale?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are for rent?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many commercially blocked units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many available sales units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many available rental units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many rental units are currently leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many sales units are currently booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many sales units are currently reserved?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many sales units have already been sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many villas do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many apartments do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many residential units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many retail units do we have?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are available in each building?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many sold units are there in each community or project?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which building has the most available units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the most sold units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the most blocked units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property type has the most inventory?",
+    "category": "Inventory Count Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What percentage of the inventory is sold?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What percentage of the inventory is available?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What percentage of rental units are leased?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "What percentage of sales inventory is booked?",
+    "category": "Inventory Count Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many units are temporarily unavailable?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are blocked, including online blocked units?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are available but classified for rent?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are available but classified for sale?",
+    "category": "Inventory Count Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the total value of available inventory?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the total selling price of sold units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average selling price of available units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average net selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average base price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average strategic selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which unit has the highest selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which unit has the lowest selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which unit has the highest price per square foot?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the highest average selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property type has the highest average price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which unit view has the highest average price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Are corner units more expensive than middle units?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which units are priced below their base price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which units are priced above their strategic selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the difference between the base price and current selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the difference between strategic price and selling price?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which available units have a selling price below a given amount?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me available units with the lowest price per square foot.?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the average price per square foot by building?",
+    "category": "Inventory Pricing Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many units are expected to complete this year?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many units are expected to complete next year?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which units are expected to complete this quarter?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which buildings have the most upcoming completions?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many sold units are not yet completed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many booked units are still under construction?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many available units are already completed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which estimated completion dates have already passed?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which units do not have an estimated completion date?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me sold units with future estimated completion dates.?",
+    "category": "Completion and Construction Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many service requests has this customer raised?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What service requests has this customer raised?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Cases are linked to this Opportunity?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the current status of this Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type of service request is this?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Case subject?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the eService name?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Case record type?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How was the Case created?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Was the Case created through phone, email, web, or another channel?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the customer linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the Contact linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property transaction is linked to the Case?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me a short summary of this Case.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all open Cases for this customer.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all closed Cases for this customer.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all Cases linked to this property transaction.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all Cases raised through the Contact Centre.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all Cases raised through email.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me all Cases raised through the customer portal.?",
+    "category": "Case and Service Request Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many parent Cases do we have?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many parent Cases are open?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many parent Cases are closed?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many parent Cases are pending?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Tenant Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Tenant Registration Cases were raised by this customer?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Tenant Registration Cases were raised for this property?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Owner and Tenant Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Primary Market Transfer Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Secondary Market Transfer Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Mortgage Registration Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Tenant Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Owner Move-in requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Move-out requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Payment Extension requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Payment Plan Change requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Alteration requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Alteration Approval Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many DLP Maintenance Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Title Deed requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Pre-Title Deed requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Pet Registration requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Access Card requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Ejari Renewal requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Property Manager requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Property Manager Deactivation requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many legal Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Unit Termination Cases were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Retail Work Permit requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Permit to Trade requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Marketing Permit requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Document Requests were raised?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which service category has the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer has raised the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property transaction has the highest number of Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which channel receives the most Cases?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which record type has the highest Case volume?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Cases do not have an Account?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Cases do not have an Opportunity?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Cases do not have an eService name?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Cases have no subject?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many parent Cases have no category?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many duplicate service requests were raised for the same customer?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many customers raised more than one Tenant Registration Case?",
+    "category": "Case Count and Category Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Give me a complete summary of this customer.?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Show me the customer’s profile, property transactions, and service requests.?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many properties has this customer been involved with?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the total value of this customer’s transactions?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many successful transactions does this customer have?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many unsuccessful transactions does this customer have?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which communities has this customer purchased in?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which buildings are linked to this customer?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Does this customer have an active mortgage?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has any property linked to this customer completed handover?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Cases has this customer raised?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are the most common service requests raised by this customer?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "Does this customer have any open Cases?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Does this customer have any outstanding payment-clearance issue?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer has the highest total transaction value?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer has the most booked properties?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer has the most service requests?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which corporate customer has the most linked Contacts?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customers have both sold and active transactions?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customers have properties in more than one community?",
+    "category": "Customer 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Give me a complete summary of this unit.?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the current inventory status of the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the unit for sale or rent?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the unit’s current selling price?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the unit’s DLD total area?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the unit view and position?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Is the unit booked, sold, or available?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer transaction is linked to this unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the order status of the linked transaction?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the payment-clearance status?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the construction status?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the handover milestone?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has the unit completed handover?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many service requests were raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many tenant registrations were raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "easy"
+  },
+  {
+    "question": "Are there any open Cases for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has a Move-in request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has a Move-out request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Has an Alteration request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "hard"
+  },
+  {
+    "question": "Has a Title Deed request been raised for the unit?",
+    "category": "Unit 360-Degree Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has more sold units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which community generated more sales?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which salesperson has a higher sales value?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which lead source generated more opportunities?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which agency has more Closed Won transactions?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the highest average price?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which unit type has the highest price per square foot?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Are available units more expensive than booked units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Are villas more expensive than apartments?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Do park-view units have a higher average price?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which year had more property bookings?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which month had more Closed Won opportunities?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which service category increased the most this year?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Case origin has the highest closure rate?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which customer type raises the most service requests?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Do corporate customers have more opportunities than individual customers?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which community has the highest number of open Cases?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which property type has the most blocked units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which building has the highest number of leased units?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which sales channel has the highest average transaction value?",
+    "category": "Simple Comparison Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities do not have a building name?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities do not have a community?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities have no salesperson?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities have no lead source?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Closed Won Opportunities do not have an order date?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Closed Won Opportunities do not have an order status?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities have different order statuses from their Opportunity Property records?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Opportunities have different order dates from their Opportunity Property records?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which inventory units do not have a status?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which inventory units do not have a property type?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which inventory units do not have a selling price?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which inventory units do not have a DLD total area?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which units are marked Available but do not have a price?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which units are marked Sold but do not have a linked transaction?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Cases do not have an Account?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Cases do not have a category?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which parent Cases have no Subject and no eService name?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which corporate Accounts do not have a primary Contact?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Contacts do not have a job title?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Account records have no country of residence or billing country?",
+    "category": "Data Quality Questions",
+    "difficulty": "medium"
+  }
+]

@@ -1,0 +1,2080 @@
+{
+  "Account": {
+    "objectDescription": "",
+    "fieldCount": 11,
+    "fields": [
+      {
+        "fieldApiName": "Name",
+        "businessMeaning": "Name of the customer account",
+        "semanticCategory": "Customer Identity",
+        "llmInterpretationAndUsage": "For an Individual account, this represents the customer’s name. For Corporate or Retail accounts, it represents the registered company or business name. Can be used in customer summaries, record identification and search.",
+        "sensitiveClassification": "PII for Individual; Internal/Business Data for Corporate and Retail",
+        "importantRules": "The meaning depends on RecordType.Name. The LLM must not assume every Account Name represents a person."
+      },
+      {
+        "fieldApiName": "Display_Address__c",
+        "businessMeaning": "Formatted address associated with the account",
+        "semanticCategory": "Customer Address / Location",
+        "llmInterpretationAndUsage": "Can be used to describe the customer’s registered, residential or correspondence address.",
+        "sensitiveClassification": "PII / Confidential",
+        "importantRules": "It should not be interpreted as the address of the purchased property unless explicitly confirmed by another property-related field."
+      },
+      {
+        "fieldApiName": "Opportunity_Count__c",
+        "businessMeaning": "Number of opportunities associated with the account",
+        "semanticCategory": "Customer Activity Metric",
+        "llmInterpretationAndUsage": "Represents how many sales or property opportunities are linked to the customer. Can be used to identify customers with single or multiple transactions.",
+        "sensitiveClassification": "Internal",
+        "importantRules": "This is a numeric count, not the number of properties currently owned. Cancelled, transferred or historical opportunities may be included depending on the Salesforce calculation logic."
+      },
+      {
+        "fieldApiName": "cm_Nationality__pc",
+        "businessMeaning": "Nationality of an individual customer",
+        "semanticCategory": "Customer Demographic",
+        "llmInterpretationAndUsage": "Can be used for factual customer-profile summaries and aggregate demographic reporting.",
+        "sensitiveClassification": "Sensitive Personal Data",
+        "importantRules": "Primarily applicable to Individual accounts. It should not be used for eligibility decisions, customer scoring, behavioural predictions or discriminatory profiling."
+      },
+      {
+        "fieldApiName": "Age__c",
+        "businessMeaning": "Age of an individual customer",
+        "semanticCategory": "Customer Demographic",
+        "llmInterpretationAndUsage": "Can be used for factual summaries or approved age-group aggregation.",
+        "sensitiveClassification": "Sensitive Personal Data",
+        "importantRules": "Primarily applicable to Individual accounts. It should not be used for discriminatory profiling or automated decision-making. Confirm whether this is a stored age or calculated from date of birth, because stored age can become outdated."
+      },
+      {
+        "fieldApiName": "RecordType.Name",
+        "businessMeaning": "Identifies the business category of the account",
+        "semanticCategory": "Account Classification",
+        "llmInterpretationAndUsage": "Determines whether the account represents an Individual, Corporate entity or Retail entity. This field controls how fields such as Account Name and Contact relationships should be interpreted.",
+        "sensitiveClassification": "Internal",
+        "importantRules": "Only Individual, Corporate and Retail records will be included. Other account record types should be excluded from the dataset."
+      },
+      {
+        "fieldApiName": "Country_of_Residence_Billing_country__c",
+        "businessMeaning": "Customer’s country of residence or registered billing country",
+        "semanticCategory": "Geographic / Residency",
+        "llmInterpretationAndUsage": "For an Individual account, interpret this primarily as country of residence. For Corporate or Retail accounts, it may represent the registered or billing country of the business.",
+        "sensitiveClassification": "Personal Data for Individual; Business Data for Corporate/Retail",
+        "importantRules": "It is not necessarily the customer’s nationality and should not be treated as the location of a purchased property."
+      },
+      {
+        "fieldApiName": "Primary_Contact__r.Name",
+        "businessMeaning": "Name of the primary contact associated with a Corporate or Retail account",
+        "semanticCategory": "Business Contact / Relationship",
+        "llmInterpretationAndUsage": "Identifies the main person representing or communicating on behalf of the company or retail account. Can be included in relationship summaries.",
+        "sensitiveClassification": "PII / Business Contact Data",
+        "importantRules": "Applicable mainly to Corporate and Retail accounts. The contact must not be interpreted as the owner of the company unless another field explicitly confirms ownership."
+      },
+      {
+        "fieldApiName": "Contact.Name",
+        "businessMeaning": "Full name of the person associated with the company or retail account",
+        "semanticCategory": "Treat as a person representing, working for or associated with the Account",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "PII / Business Contact Data",
+        "importantRules": "Do not assume the person is the owner, authorized signatory or primary contact unless explicitly identified."
+      },
+      {
+        "fieldApiName": "Contact.Title",
+        "businessMeaning": "Job title or business designation of the contact",
+        "semanticCategory": "Describes the person’s role within the organization, such as Manager, Director or Finance Manager",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "PII / Business Contact Data",
+        "importantRules": "Job titles may be manually entered and inconsistent. Use as descriptive information rather than a guaranteed authority level."
+      },
+      {
+        "fieldApiName": "Contact.MailingAddress",
+        "businessMeaning": "Mailing or correspondence address of the contact",
+        "semanticCategory": "Address used to contact the individual associated with the Corporate or Retail account",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "PII / Confidential",
+        "importantRules": "Do not automatically treat it as the company’s registered address, the Account address or the purchased property address."
+      }
+    ]
+  },
+  "Opportunity": {
+    "objectDescription": "Opportunity Object — LLM Data Dictionary Object-level definition An Opportunity represents a property-related transaction associated with a customer Account. Depending on its stage and status, it may represent an active booking, completed sale, cancelled transaction, transferred property transaction, or another sales lifecycle state. The LLM should not assume that every Opportunity represents a currently owned or successfully purchased property. Fields such as StageName, Order_Stattus__c, milestone status, and transfer-related business rules must be reviewed before describing the transaction. Opportunity field definitions",
+    "fieldCount": 66,
+    "fields": [
+      {
+        "fieldApiName": "Id",
+        "businessMeaning": "Unique Salesforce identifier of the Opportunity",
+        "semanticCategory": "System Identifier",
+        "llmInterpretationAndUsage": "Used to uniquely identify, retrieve, join, or reference the Opportunity record",
+        "sensitiveClassification": "Internal System Data",
+        "importantRules": "Should not normally appear in a customer-facing summary. Useful for system integration and record linking only."
+      },
+      {
+        "fieldApiName": "Name",
+        "businessMeaning": "Salesforce Opportunity name or transaction reference",
+        "semanticCategory": "Transaction Identifier",
+        "llmInterpretationAndUsage": "Represents the business name or reference assigned to the property transaction",
+        "sensitiveClassification": "Internal",
+        "importantRules": "It may contain a booking number, customer name, unit reference, or generated naming format. It should not be interpreted without understanding the organization’s naming convention."
+      },
+      {
+        "fieldApiName": "StageName",
+        "businessMeaning": "Current sales stage or final outcome of the Opportunity",
+        "semanticCategory": "Sales Lifecycle Status",
+        "llmInterpretationAndUsage": "Indicates the commercial stage of the transaction, such as active, completed, won, lost, cancelled, or transferred",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This is one of the primary fields used to determine whether the transaction is active, successful, unsuccessful, cancelled, or historical."
+      },
+      {
+        "fieldApiName": "Building_Name__c",
+        "businessMeaning": "Name of the building, tower, phase, or property development linked to the Opportunity",
+        "semanticCategory": "Property / Project Location",
+        "llmInterpretationAndUsage": "Represents the specific building or development associated with the property transaction",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may be used as a property location or project grouping field. It should not automatically be treated as the community, city, postal address, or unit number."
+      },
+      {
+        "fieldApiName": "Building_Community__c",
+        "businessMeaning": "Community or master development where the building is located",
+        "semanticCategory": "Community / Geographic Grouping",
+        "llmInterpretationAndUsage": "Represents the higher-level community containing the building, project, or development",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Use this field for community-level grouping and summaries. It is broader than Building_Name__c."
+      },
+      {
+        "fieldApiName": "cm_Sales_Person__r.Name",
+        "businessMeaning": "Name of the salesperson responsible for the Opportunity",
+        "semanticCategory": "Employee / Sales Ownership",
+        "llmInterpretationAndUsage": "Identifies the internal salesperson who manages or originated the transaction",
+        "sensitiveClassification": "Internal / Employee Data",
+        "importantRules": "It can be used for salesperson-level summaries and performance reporting. It should not automatically be interpreted as the current Opportunity Owner unless confirmed."
+      },
+      {
+        "fieldApiName": "LeadSource",
+        "businessMeaning": "Standard Salesforce source through which the customer or transaction originated",
+        "semanticCategory": "Marketing Source",
+        "llmInterpretationAndUsage": "Indicates the original high-level source of the Opportunity, such as referral, website, event, walk-in, or campaign",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Values may be broad or manually selected. It should be distinguished from the more detailed lead channel field."
+      },
+      {
+        "fieldApiName": "cm_Lead_Channel__c",
+        "businessMeaning": "Detailed business or sales channel associated with the Opportunity",
+        "semanticCategory": "Sales / Acquisition Channel",
+        "llmInterpretationAndUsage": "Provides a more specific classification of how the customer or booking was generated",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "May overlap with LeadSource, but usually provides a more detailed or organization-specific channel classification."
+      },
+      {
+        "fieldApiName": "Amount",
+        "businessMeaning": "Standard gross amount associated with the Opportunity",
+        "semanticCategory": "Financial / Transaction Value",
+        "llmInterpretationAndUsage": "Represents the standard Salesforce Opportunity amount, typically the gross sales or transaction value",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "Currency must be identified from Salesforce currency settings. It should not automatically be considered the final payable or net amount."
+      },
+      {
+        "fieldApiName": "CloseDate",
+        "businessMeaning": "Expected or actual commercial closing date of the Opportunity",
+        "semanticCategory": "Sales Date",
+        "llmInterpretationAndUsage": "Represents the expected close date for an open Opportunity or the closing date used when the transaction was completed",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may be forecast-oriented for open Opportunities. Do not always interpret it as the actual property booking date or order date."
+      },
+      {
+        "fieldApiName": "Current_Mortgage_Status__c",
+        "businessMeaning": "Current stage or status of the mortgage process",
+        "semanticCategory": "Mortgage / Financing Status",
+        "llmInterpretationAndUsage": "Indicates the customer’s current mortgage or financing progress for the property transaction",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It should not be interpreted as final mortgage approval unless the field value explicitly indicates approval. Blank may mean not applicable, cash purchase, or not yet updated."
+      },
+      {
+        "fieldApiName": "Property_Booked_Date__c",
+        "businessMeaning": "Date on which the property was reserved or booked",
+        "semanticCategory": "Booking Date",
+        "llmInterpretationAndUsage": "Represents the actual date on which the customer booked or reserved the property",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Usually more appropriate than CloseDate for booking-trend analysis. It does not necessarily mean the transaction was later completed."
+      },
+      {
+        "fieldApiName": "Milestone_Current_Status__c",
+        "businessMeaning": "Current operational, construction, handover, or customer journey milestone",
+        "semanticCategory": "Property Lifecycle Status",
+        "llmInterpretationAndUsage": "Represents the latest known milestone reached in the property lifecycle or handover process",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This may describe construction, notification, orientation, appointment, key release, or handover progress. It is not the same as the Opportunity sales stage."
+      },
+      {
+        "fieldApiName": "cm_Agency_Name__c",
+        "businessMeaning": "Salesforce lookup identifier for the agency associated with the Opportunity",
+        "semanticCategory": "Relationship Identifier",
+        "llmInterpretationAndUsage": "Used to link the Opportunity with an external real-estate agency record",
+        "sensitiveClassification": "Internal System Data",
+        "importantRules": "The raw lookup ID should be used for relationships and system joins. It should not normally be displayed in summaries."
+      },
+      {
+        "fieldApiName": "cm_Agency_Name__r.Name",
+        "businessMeaning": "Name of the external agency associated with the Opportunity",
+        "semanticCategory": "Agency / External Sales Partner",
+        "llmInterpretationAndUsage": "Identifies the agency that introduced, managed, or supported the transaction",
+        "sensitiveClassification": "Internal / Business Partner Data",
+        "importantRules": "Use the related name for readable summaries. The agency’s exact responsibility may depend on the business process."
+      },
+      {
+        "fieldApiName": "cm_Agent_Name__c",
+        "businessMeaning": "Salesforce lookup identifier for the individual agent associated with the Opportunity",
+        "semanticCategory": "Relationship Identifier",
+        "llmInterpretationAndUsage": "Links the Opportunity to an individual broker or agent record",
+        "sensitiveClassification": "Internal System Data",
+        "importantRules": "The raw lookup ID should not normally appear in natural-language summaries."
+      },
+      {
+        "fieldApiName": "cm_Agent_Name__r.Name",
+        "businessMeaning": "Name of the broker or agent associated with the transaction",
+        "semanticCategory": "Agent / External Sales Partner",
+        "llmInterpretationAndUsage": "Identifies the individual external agent or broker linked to the Opportunity",
+        "sensitiveClassification": "PII / Business Contact Data",
+        "importantRules": "Do not assume the agent is employed directly by the organization. They may be associated with the selected agency."
+      },
+      {
+        "fieldApiName": "Sales_Room__c",
+        "businessMeaning": "Sales room, branch, office, kiosk, or sales location associated with the booking",
+        "semanticCategory": "Sales Location / Operational Channel",
+        "llmInterpretationAndUsage": "Represents the physical or operational sales location from which the transaction was handled",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It should not be interpreted as the property location. A property can be sold through a sales room located elsewhere."
+      },
+      {
+        "fieldApiName": "Order_Stattus__c",
+        "businessMeaning": "Current status of the sales order related to the Opportunity",
+        "semanticCategory": "Order Lifecycle Status",
+        "llmInterpretationAndUsage": "Indicates the operational status of the associated order, such as active, processed, cancelled, transferred, or completed",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "The API name contains Stattus, which appears to be an intentional Salesforce field spelling. The exact meaning depends on the configured picklist values."
+      },
+      {
+        "fieldApiName": "Order_Date__c",
+        "businessMeaning": "Date on which the sales order was created, confirmed, or processed",
+        "semanticCategory": "Order Date",
+        "llmInterpretationAndUsage": "Represents the business date associated with the formal sales order",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may differ from the property booking date and Opportunity close date. The exact business trigger for setting this date should be documented."
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net value of the transaction after applicable adjustments",
+        "semanticCategory": "Financial / Net Transaction Value",
+        "llmInterpretationAndUsage": "Represents the net financial amount after discounts, adjustments, exclusions, or other business calculations",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "The calculation should be documented. It should not automatically be treated as the amount paid, amount outstanding, or recognized revenue."
+      },
+      {
+        "fieldApiName": "Property_Booked_Date__c",
+        "businessMeaning": "Date the property was initially booked or reserved",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Order_Date__c",
+        "businessMeaning": "Date the formal order was generated, confirmed, or processed",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "CloseDate",
+        "businessMeaning": "Expected or actual commercial closure date used by the Opportunity process",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Amount",
+        "businessMeaning": "Standard gross or overall Opportunity transaction value",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net transaction value after business adjustments",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "StageName",
+        "businessMeaning": "Commercial sales lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Order_Stattus__c",
+        "businessMeaning": "Operational order lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Milestone_Current_Status__c",
+        "businessMeaning": "Property, construction, orientation, or handover lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Current_Mortgage_Status__c",
+        "businessMeaning": "Customer financing lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "StageName",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "CloseDate",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Amount",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "LeadSource",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Lead_Channel__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Sales_Person__r.Name",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Community__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Booked_Date__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Amount",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Agency_Name__r.Name",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Agent_Name__r.Name",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Amount",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "StageName",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Current_Mortgage_Status__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "StageName",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Booked_Date__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "CloseDate",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Name__c",
+        "businessMeaning": "Property not assigned, unavailable, or data not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Community__c",
+        "businessMeaning": "Community not mapped or not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Sales_Person__r.Name",
+        "businessMeaning": "Salesperson not assigned or relationship unavailable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "LeadSource",
+        "businessMeaning": "Lead source not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Lead_Channel__c",
+        "businessMeaning": "Detailed channel not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Current_Mortgage_Status__c",
+        "businessMeaning": "Cash purchase, mortgage not initiated, not applicable, or data not updated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Booked_Date__c",
+        "businessMeaning": "Property not yet booked or booking date missing",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Milestone_Current_Status__c",
+        "businessMeaning": "Milestone process not started or data not synchronized",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Agency_Name__r.Name",
+        "businessMeaning": "Direct sale, no agency involved, or agency not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Agent_Name__r.Name",
+        "businessMeaning": "No agent involved or agent not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Sales_Room__c",
+        "businessMeaning": "Sales location not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Order_Stattus__c",
+        "businessMeaning": "Order not created, status unavailable, or data missing",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Order_Date__c",
+        "businessMeaning": "Order not yet generated or date not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net amount not calculated or not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Email",
+        "businessMeaning": "Direct Communication",
+        "semanticCategory": "Customer enquiry originated through email",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      }
+    ]
+  },
+  "Opportunity_Property__c": {
+    "objectDescription": "Opportunity Property Object — LLM Data Dictionary Opportunity_Property__c Object-level business definition Opportunity_Property__c represents the property-related transaction details associated with an Opportunity. It is not the actual inventory master record. The object acts as a transaction-detail or association record containing information such as: The property reference linked to the transaction Order status and order date Property area details Selling and net transaction values VAT-inclusive values Receipt, installment, and invoice clearance progress Construction status Parking and garage details The relationship should be interpreted as: → Opportunity Property → Associated property or inventory reference The LLM should understand: The Account represents the customer. The Opportunity represents the commercial transaction. The Opportunity Property represents the property-related details of that transaction. The actual inventory master may exist in another Salesforce object. The LLM must not describe Opportunity_Property__c itself as the inventory unit. Field definitions",
+    "fieldCount": 78,
+    "fields": [
+      {
+        "fieldApiName": "cm_Inventory_Location_Code__c",
+        "businessMeaning": "Property or inventory location reference associated with the transaction",
+        "semanticCategory": "Property Reference / Location Code",
+        "llmInterpretationAndUsage": "Identifies the property associated with the Opportunity using a structured internal reference code",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This is a reference value. It does not mean the Opportunity Property record itself is the inventory master. Do not decode individual code segments without an approved mapping."
+      },
+      {
+        "fieldApiName": "cm_Order_Status__c",
+        "businessMeaning": "Current order status of the property transaction",
+        "semanticCategory": "Order Lifecycle Status",
+        "llmInterpretationAndUsage": "Indicates the operational status of the order for the property associated with the Opportunity",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Has the same business meaning as the order-status field on Opportunity. If the values differ, flag the discrepancy rather than selecting one silently."
+      },
+      {
+        "fieldApiName": "cm_Order_Date__c",
+        "businessMeaning": "Date associated with the formal property order",
+        "semanticCategory": "Order Date",
+        "llmInterpretationAndUsage": "Represents the date on which the order was created, confirmed, or processed for the property transaction",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Has the same business meaning as the order-date field on Opportunity. It is different from booking date and Opportunity close date."
+      },
+      {
+        "fieldApiName": "Plot_Area__c",
+        "businessMeaning": "Total land or plot area associated with the property",
+        "semanticCategory": "Property Area / Land",
+        "llmInterpretationAndUsage": "Represents the size of the land or plot connected with the property transaction",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Mainly applicable to villas, townhouses, plots, or landed properties. It may be blank or not applicable for apartments and some retail units."
+      },
+      {
+        "fieldApiName": "Total_Area__c",
+        "businessMeaning": "Overall recorded area of the property associated with the transaction",
+        "semanticCategory": "Property Area",
+        "llmInterpretationAndUsage": "Represents the total area recorded for the property",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may include or exclude terrace, garage, or other component areas depending on the business calculation."
+      },
+      {
+        "fieldApiName": "Saleable_Leasable_Area__c",
+        "businessMeaning": "Area considered for sale or lease calculations",
+        "semanticCategory": "Commercial Property Area",
+        "llmInterpretationAndUsage": "Represents the commercially saleable or leasable area associated with the property transaction",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may differ from total area, plot area, built-up area, or regulatory area."
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Selling price after applicable commercial adjustments",
+        "semanticCategory": "Financial / Net Selling Price",
+        "llmInterpretationAndUsage": "Represents the adjusted selling price after discounts, premiums, or other configured commercial calculations",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It should not automatically be treated as the amount paid, outstanding balance, or VAT-inclusive amount."
+      },
+      {
+        "fieldApiName": "cm_Selling_Price__c",
+        "businessMeaning": "Base or gross selling price associated with the property transaction",
+        "semanticCategory": "Financial / Selling Price",
+        "llmInterpretationAndUsage": "Represents the primary selling price before applicable net adjustments",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "The exact inclusion of discounts, fees, or VAT depends on the business calculation."
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net financial amount recorded for the property transaction",
+        "semanticCategory": "Financial / Net Transaction Value",
+        "llmInterpretationAndUsage": "Represents the net transaction value after applicable adjustments",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It may differ from Net_Selling_Price__c. The two fields should not be treated as identical unless the business formula confirms this."
+      },
+      {
+        "fieldApiName": "Net_Amount_including_VAT__c",
+        "businessMeaning": "Net transaction amount after VAT is included",
+        "semanticCategory": "Financial / VAT-Inclusive Value",
+        "llmInterpretationAndUsage": "Represents the net amount inclusive of VAT",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It does not represent VAT amount alone, amount paid, outstanding balance, or recognized revenue."
+      },
+      {
+        "fieldApiName": "Total_Receipt_Cleared__c",
+        "businessMeaning": "Percentage of the expected receipt value that has cleared",
+        "semanticCategory": "Payment Progress / Receipt Clearance",
+        "llmInterpretationAndUsage": "Indicates the percentage of receipt value successfully cleared",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "This is a percentage field, not a currency amount."
+      },
+      {
+        "fieldApiName": "Receipt_Cleared_Amount__c",
+        "businessMeaning": "Monetary amount represented by cleared receipts",
+        "semanticCategory": "Payment Progress / Cleared Receipt Amount",
+        "llmInterpretationAndUsage": "Represents the actual currency value of cleared receipts",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "Do not confuse it with receipt-clearance percentage or total amount paid across all payment sources."
+      },
+      {
+        "fieldApiName": "Total_Installment_Cleared__c",
+        "businessMeaning": "Percentage of scheduled installments that have cleared",
+        "semanticCategory": "Payment Progress / Installment Clearance",
+        "llmInterpretationAndUsage": "Indicates installment-clearance progress as a percentage",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "This is a percentage field. It is not the number of installments or the monetary amount of cleared installments."
+      },
+      {
+        "fieldApiName": "Invoice_Cleared_Amount__c",
+        "businessMeaning": "Percentage of invoiced value that has cleared",
+        "semanticCategory": "Payment Progress / Invoice Clearance",
+        "llmInterpretationAndUsage": "Indicates the percentage of the invoiced amount successfully cleared",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "Despite “Amount” appearing in the API name, this is a percentage field and should be displayed as such."
+      },
+      {
+        "fieldApiName": "Terrace_Area__c",
+        "businessMeaning": "Area allocated to a terrace, balcony, or external terrace space",
+        "semanticCategory": "Property Area / External Space",
+        "llmInterpretationAndUsage": "Represents the separately recorded terrace area associated with the property",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may or may not already be included in total area. Do not add it to total area unless an approved calculation is provided."
+      },
+      {
+        "fieldApiName": "Garage_Area__c",
+        "businessMeaning": "Physical area allocated to a garage",
+        "semanticCategory": "Property Area / Garage",
+        "llmInterpretationAndUsage": "Represents the separately recorded garage area associated with the property",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Garage area is different from parking count. One garage may contain one or more parking spaces."
+      },
+      {
+        "fieldApiName": "Property_Construction_Status__c",
+        "businessMeaning": "Current physical construction or completion status of the property",
+        "semanticCategory": "Construction Lifecycle Status",
+        "llmInterpretationAndUsage": "Represents the current construction stage of the property associated with the transaction",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It is separate from Opportunity sales stage, order status, and handover milestone status."
+      },
+      {
+        "fieldApiName": "Parking_Count__c",
+        "businessMeaning": "Number of parking spaces allocated to the property",
+        "semanticCategory": "Property Feature / Parking",
+        "llmInterpretationAndUsage": "Represents the quantity of parking spaces associated with the property",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This is a count, not an area. A blank value does not necessarily mean zero parking spaces."
+      },
+      {
+        "fieldApiName": "cm_Inventory_Location_Code__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Status__c",
+        "businessMeaning": "Opportunity.Order_Stattus__c",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Date__c",
+        "businessMeaning": "Opportunity.Order_Date__c",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Plot_Area__c",
+        "businessMeaning": "Land or plot area",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Area__c",
+        "businessMeaning": "Overall recorded property area",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Saleable_Leasable_Area__c",
+        "businessMeaning": "Area used for sale or leasing calculations",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Terrace_Area__c",
+        "businessMeaning": "Terrace or external-space area",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Garage_Area__c",
+        "businessMeaning": "Garage area",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Selling_Price__c",
+        "businessMeaning": "Base or gross selling price",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Selling price after applicable commercial adjustments",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net transaction value based on the configured financial calculation",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount_including_VAT__c",
+        "businessMeaning": "Net transaction value including VAT",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Receipt_Cleared_Amount__c",
+        "businessMeaning": "Actual monetary value of cleared receipts",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Receipt_Cleared__c",
+        "businessMeaning": "Percentage",
+        "semanticCategory": "Percentage of expected receipt value cleared",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Receipt_Cleared_Amount__c",
+        "businessMeaning": "Currency",
+        "semanticCategory": "Monetary value of cleared receipts",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Installment_Cleared__c",
+        "businessMeaning": "Percentage",
+        "semanticCategory": "Percentage of scheduled installments cleared",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Invoice_Cleared_Amount__c",
+        "businessMeaning": "Percentage",
+        "semanticCategory": "Percentage of invoiced value cleared",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Opportunity.StageName",
+        "businessMeaning": "Commercial sales lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Status__c",
+        "businessMeaning": "Order lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Opportunity.Milestone_Current_Status__c",
+        "businessMeaning": "Inspection, orientation, key release, or handover lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Construction_Status__c",
+        "businessMeaning": "Physical construction lifecycle",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Parking_Count__c",
+        "businessMeaning": "Number of allocated parking spaces",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Garage_Area__c",
+        "businessMeaning": "Physical garage area",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Inventory_Location_Code__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Status__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Date__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Construction_Status__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Parking_Count__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Plot_Area__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Area__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Saleable_Leasable_Area__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Terrace_Area__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Garage_Area__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Parking_Count__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Selling_Price__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount_including_VAT__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Receipt_Cleared__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Receipt_Cleared_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Installment_Cleared__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Invoice_Cleared_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Inventory_Location_Code__c",
+        "businessMeaning": "Property reference not populated, unavailable, or not synchronized",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Status__c",
+        "businessMeaning": "Order not created, status missing, or synchronization issue",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Order_Date__c",
+        "businessMeaning": "Order not yet generated or date not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Plot_Area__c",
+        "businessMeaning": "Not applicable to the property type or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Area__c",
+        "businessMeaning": "Area unavailable or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Saleable_Leasable_Area__c",
+        "businessMeaning": "Commercial area not calculated or not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Net selling price not calculated or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "cm_Selling_Price__c",
+        "businessMeaning": "Selling price unavailable or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount__c",
+        "businessMeaning": "Net amount not calculated or unavailable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Amount_including_VAT__c",
+        "businessMeaning": "VAT-inclusive amount not calculated or VAT not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Receipt_Cleared__c",
+        "businessMeaning": "No cleared receipts, calculation unavailable, or value not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Receipt_Cleared_Amount__c",
+        "businessMeaning": "No cleared receipt amount or value not updated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Total_Installment_Cleared__c",
+        "businessMeaning": "No installments cleared, calculation unavailable, or value not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Invoice_Cleared_Amount__c",
+        "businessMeaning": "No invoice clearance, calculation unavailable, or value not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Terrace_Area__c",
+        "businessMeaning": "No terrace, not applicable, or area not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Garage_Area__c",
+        "businessMeaning": "No garage, not applicable, or area not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Construction_Status__c",
+        "businessMeaning": "Construction status not populated or not synchronized",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Parking_Count__c",
+        "businessMeaning": "No parking, not applicable, or value not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      }
+    ]
+  },
+  "Property_Inventory__c": {
+    "objectDescription": "Property Inventory Object — LLM Data Dictionary Property_Inventory__c Object-level business definition Property_Inventory__c represents the actual physical property inventory unit managed within Salesforce. Each record may represent a specific: Other saleable or leasable property This object is the authoritative inventory-level source for understanding: The unit’s current availability or occupancy status Whether the unit is intended for sale, rent, or is blocked The physical unit type and usage Unit location, view, and position Current and strategic pricing Price per square foot Estimated completion date DLD-recorded area The relationship may be interpreted as: Property Inventory → Actual physical property or unit → Customer transaction Opportunity Property → Property-related transaction details and association The LLM should use Property_Inventory__c when answering questions about: Available inventory Reserved or booked units Blocked inventory Rental inventory Unit types and usage Inventory pricing Inventory completion timelines Field definitions",
+    "fieldCount": 65,
+    "fields": [
+      {
+        "fieldApiName": "Unit_View__c",
+        "businessMeaning": "View or outlook associated with the unit",
+        "semanticCategory": "Property Feature / View",
+        "llmInterpretationAndUsage": "Describes what the unit overlooks or faces, such as park, pool, road, community, garden, or another feature",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Values may be descriptive and inconsistent. Do not interpret a view as a guaranteed permanent feature unless contractually confirmed."
+      },
+      {
+        "fieldApiName": "Unit_Position__c",
+        "businessMeaning": "Physical position or orientation of the unit within the building, project, row, or development",
+        "semanticCategory": "Property Feature / Position",
+        "llmInterpretationAndUsage": "Describes where the unit is positioned, such as corner, middle, end, internal, external, front, rear, or another configured position",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It is not necessarily a geographic direction unless the configured value explicitly represents one."
+      },
+      {
+        "fieldApiName": "Selling_Price_Per_Sq_Ft__c",
+        "businessMeaning": "Selling price calculated per square foot of area",
+        "semanticCategory": "Financial / Unit Rate",
+        "llmInterpretationAndUsage": "Represents the unit’s sales price rate per square foot",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "The area basis used in the calculation must be known. It may use saleable area, DLD area, total area, or another configured area."
+      },
+      {
+        "fieldApiName": "Penalty_Amount__c",
+        "businessMeaning": "Base price of the inventory unit",
+        "semanticCategory": "Financial / Base Price",
+        "llmInterpretationAndUsage": "Despite the API name, this field should be interpreted as the unit’s base price",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "The word “Penalty” in the API name is misleading. The LLM must not describe it as a customer penalty, fine, overdue charge, or cancellation fee."
+      },
+      {
+        "fieldApiName": "Strategic_Selling_Price__c",
+        "businessMeaning": "Strategic or commercially targeted selling price assigned to the inventory",
+        "semanticCategory": "Financial / Strategic Price",
+        "llmInterpretationAndUsage": "Represents a strategically determined sales price based on commercial planning, positioning, demand, or management decisions",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It may differ from base price and current selling price. Do not assume it is the final contractual value."
+      },
+      {
+        "fieldApiName": "Selling_Price__c",
+        "businessMeaning": "Current or standard selling price of the inventory unit",
+        "semanticCategory": "Financial / Selling Price",
+        "llmInterpretationAndUsage": "Represents the current selling price recorded against the inventory unit",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It should not automatically be treated as the final sold value or amount paid by a customer."
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Net selling price after applicable adjustments",
+        "semanticCategory": "Financial / Net Selling Price",
+        "llmInterpretationAndUsage": "Represents the selling price after configured discounts, premiums, adjustments, or other commercial calculations",
+        "sensitiveClassification": "Confidential Financial Data",
+        "importantRules": "It may differ from the final transaction value recorded on the Opportunity or Opportunity Property."
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "Detailed configuration, layout, bedroom type, model, or unit category",
+        "semanticCategory": "Property Classification / Unit Configuration",
+        "llmInterpretationAndUsage": "Describes the detailed configuration of the inventory, such as studio, one-bedroom, two-bedroom, three-bedroom, or another configured unit model",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This should remain separate from Type__c, which represents the broader property form such as Villa."
+      },
+      {
+        "fieldApiName": "Building_Location_Name__c",
+        "businessMeaning": "Building, project, phase, cluster, or inventory location associated with the unit",
+        "semanticCategory": "Property Location",
+        "llmInterpretationAndUsage": "Identifies where the actual inventory unit is located within the property portfolio",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "It may represent a building or project-level name rather than a complete address."
+      },
+      {
+        "fieldApiName": "Estimated_Completion_Date__c",
+        "businessMeaning": "Estimated date on which construction or development of the inventory unit is expected to be completed",
+        "semanticCategory": "Construction / Completion Date",
+        "llmInterpretationAndUsage": "Indicates the expected construction-completion date for the unit",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This is an estimate and may change. It should not be presented as an actual completion, handover, or key-release date."
+      },
+      {
+        "fieldApiName": "Property_Usage__c",
+        "businessMeaning": "Intended functional use of the inventory",
+        "semanticCategory": "Property Classification / Usage",
+        "llmInterpretationAndUsage": "Identifies whether the unit is residential, commercial, retail, mixed-use, or another usage category",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This describes intended usage, not current sales or leasing status."
+      },
+      {
+        "fieldApiName": "Property_Type__c",
+        "businessMeaning": "Commercial inventory classification indicating whether the unit is for sale, rent, or blocked",
+        "semanticCategory": "Inventory Commercial Classification",
+        "llmInterpretationAndUsage": "Indicates how the unit is currently classified for commercial handling",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Based on the provided values, this is not the physical property type. It should not be used to identify whether the unit is a villa, apartment, or townhouse."
+      },
+      {
+        "fieldApiName": "Property_Status__c",
+        "businessMeaning": "Current operational availability or occupancy status of the inventory unit",
+        "semanticCategory": "Inventory Status",
+        "llmInterpretationAndUsage": "Indicates the unit’s current position in the inventory lifecycle, such as available, reserved, booked, sold, blocked, leased, or online blocked",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This should be the main field for current inventory-status summaries and counts."
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "Broad physical property form",
+        "semanticCategory": "Property Classification / Physical Type",
+        "llmInterpretationAndUsage": "Identifies the high-level property type, such as Villa",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "This is different from Type_of_Unit__c, which may describe the detailed layout or configuration."
+      },
+      {
+        "fieldApiName": "Attribute24__c",
+        "businessMeaning": "Total property area recorded with or recognized by DLD",
+        "semanticCategory": "Regulatory Area / DLD Total Area",
+        "llmInterpretationAndUsage": "Represents the DLD Total Area for the inventory unit",
+        "sensitiveClassification": "Internal / Regulatory Property Data",
+        "importantRules": "The API name is generic and does not explain the meaning. The LLM should use the business label “DLD Total Area.” The unit of measurement must be confirmed before display."
+      },
+      {
+        "fieldApiName": "Property_Inventory__c",
+        "businessMeaning": "Actual inventory or physical unit",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Opportunity_Property__c",
+        "businessMeaning": "Property-related transaction details and association",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Type__c",
+        "businessMeaning": "What commercial category is this unit assigned to?",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Status__c",
+        "businessMeaning": "What is the unit’s current operational status?",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "Villa",
+        "semanticCategory": "Broad physical category",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "4 Bedroom Type A",
+        "semanticCategory": "Detailed layout or configuration",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Penalty_Amount__c",
+        "businessMeaning": "Base price",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Strategic_Selling_Price__c",
+        "businessMeaning": "Strategically targeted selling price",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price__c",
+        "businessMeaning": "Current or standard selling price",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Selling price after applicable adjustments",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price_Per_Sq_Ft__c",
+        "businessMeaning": "Selling price rate per square foot",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Estimated_Completion_Date__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_View__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_Position__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Type__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Status__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Location_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Penalty_Amount__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Strategic_Selling_Price__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price_Per_Sq_Ft__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_View__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_Position__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Attribute24__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Usage__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Estimated_Completion_Date__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Location_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Status__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_View__c",
+        "businessMeaning": "View not classified or not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Unit_Position__c",
+        "businessMeaning": "Position not classified or not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price_Per_Sq_Ft__c",
+        "businessMeaning": "Rate not calculated, area unavailable, or unit not currently priced",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Penalty_Amount__c",
+        "businessMeaning": "Base price not populated or unavailable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Strategic_Selling_Price__c",
+        "businessMeaning": "Strategic price not assigned",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Selling_Price__c",
+        "businessMeaning": "Current selling price not assigned or unit not available for sale",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Net_Selling_Price__c",
+        "businessMeaning": "Net price not calculated or not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type_of_Unit__c",
+        "businessMeaning": "Unit configuration not classified",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Building_Location_Name__c",
+        "businessMeaning": "Building or location not mapped",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Estimated_Completion_Date__c",
+        "businessMeaning": "Completion date not estimated, not applicable, or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Usage__c",
+        "businessMeaning": "Usage type not classified",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Type__c",
+        "businessMeaning": "Commercial category not assigned",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Property_Status__c",
+        "businessMeaning": "Inventory status not recorded or synchronization issue",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Type__c",
+        "businessMeaning": "Physical property type not classified",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Attribute24__c",
+        "businessMeaning": "DLD area unavailable or not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      }
+    ]
+  },
+  "Case": {
+    "objectDescription": "Case Object — LLM Data Dictionary Object-level business definition The Case object represents a customer service request, operational request, enquiry, complaint, registration, approval request, or another service-related interaction. Cases may be associated with: A corporate or retail entity A property or unit An internal service process For LLM summarization and category analysis, only parent Cases should be included. Child Cases should be excluded because they may represent internal workflow steps, departmental tasks, approvals, or sub-processes created from the original customer request. Parent Case filtering rule The dataset should include only records where Case_Type__c indicates that the Case is a parent Case. Conceptual filter: Case_Type__c = \"Parent Case\" The exact stored picklist value should be used from Salesforce. The LLM should not count parent and child Cases together, because this may duplicate a single customer request across multiple operational steps. Field definitions",
+    "fieldCount": 36,
+    "fields": [
+      {
+        "fieldApiName": "CaseNumber",
+        "businessMeaning": "Unique customer service Case reference generated by Salesforce",
+        "semanticCategory": "Service Request Identifier",
+        "llmInterpretationAndUsage": "Used to uniquely identify and reference the Case",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Suitable for retrieval and traceability. It should not normally be included in aggregated summaries unless a detailed case list is requested."
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "Short description or business category of the customer request",
+        "semanticCategory": "Service Category / Request Description",
+        "llmInterpretationAndUsage": "Describes the nature of the Case and may be used to classify or summarize the service request",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "For most Case types, this is one of the primary fields used for category-based reporting. For Contact Centre records, it should not be used as the main categorization field."
+      },
+      {
+        "fieldApiName": "Status",
+        "businessMeaning": "Current operational status of the Case",
+        "semanticCategory": "Service Lifecycle Status",
+        "llmInterpretationAndUsage": "Indicates whether the Case is new, open, in progress, pending, resolved, closed, or in another configured state",
+        "sensitiveClassification": "Internal Operational Data",
+        "importantRules": "Status values should be interpreted using the organization’s Case-status definitions. A closed status does not necessarily mean the request was successfully completed unless the process confirms this."
+      },
+      {
+        "fieldApiName": "AccountId",
+        "businessMeaning": "Salesforce lookup to the Account associated with the Case",
+        "semanticCategory": "Customer Relationship",
+        "llmInterpretationAndUsage": "Connects the Case to the individual, corporate, or retail customer account",
+        "sensitiveClassification": "Internal System Data / PII Link",
+        "importantRules": "Use for joins and customer-level summaries. The raw Salesforce ID should not normally appear in natural-language output."
+      },
+      {
+        "fieldApiName": "ContactId",
+        "businessMeaning": "Salesforce lookup to the Contact associated with the Case",
+        "semanticCategory": "Customer Contact Relationship",
+        "llmInterpretationAndUsage": "Identifies the person who raised, represents, or is associated with the Case",
+        "sensitiveClassification": "PII / Business Contact Data",
+        "importantRules": "A Contact may be the requester, representative, tenant, employee, or another associated person. Do not automatically interpret the Contact as the Account owner."
+      },
+      {
+        "fieldApiName": "Opporutniy_Name__c",
+        "businessMeaning": "Opportunity associated with the Case",
+        "semanticCategory": "Transaction / Property Relationship",
+        "llmInterpretationAndUsage": "Links the service request to a specific property transaction or Opportunity",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "The API name contains the spelling Opporutniy. Preserve the actual API name in queries. The relationship may be stored as a lookup or another reference type."
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "Administrative or configured eService name associated with the Case",
+        "semanticCategory": "Service Category / Digital Service",
+        "llmInterpretationAndUsage": "Identifies the formal eService or administrative service type under which the Case was created",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "For most non-Contact-Centre Cases, this can be used as a primary service-category field. It should not be relied on for Contact Centre categorization where the value may be absent, broad, or unsuitable."
+      },
+      {
+        "fieldApiName": "RecordType.Name",
+        "businessMeaning": "Salesforce Case record type",
+        "semanticCategory": "Case Classification / Process Type",
+        "llmInterpretationAndUsage": "Identifies the Case process, department, channel, or service framework",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "For Contact Centre records, Record Type should be used as the primary categorization basis where Subject and eService name are not suitable."
+      },
+      {
+        "fieldApiName": "Origin",
+        "businessMeaning": "Channel through which the Case was created",
+        "semanticCategory": "Service Channel",
+        "llmInterpretationAndUsage": "Identifies whether the request originated through phone, email, web, portal, internal entry, contact centre, or another configured channel",
+        "sensitiveClassification": "Internal Business Data",
+        "importantRules": "Origin describes how the Case was received, not what the customer requested. It should not be used as the service category."
+      },
+      {
+        "fieldApiName": "Case_Type__c",
+        "businessMeaning": "Indicates whether the Case is a parent Case or child Case",
+        "semanticCategory": "Case Hierarchy",
+        "llmInterpretationAndUsage": "Used to separate the original customer request from operational child Cases",
+        "sensitiveClassification": "Internal System / Process Data",
+        "importantRules": "Only parent Cases should be included in customer-request counts and category summaries."
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "RecordType.Name",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "RecordType.Name",
+        "businessMeaning": "Business process or Case classification",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Origin",
+        "businessMeaning": "Channel through which the Case was received",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "Short service request description",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "Standardized eService or administrative service name",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Status",
+        "businessMeaning": "Current Case lifecycle state",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Origin",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "CaseNumber",
+        "businessMeaning": "Unexpected system or extraction issue",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "Subject not entered, generated elsewhere, or not applicable",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Status",
+        "businessMeaning": "Unexpected data or extraction issue",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "AccountId",
+        "businessMeaning": "Case not linked to an Account",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "ContactId",
+        "businessMeaning": "No Contact associated or request raised directly against the Account",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Opporutniy_Name__c",
+        "businessMeaning": "Case is not related to a specific Opportunity or the relationship was not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "eService_Admin_Name__c",
+        "businessMeaning": "Case was not created through a configured eService, field not applicable, or value not populated",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "RecordType.Name",
+        "businessMeaning": "Record Type unavailable in the extract or relationship not queried",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Origin",
+        "businessMeaning": "Intake channel not recorded",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Case_Type__c",
+        "businessMeaning": "Hierarchy type not classified or legacy Case record",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Subject",
+        "businessMeaning": "Internal Customer Service Data",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Status",
+        "businessMeaning": "Internal Operational Data",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      },
+      {
+        "fieldApiName": "Origin",
+        "businessMeaning": "Internal Channel Data",
+        "semanticCategory": "",
+        "llmInterpretationAndUsage": "",
+        "sensitiveClassification": "",
+        "importantRules": ""
+      }
+    ]
+  }
+}

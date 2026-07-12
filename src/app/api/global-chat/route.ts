@@ -315,6 +315,7 @@ export async function POST(req: NextRequest) {
 
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, sfHistory) : null
+  // Note: thinking steps for Salesforce are emitted inside the stream start block above
   if (salesforceResult) {
     const sfCitation = salesforceResult.citation
     if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
@@ -396,6 +397,19 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
 
       try {
         send({ type: 'start', userMessageId: userMsg.id })
+
+        // ── Thinking process steps (emitted as thinking events) ──
+        const steps: string[] = []
+        const emitStep = (step: string) => { steps.push(step); send({ type: 'thinking', step, index: steps.length }) }
+
+        if (skipRetrieval) {
+          emitStep('Processing your message...')
+        } else {
+          emitStep('Understanding your question...')
+          if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
+          if (intent.documents) emitStep('Searching documents for relevant content...')
+          if (intent.web) emitStep('Searching the web for supplementary information...')
+        }
 
         let fullContent = ''
         for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), conversationHistory)) {

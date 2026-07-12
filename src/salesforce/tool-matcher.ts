@@ -106,7 +106,24 @@ Rules:
 51. For "compare [project] [year1] vs [year2]", "project comparison", "Alton/Kaya/Hayat comparison" → compare-years-by-project.
 52. For "breakdown by customer", "customer names", "sales by customer name", "which customers bought" → get-customer-breakdown.
 53. For "bedroom by year", "bedroom comparison", "unit type by year", "bedroom trend" → get-bedroom-by-year.
-54. NEVER ask for clarification — always try to answer with the best available tool.
+54. For "cases for customer X", "support tickets for account", "case history for buyer" → get-cases-for-account.
+55. For "cases raised by John", "support requests from person" → get-cases-for-contact.
+56. For "sales by community and bedroom", "bedroom per project", "project bedroom comparison" → get-sales-by-community-and-bedroom.
+57. For "compare July vs June", "month to month", "this month vs last month sales" → compare-months.
+58. For "list communities", "all communities", "what communities are available", "give me all communities" → list-all-communities.
+59. For "unit details", "unit status", "is this unit available", "what type is this unit", "inventory lookup" → lookup-inventory-unit.
+60. For "average plot area", "total area", "parking spaces", "selling price property", "terrace area", "garage area" → get-opp-property-aggregate.
+61. For "receipt clearance", "installment clearance", "invoice clearance", "payment percentage", "has customer cleared all" → get-payment-clearance.
+62. For "customer details", "who is this customer", "customer address", "nationality", "company info" → lookup-account-detail.
+63. For "case details", "case status", "case type", "service request details" → lookup-case-detail.
+64. For "quality inspection", "snag list", "deep cleaning", "key release", "handover notification", "milestone detail" → get-milestone-detail.
+65. For "available sales units", "available rental units", "leased rental units", "booked sales units" → get-inventory-by-building-status.
+66. For "missing data", "data quality", "null fields", "incomplete records" → get-data-quality.
+67. For "price by building", "price by view", "price by type", "avg price by" → get-inventory-price-by-attribute.
+68. For "completing this year", "upcoming completions", "completed units", "completion this quarter" → get-completion-filter.
+69. For "blocked including online", "temporarily unavailable", "available for rent", "available for sale" → get-inventory-status-combo.
+70. For "customer summary", "customer overview", "360 view", "summary of customer" → get-customer-summary.
+71. NEVER ask for clarification — always try to answer with the best available tool. If clarify is returned, always set it to null.
 
 Respond with ONLY JSON:
 {
@@ -142,7 +159,7 @@ export async function matchTool(query: string): Promise<ToolMatch> {
         tool: validated.tool && TOOL_CATALOG.some(t => t.name === validated.tool) ? validated.tool : null,
         confidence: validated.confidence,
         params: (validated.params || {}) as Record<string, string | number | boolean>,
-        clarify: validated.clarify || null,
+        clarify: null, // ALWAYS null — never ask for clarification
       }
     } catch (structErr) {
       console.warn('[salesforce] Structured output failed, falling back to raw chatJson:', structErr)
@@ -157,7 +174,7 @@ export async function matchTool(query: string): Promise<ToolMatch> {
         tool: validated.tool && TOOL_CATALOG.some(t => t.name === validated.tool) ? validated.tool : null,
         confidence: validated.confidence,
         params: (validated.params || {}) as Record<string, string | number | boolean>,
-        clarify: validated.clarify || null,
+        clarify: null, // ALWAYS null — never ask for clarification
       }
     }
 
@@ -169,7 +186,7 @@ export async function matchTool(query: string): Promise<ToolMatch> {
         tool: parsed.tool && TOOL_CATALOG.some(t => t.name === parsed.tool) ? parsed.tool : null,
         confidence: parsed.confidence || 'low',
         params: parsed.params || {},
-        clarify: parsed.clarify || null,
+        clarify: null, // ALWAYS null — never ask for clarification
       }
     } catch {
       // LLM returned non-JSON text (e.g. role hijack response) — no tool match

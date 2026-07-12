@@ -75,12 +75,17 @@ export function validateSOQL(query: string): GuardrailResult {
     return { safe: false, reason: 'Select clause contains suspicious characters' }
   }
 
-  // 10. Block Building_Community__c in GROUP BY (Salesforce limitation — this field cannot be grouped)
+  // 10. Block Building_Community__c in GROUP BY on Opportunity (Salesforce limitation — this field cannot be grouped on Opportunity)
+  // But ALLOW it on Property_Inventory__c where it works fine
   const groupByMatch = query.match(/\bGROUP\s+BY\b(.+?)(?:\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|$)/i)
   if (groupByMatch) {
     const groupByClause = groupByMatch[1]
     if (/Building_Community__c/i.test(groupByClause)) {
-      return { safe: false, reason: 'Building_Community__c cannot be grouped — use Building_Name__c instead' }
+      const fromObj = query.match(/\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i)?.[1]
+      if (fromObj && fromObj.toLowerCase() === 'opportunity') {
+        return { safe: false, reason: 'Building_Community__c cannot be grouped on Opportunity — use Building_Name__c instead' }
+      }
+      // For Property_Inventory__c and other objects, Building_Community__c GROUP BY is allowed
     }
   }
 

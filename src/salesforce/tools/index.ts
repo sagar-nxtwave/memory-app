@@ -23,37 +23,75 @@ export interface ToolDefinition {
   execute: (params: Record<string, string | number | boolean | undefined>) => Promise<ToolResult | null>
 }
 
-function formatResult(result: SoqlResult, maxRows: number = 50): string {
+// ── Test record detection — exclude placeholder/test data from results ──
+function isTestOpportunity(rec: Record<string, unknown>): boolean {
+  // Amount = 1 is a test record marker
+  if (rec.Amount === 1) return true
+  // CloseDate in 2032 is placeholder data
+  const cd = String(rec.CloseDate || '')
+  if (cd.startsWith('2032-')) return true
+  // Salesforce Admin as salesperson is test data
+  const sp = rec.cm_Sales_Person__r
+  if (sp && typeof sp === 'object' && (sp as Record<string, unknown>).Name === 'Salesforce Admin') return true
+  // Test account names
+  const acct = rec.Account
+  if (acct && typeof acct === 'object') {
+    const acctName = String((acct as Record<string, unknown>).Name || '')
+    if (/^(test|do not update|contractor \/ miscellaneous)/i.test(acctName)) return true
+  }
+  return false
+}
+
+// ── Placeholder building names to exclude from community/building breakdowns ──
+const PLACEHOLDER_BUILDINGS = new Set(['Master Community', 'All Buildings', ''])
+
+function isPlaceholderBuilding(name: string | null | undefined): boolean {
+  if (!name) return true
+  return PLACEHOLDER_BUILDINGS.has(name) || /parking|container/i.test(name)
+}
+
+function formatResult(result: SoqlResult, maxRows: number = 50, filterTests: boolean = true): string {
   if (result.records.length === 0) {
     if (/count\s*\(\s*\)/i.test(JSON.stringify(result))) return `${result.totalSize}`
     return 'No matching records found.'
   }
-  const rows = result.records.slice(0, maxRows).map((r) => {
+  // Filter test records if requested
+  let records = filterTests ? result.records.filter(r => !isTestOpportunity(r as Record<string, unknown>)) : result.records
+  if (records.length === 0) {
+    return filterTests ? 'No matching records found (test records excluded).' : 'No matching records found.'
+  }
+  const rows = records.slice(0, maxRows).map((r) => {
     const { attributes, ...fields } = r as Record<string, unknown>
     void attributes
     return Object.entries(fields)
       .filter(([k]) => k !== 'attributes')
       .map(([k, v]) => {
-        // Clean up field names — remove __c, __r suffixes
         const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
-        let val = v
+        let val: unknown = v
         if (typeof val === 'object' && val !== null) {
-          // Handle nested objects (like Account.Name)
           if ((val as Record<string, unknown>).Name) {
             val = (val as Record<string, unknown>).Name
           } else {
             val = JSON.stringify(val)
           }
         }
+        // Privacy: mask emails and phone numbers
+        if (typeof val === 'string') {
+          const s = val as string
+          val = s.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, (email: string) => {
+            const [local, domain] = email.split('@')
+            return `${local.charAt(0)}***@${domain}`
+          }).replace(/\+971[\s-]?\d[\s-]?\d{3}[\s-]?\d{4}/g, (phone: string) => phone.slice(0, 6) + '****')
+        }
         return val == null ? '' : `${cleanKey}: ${val}`
       })
-      .filter(([k]) => k !== '')
+      .filter(([, v]) => v !== '')
       .join(' | ')
   })
-  const more = result.records.length > maxRows
-    ? `\n… and ${result.records.length - maxRows} more`
+  const more = records.length > maxRows
+    ? `\n… and ${records.length - maxRows} more`
     : ''
-  return rows.join('\n')
+  return rows.join('\n') + more
 }
 
 const MONTH_MAP: Record<string, number> = {
@@ -113,8 +151,6 @@ function dateFilter(field: string, period?: string): string {
   return ''
 }
 
-const SALESFORCE_NOTE = ''
-
 // Tool 1: get-sales-summary
 const getSalesSummary: ToolDefinition = {
   name: 'get-sales-summary',
@@ -152,7 +188,7 @@ const getSalesByBuilding: ToolDefinition = {
   execute: async (params) => {
     const period = params.period as string | undefined
     const limit = (params.limit as number) || 10
-    let where = "WHERE Building_Name__c != null AND StageName = 'Closed Won'"
+    let where = "WHERE Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND StageName = 'Closed Won'"
     where += dateFilter('CloseDate', period)
     const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC LIMIT ${limit}`
     try {
@@ -296,13 +332,26 @@ const lookupCustomer: ToolDefinition = {
   ],
   keywords: ['customer', 'account', 'buyer', 'what did', 'show me', 'lookup', 'find customer'],
   execute: async (params) => {
-    const name = params.name as string
+    const name = (params.name as string)?.replace(/'/g, "")
     if (!name) return null
+    // Try exact LIKE first
     const query = `SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE Account.Name LIKE '%${name}%' ORDER BY CloseDate DESC LIMIT 20`
     try {
       const result = await soql(query)
-      const body = formatResult(result)
-      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
+      if (result.records.length > 0) {
+        return { context: formatResult(result), citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+      // Fuzzy fallback: split name and try first/last parts separately
+      const parts = name.split(/\s+/).filter(p => p.length > 2)
+      if (parts.length >= 2) {
+        const fuzzyConditions = parts.map(p => `Account.Name LIKE '%${p}%'`).join(' OR ')
+        const fuzzyQuery = `SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE (${fuzzyConditions}) ORDER BY CloseDate DESC LIMIT 20`
+        const fuzzyResult = await soql(fuzzyQuery)
+        if (fuzzyResult.records.length > 0) {
+          return { context: `Found close matches:\n${formatResult(fuzzyResult)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+        }
+      }
+      return { context: `No records found for customer "${name}". Could you check the spelling or provide additional details like email or phone?`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -312,15 +361,23 @@ const getUnitCount: ToolDefinition = {
   name: 'get-unit-count',
   description: 'Get total units from property inventory. Use for "how many units", "total properties", "unit count".',
   params: [
-    { name: 'status', type: 'string', description: 'Filter by status', required: false },
+    { name: 'status', type: 'string', description: 'Filter by status (e.g. "Available", "Sold", "Reserved", "Booked", "Leased")', required: false },
+    { name: 'community', type: 'string', description: 'Filter by community/project name', required: false },
   ],
   keywords: ['how many units', 'total units', 'unit count', 'total properties', 'property count', 'inventory'],
   execute: async (params) => {
-    const query = `SELECT COUNT(Id) FROM Property_Inventory__c`
+    const status = params.status as string | undefined
+    const community = params.community as string | undefined
+    let where = ''
+    const conditions: string[] = []
+    if (status) conditions.push(`Property_Status__c = '${status.replace(/'/g, "")}'`)
+    if (community) conditions.push(`Building_Community__c LIKE '%${community.replace(/'/g, "")}%'`)
+    if (conditions.length) where = `WHERE ${conditions.join(' AND ')}`
+    const query = `SELECT COUNT(Id) cnt FROM Property_Inventory__c ${where}`
     try {
       const result = await soql(query)
-      const body = formatResult(result)
-      return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
+      const count = result.records[0]?.cnt ?? result.totalSize
+      return { context: `Total units${status ? ` (${status})` : ''}${community ? ` in ${community}` : ''}: ${count}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -469,7 +526,7 @@ const getLeadsSummary: ToolDefinition = {
       const statusResult = await soql(statusQuery)
       const total = countResult.records[0]?.cnt ?? countResult.totalSize
       const statusBody = formatResult(statusResult)
-      return { context: `${SALESFORCE_NOTE}Total leads: ${total}\n\n${statusBody}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Total leads: ${total}\n\n${statusBody}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -532,7 +589,7 @@ const getTasksSummary: ToolDefinition = {
       const statusResult = await soql(statusQuery)
       const total = countResult.records[0]?.cnt ?? countResult.totalSize
       const statusBody = formatResult(statusResult)
-      return { context: `${SALESFORCE_NOTE}Total tasks: ${total}\n\nBreakdown by status:\n${statusBody}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Total tasks: ${total}\n\nBreakdown by status:\n${statusBody}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -642,6 +699,26 @@ const getPropertyByCommunity: ToolDefinition = {
       const result = await soql(query)
       const body = formatResult(result)
       return { context: body, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 23b: list-all-communities
+const listAllCommunities: ToolDefinition = {
+  name: 'list-all-communities',
+  description: 'List all distinct community names from inventory. Use for "list communities", "all communities", "what communities are available", "give me all communities", "community list".',
+  params: [],
+  keywords: ['list communities', 'all communities', 'community names', 'community list', 'available communities', 'what communities', 'give me all the community'],
+  execute: async () => {
+    const query = `SELECT Building_Community__c FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c ORDER BY Building_Community__c`
+    try {
+      const result = await soql(query)
+      if (!result.records || result.records.length === 0) {
+        return { context: 'No communities found in the inventory.', citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+      const communities = result.records.map((r: Record<string, unknown>) => (r as { Building_Community__c?: string }).Building_Community__c).filter((c): c is string => Boolean(c))
+      const list = communities.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n')
+      return { context: `Found ${communities.length} communities:\n${list}`, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
 }
@@ -1252,7 +1329,7 @@ const getTasksByOwner: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = ''
     if (period) where = 'WHERE ' + dateFilter('CreatedDate', period).replace(/^ AND /, '')
-    const query = `SELECT OwnerId, COUNT(Id) cnt FROM Task ${where} GROUP BY OwnerId ORDER BY COUNT(Id) DESC LIMIT ${limit}`
+    const query = `SELECT Owner.Name ownerName, COUNT(Id) cnt FROM Task ${where} GROUP BY Owner.Name ORDER BY COUNT(Id) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1899,13 +1976,18 @@ const getCancellationRate: ToolDefinition = {
       let dateFilter = ''
       const y = currentYear()
       if (period === 'this year') dateFilter = ` AND CloseDate >= ${y}-01-01 AND CloseDate <= ${y}-12-31`
-      else if (period === 'this month') dateFilter = ` AND CloseDate >= ${y}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01 AND CloseDate <= ${y}-${String(new Date().getMonth() + 1).padStart(2, '0')}-31`
+      else if (period === 'this month') {
+        const now = new Date()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+        dateFilter = ` AND CloseDate >= ${y}-${month}-01 AND CloseDate <= ${y}-${month}-${lastDay}`
+      }
 
-      // Two queries: total per building + cancelled per building (SUM CASE WHEN is invalid SOQL)
+      // Two queries: total per building + cancelled per building (using Order_Stattus__c)
       const totalR = await soql(`SELECT Building_Name__c community, COUNT(Id) total FROM Opportunity WHERE Building_Name__c != null${dateFilter} GROUP BY Building_Name__c HAVING COUNT(Id) > 10 ORDER BY COUNT(Id) DESC LIMIT 30`)
       if (!totalR.records.length) return null
 
-      const cancelledR = await soql(`SELECT Building_Name__c community, COUNT(Id) cancelled FROM Opportunity WHERE Building_Name__c != null AND IsClosed = true AND IsWon = false${dateFilter} GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 30`)
+      const cancelledR = await soql(`SELECT Building_Name__c community, COUNT(Id) cancelled FROM Opportunity WHERE Building_Name__c != null AND Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')${dateFilter} GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 30`)
 
       // Merge the two maps
       const totalMap = new Map<string, number>()
@@ -2150,7 +2232,7 @@ const getSalesByQuarter: ToolDefinition = {
     let where = `WHERE IsWon = true AND CALENDAR_YEAR(CloseDate) = ${year}`
     if (community) {
       const safeName = community.replace(/'/g, "")
-      where += ` AND Building_Name__c = '${safeName}'`
+      where += ` AND (Building_Name__c LIKE '%${safeName}%' OR Building_Community__c LIKE '%${safeName}%')`
     }
     const query = `SELECT QUARTER(CloseDate) quarter, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY QUARTER(CloseDate) ORDER BY QUARTER(CloseDate)`
     try {
@@ -2185,36 +2267,39 @@ const compareYearsByProject: ToolDefinition = {
     const year2 = params.year2 as string
     const community = params.community as string | undefined
     const safeName = community ? community.replace(/'/g, "") : null
-    if (safeName) {
-      // Project-specific comparison
-      const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c = '${safeName}' AND CALENDAR_YEAR(CloseDate) = ${year1}`)
-      const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c = '${safeName}' AND CALENDAR_YEAR(CloseDate) = ${year2}`)
-      const d1 = q1.records[0] || { cnt: 0, total: 0 }
-      const d2 = q2.records[0] || { cnt: 0, total: 0 }
-      const amt1 = d1.total ? formatAED(d1.total) : 'AED 0'
-      const amt2 = d2.total ? formatAED(d2.total) : 'AED 0'
-      const dealChange = d1.cnt > 0 ? (((d2.cnt as number) - (d1.cnt as number)) / (d1.cnt as number) * 100).toFixed(1) : 'N/A'
-      const revChange = (d1.total as number) > 0 ? (((d2.total as number) - (d1.total as number)) / (d1.total as number) * 100).toFixed(1) : 'N/A'
-      const context = `${community} — ${year1} vs ${year2}:\n  ${year1}: ${(d1.cnt as number).toLocaleString()} deals | ${amt1}\n  ${year2}: ${(d2.cnt as number).toLocaleString()} deals | ${amt2}\n  Change: ${dealChange}% deals | ${revChange}% revenue`
+    try {
+      if (safeName) {
+        // Project-specific comparison — try both Building_Name__c and Building_Community__c
+        const communityFilter = `(Building_Name__c LIKE '%${safeName}%' OR Building_Community__c LIKE '%${safeName}%')`
+        const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year1}`)
+        const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year2}`)
+        const d1 = q1.records[0] || { cnt: 0, total: 0 }
+        const d2 = q2.records[0] || { cnt: 0, total: 0 }
+        const amt1 = (d1.total as number) ? formatAED(d1.total as number) : 'AED 0'
+        const amt2 = (d2.total as number) ? formatAED(d2.total as number) : 'AED 0'
+        const dealChange = (d1.cnt as number) > 0 ? (((d2.cnt as number) - (d1.cnt as number)) / (d1.cnt as number) * 100).toFixed(1) : 'N/A'
+        const revChange = (d1.total as number) > 0 ? (((d2.total as number) - (d1.total as number)) / (d1.total as number) * 100).toFixed(1) : 'N/A'
+        const context = `${community} — ${year1} vs ${year2}:\n  ${year1}: ${(d1.cnt as number).toLocaleString()} deals | ${amt1}\n  ${year2}: ${(d2.cnt as number).toLocaleString()} deals | ${amt2}\n  Change: ${dealChange}% deals | ${revChange}% revenue`
+        return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+      // No community specified — compare by all projects (exclude placeholders)
+      const q1 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+      const q2 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+      const map1 = new Map<string, { cnt: number; total: number }>()
+      const map2 = new Map<string, { cnt: number; total: number }>()
+      for (const r of q1.records) map1.set(r.Building_Name__c as string, { cnt: r.cnt as number, total: r.total as number })
+      for (const r of q2.records) map2.set(r.Building_Name__c as string, { cnt: r.cnt as number, total: r.total as number })
+      const allBuildings = [...new Set([...map1.keys(), ...map2.keys()])].slice(0, 15)
+      const rows = allBuildings.map(b => {
+        const d1 = map1.get(b) || { cnt: 0, total: 0 }
+        const d2 = map2.get(b) || { cnt: 0, total: 0 }
+        const amt1 = d1.total ? formatAED(d1.total) : 'AED 0'
+        const amt2 = d2.total ? formatAED(d2.total) : 'AED 0'
+        return `${b}: ${year1}=${d1.cnt} deals (${amt1}) | ${year2}=${d2.cnt} deals (${amt2})`
+      })
+      const context = `Project Comparison ${year1} vs ${year2}:\n${rows.join('\n')}`
       return { context, citation: { documentName: 'Salesforce (live CRM)' } }
-    }
-    // No community specified — compare by all projects
-    const q1 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
-    const q2 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
-    const map1 = new Map<string, { cnt: number; total: number }>()
-    const map2 = new Map<string, { cnt: number; total: number }>()
-    for (const r of q1.records) map1.set(r.Building_Name__c as string, { cnt: r.cnt as number, total: r.total as number })
-    for (const r of q2.records) map2.set(r.Building_Name__c as string, { cnt: r.cnt as number, total: r.total as number })
-    const allBuildings = [...new Set([...map1.keys(), ...map2.keys()])].slice(0, 15)
-    const rows = allBuildings.map(b => {
-      const d1 = map1.get(b) || { cnt: 0, total: 0 }
-      const d2 = map2.get(b) || { cnt: 0, total: 0 }
-      const amt1 = d1.total ? formatAED(d1.total) : 'AED 0'
-      const amt2 = d2.total ? formatAED(d2.total) : 'AED 0'
-      return `${b}: ${year1}=${d1.cnt} deals (${amt1}) | ${year2}=${d2.cnt} deals (${amt2})`
-    })
-    const context = `Project Comparison ${year1} vs ${year2}:\n${rows.join('\n')}`
-    return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
   }
 }
 
@@ -2232,14 +2317,18 @@ const getCustomerBreakdown: ToolDefinition = {
     const limit = (params.limit as number) || 20
     let where = "WHERE Account.Name != null AND IsWon = true AND Amount != null"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT Account.Name name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
-      const rows = result.records.map((r: any) => {
-        const amt = r.total ? formatAED(r.total) : 'N/A'
-        return `${r.Account?.Name ?? 'Unknown'} | ${r.cnt} deals | ${amt}`
+      if (result.records.length === 0) return { context: 'No customer data found.', citation: { documentName: 'Salesforce (live CRM)' } }
+      const rows = result.records.map((r: Record<string, unknown>) => {
+        const name = String(r.name || (r.Account as Record<string, unknown>)?.Name || 'Unknown')
+        const cnt = r.cnt as number
+        const total = r.total as number
+        const amt = total ? formatAED(total) : 'N/A'
+        return `${name} | ${cnt} deals | ${amt}`
       })
-      const context = `Customer Breakdown (top ${limit}):\n${rows.join('\n')}`
+      const context = `Customer Breakdown (top ${Math.min(limit, rows.length)}):\n${rows.join('\n')}`
       return { context, citation: { documentName: 'Salesforce (live CRM)' } }
     } catch { return null }
   }
@@ -2260,26 +2349,537 @@ const getBedroomByYear: ToolDefinition = {
     const year2 = params.year2 as string
     const community = params.community as string | undefined
     let whereBase = "WHERE Sales_Room__c != null AND IsWon = true"
-    if (community) whereBase += ` AND Building_Name__c = '${community.replace(/'/g, "")}'`
-    const q1 = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt FROM Opportunity ${whereBase} AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Sales_Room__c ORDER BY COUNT(Id) DESC`)
-    const q2 = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt FROM Opportunity ${whereBase} AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Sales_Room__c ORDER BY COUNT(Id) DESC`)
-    const map1 = new Map<string, number>()
-    const map2 = new Map<string, number>()
-    for (const r of q1.records) map1.set(r.Sales_Room__c as string, r.cnt as number)
-    for (const r of q2.records) map2.set(r.Sales_Room__c as string, r.cnt as number)
-    const allTypes = [...new Set([...map1.keys(), ...map2.keys()])]
-    const rows = allTypes.map(t => {
-      const c1 = map1.get(t) || 0
-      const c2 = map2.get(t) || 0
-      const change = c1 > 0 ? (((c2 - c1) / c1) * 100).toFixed(0) : 'N/A'
-      return `${t}: ${year1}=${c1} | ${year2}=${c2} | ${change}%`
-    })
-    const context = `Bedroom Comparison ${year1} vs ${year2}${community ? ` (${community})` : ''}:\n${rows.join('\n')}`
-    return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+    if (community) whereBase += ` AND (Building_Name__c LIKE '%${community.replace(/'/g, "")}%' OR Building_Community__c LIKE '%${community.replace(/'/g, "")}%')`
+    try {
+      const q1 = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt FROM Opportunity ${whereBase} AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Sales_Room__c ORDER BY COUNT(Id) DESC`)
+      const q2 = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt FROM Opportunity ${whereBase} AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Sales_Room__c ORDER BY COUNT(Id) DESC`)
+      const map1 = new Map<string, number>()
+      const map2 = new Map<string, number>()
+      for (const r of q1.records) map1.set(r.Sales_Room__c as string, r.cnt as number)
+      for (const r of q2.records) map2.set(r.Sales_Room__c as string, r.cnt as number)
+      const allTypes = [...new Set([...map1.keys(), ...map2.keys()])]
+      const rows = allTypes.map(t => {
+        const c1 = map1.get(t) || 0
+        const c2 = map2.get(t) || 0
+        const change = c1 > 0 ? (((c2 - c1) / c1) * 100).toFixed(0) : 'N/A'
+        return `${t}: ${year1}=${c1} | ${year2}=${c2} | ${change}%`
+      })
+      const context = `Bedroom Comparison ${year1} vs ${year2}${community ? ` (${community})` : ''}:\n${rows.join('\n')}`
+      return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NEW TOOLS (85-88): Case associations, multi-dimensional breakdowns, month compare
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Tool 85: get-cases-for-account
+const getCasesForAccount: ToolDefinition = {
+  name: 'get-cases-for-account',
+  description: 'Get all cases linked to a customer/account. Use for "cases for customer X", "support tickets for this account", "case history for buyer".',
+  params: [
+    { name: 'accountName', type: 'string', description: 'Account/customer name to search', required: true },
+    { name: 'limit', type: 'number', description: 'Max cases to return', required: false },
+  ],
+  keywords: ['cases for customer', 'support tickets', 'case history', 'cases for account', 'cases by customer', 'service cases for'],
+  execute: async (params) => {
+    const name = (params.accountName as string)?.replace(/'/g, "")
+    if (!name) return null
+    const limit = (params.limit as number) || 20
+    try {
+      const result = await soql(`SELECT CaseNumber, Subject, Status, Type, Priority, CreatedDate FROM Case WHERE Account.Name LIKE '%${name}%' ORDER BY CreatedDate DESC LIMIT ${limit}`)
+      if (result.records.length === 0) {
+        return { context: `No cases found for customer "${name}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+      const rows = result.records.map((r: Record<string, unknown>) => {
+        const { attributes, ...fields } = r; void attributes
+        return Object.entries(fields).filter(([k]) => k !== 'attributes').map(([k, v]) => {
+          const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+          return v == null ? '' : `${cleanKey}: ${v}`
+        }).filter(([, v]) => v !== '').join(' | ')
+      })
+      return { context: `Cases for "${name}" (${result.totalSize} total):\n${rows.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 86: get-cases-for-contact
+const getCasesForContact: ToolDefinition = {
+  name: 'get-cases-for-contact',
+  description: 'Get all cases raised by a specific contact/person. Use for "cases raised by John", "support requests from this person", "what cases did X file".',
+  params: [
+    { name: 'contactName', type: 'string', description: 'Contact/person name to search', required: true },
+    { name: 'limit', type: 'number', description: 'Max cases to return', required: false },
+  ],
+  keywords: ['cases by contact', 'cases raised by', 'support requests from', 'cases filed by', 'contact cases'],
+  execute: async (params) => {
+    const name = (params.contactName as string)?.replace(/'/g, "")
+    if (!name) return null
+    const limit = (params.limit as number) || 20
+    try {
+      const result = await soql(`SELECT CaseNumber, Subject, Status, Type, Priority, CreatedDate, Account.Name FROM Case WHERE Contact.Name LIKE '%${name}%' ORDER BY CreatedDate DESC LIMIT ${limit}`)
+      if (result.records.length === 0) {
+        return { context: `No cases found for contact "${name}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      }
+      const rows = result.records.map((r: Record<string, unknown>) => {
+        const { attributes, ...fields } = r; void attributes
+        return Object.entries(fields).filter(([k]) => k !== 'attributes').map(([k, v]) => {
+          const cleanKey = k.replace(/__c$|__r$/, '').replace(/_/g, ' ')
+          let val = v
+          if (typeof val === 'object' && val !== null && (val as Record<string, unknown>).Name) {
+            val = (val as Record<string, unknown>).Name
+          }
+          return val == null ? '' : `${cleanKey}: ${val}`
+        }).filter(([, v]) => v !== '').join(' | ')
+      })
+      return { context: `Cases raised by "${name}" (${result.totalSize} total):\n${rows.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 87: get-sales-by-community-and-bedroom (multi-dimensional)
+const getSalesByCommunityAndBedroom: ToolDefinition = {
+  name: 'get-sales-by-community-and-bedroom',
+  description: 'Get sales broken down by BOTH community and bedroom type. Use for "sales by community and bedroom", "bedroom breakdown per project", "3-bedroom sales in Kaya", "project bedroom comparison".',
+  params: [
+    { name: 'period', type: 'string', description: 'Time period', required: false },
+    { name: 'community', type: 'string', description: 'Filter by community name', required: false },
+    { name: 'year', type: 'string', description: 'Filter by year', required: false },
+  ],
+  keywords: ['sales by community and bedroom', 'bedroom per project', 'project bedroom', 'community bedroom breakdown', 'bedroom breakdown by project'],
+  execute: async (params) => {
+    const period = params.period as string | undefined
+    const community = params.community as string | undefined
+    const year = params.year as string | undefined
+    let where = "WHERE Building_Name__c != null AND Sales_Room__c != null AND StageName = 'Closed Won'"
+    if (community) {
+      const safeName = community.replace(/'/g, "")
+      where += ` AND (Building_Name__c LIKE '%${safeName}%' OR Building_Community__c LIKE '%${safeName}%')`
+    }
+    if (year) where += ` AND CALENDAR_YEAR(CloseDate) = ${year}`
+    else if (period) where += dateFilter('CloseDate', period)
+    const query = `SELECT Building_Name__c, Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c, Sales_Room__c ORDER BY Building_Name__c, SUM(Amount) DESC`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: 'No matching records found.', citation: { documentName: 'Salesforce (live CRM)' } }
+      // Group by building
+      const grouped = new Map<string, { bedroom: string; cnt: number; total: number }[]>()
+      for (const r of result.records) {
+        const building = String(r.Building_Name__c)
+        if (!grouped.has(building)) grouped.set(building, [])
+        grouped.get(building)!.push({ bedroom: String(r.Sales_Room__c), cnt: r.cnt as number, total: r.total as number })
+      }
+      const lines: string[] = []
+      for (const [building, bedrooms] of grouped) {
+        lines.push(`\n${building}:`)
+        for (const b of bedrooms) {
+          lines.push(`  ${b.bedroom}: ${b.cnt} deals | ${formatAED(b.total)}`)
+        }
+      }
+      return { context: `Sales by Community & Bedroom${year ? ` (${year})` : ''}:\n${lines.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 88: compare-months (intra-year month-to-month)
+const compareMonths: ToolDefinition = {
+  name: 'compare-months',
+  description: 'Compare sales between two specific months. Use for "compare July vs June", "month to month comparison", "this month vs last month sales".',
+  params: [
+    { name: 'month1', type: 'string', description: 'First month (e.g. "June", "Jun 2026")', required: true },
+    { name: 'month2', type: 'string', description: 'Second month (e.g. "July", "Jul 2026")', required: true },
+  ],
+  keywords: ['compare months', 'month to month', 'this month vs last month', 'monthly comparison', 'july vs june'],
+  execute: async (params) => {
+    const m1 = params.month1 as string
+    const m2 = params.month2 as string
+    if (!m1 || !m2) return null
+    // Parse month names
+    const m1Filter = monthYearDateFilter('CloseDate', m1)
+    const m2Filter = monthYearDateFilter('CloseDate', m2)
+    if (!m1Filter || !m2Filter) {
+      return { context: `Could not parse month names. Use format like "June 2026" or "Jul".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    }
+    try {
+      const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true${m1Filter}`)
+      const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true${m2Filter}`)
+      const d1 = q1.records[0] || { cnt: 0, total: 0 }
+      const d2 = q2.records[0] || { cnt: 0, total: 0 }
+      const amt1 = (d1.total as number) ? formatAED(d1.total as number) : 'AED 0'
+      const amt2 = (d2.total as number) ? formatAED(d2.total as number) : 'AED 0'
+      const dealChange = (d1.cnt as number) > 0 ? (((d2.cnt as number) - (d1.cnt as number)) / (d1.cnt as number) * 100).toFixed(1) : 'N/A'
+      const revChange = (d1.total as number) > 0 ? (((d2.total as number) - (d1.total as number)) / (d1.total as number) * 100).toFixed(1) : 'N/A'
+      const context = `${m1} vs ${m2}:\n  ${m1}: ${(d1.cnt as number).toLocaleString()} deals | ${amt1}\n  ${m2}: ${(d2.cnt as number).toLocaleString()} deals | ${amt2}\n  Change: ${dealChange}% deals | ${revChange}% revenue`
+      return { context, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// NEW GAP-CLOSING TOOLS (89-100)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Tool 89: lookup-inventory-unit — Single Property_Inventory__c lookup by name/number
+const lookupInventoryUnit: ToolDefinition = {
+  name: 'lookup-inventory-unit',
+  description: 'Look up a single inventory unit by name, number, or building. Use for "what is the status of this unit", "is this unit available", "what type is this unit", "unit details", "inventory lookup".',
+  params: [
+    { name: 'unit', type: 'string', description: 'Unit name or number to search', required: true },
+    { name: 'building', type: 'string', description: 'Filter by building name', required: false },
+  ],
+  keywords: ['unit details', 'unit status', 'inventory lookup', 'this unit', 'what type', 'is this unit', 'unit information'],
+  execute: async (params) => {
+    const unit = params.unit as string
+    const building = params.building as string | undefined
+    let where = `WHERE Name LIKE '%${unit}%'`
+    if (building) where += ` AND Building_Name__c LIKE '%${building}%'`
+    const query = `SELECT Name, Property_Status__c, Type__c, Type_of_Unit__c, Building_Name__c, Building_Community__c, Property_Usage__c, Unit_View__c, Unit_Position__c, Selling_Price__c, Net_Selling_Price__c, Selling_Price_Per_Sq_Ft__c, Penalty_Amount__c, Strategic_Selling_Price__c, Estimated_Completion_Date__c, DLD_Total_Area__c, Parking_Count__c, Property_Type__c FROM Property_Inventory__c ${where} LIMIT 5`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No inventory unit found matching "${unit}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: formatResult(result), citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 90: get-opp-property-aggregate — Aggregate Opportunity_Property__c fields
+const getOppPropertyAggregate: ToolDefinition = {
+  name: 'get-opp-property-aggregate',
+  description: 'Get aggregate stats from Opportunity_Property__c (areas, prices, parking). Use for "average plot area", "total parking spaces", "average selling price of properties", "which deal has largest area".',
+  params: [
+    { name: 'metric', type: 'string', description: 'Metric: plot-area, total-area, terrace, garage, parking, selling-price, net-price', required: true },
+    { name: 'agg', type: 'string', description: 'Aggregation: avg, sum, min, max, count (default avg)', required: false },
+    { name: 'community', type: 'string', description: 'Filter by community', required: false },
+  ],
+  keywords: ['average plot area', 'total area', 'parking spaces', 'selling price property', 'terrace area', 'garage area', 'largest area', 'average area'],
+  execute: async (params) => {
+    const metric = params.metric as string
+    const agg = (params.agg as string) || 'avg'
+    const community = params.community as string | undefined
+    const fieldMap: Record<string, string> = {
+      'plot-area': 'Plot_Area__c', 'total-area': 'Total_Area__c', 'terrace': 'Terrace_Area__c',
+      'garage': 'Garage_Area__c', 'parking': 'Parking_Count__c', 'selling-price': 'Selling_Price__c',
+      'net-price': 'Net_Selling_Price__c', 'vat': 'Net_Amount_Including_VAT__c',
+    }
+    const field = fieldMap[metric]
+    if (!field) return { context: `Unknown metric "${metric}". Available: ${Object.keys(fieldMap).join(', ')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const aggFn = agg === 'sum' ? 'SUM' : agg === 'min' ? 'MIN' : agg === 'max' ? 'MAX' : agg === 'count' ? 'COUNT' : 'AVG'
+    let where = `WHERE ${field} != null`
+    if (community) where += ` AND Opportunity_Name__r.Building_Community__c = '${community}'`
+    const query = `SELECT ${aggFn}(${field}) val, COUNT(Id) cnt FROM Opportunity_Property__c ${where}`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No data found for ${metric}.`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const r = result.records[0] as Record<string, unknown>
+      const val = r.val ?? 'N/A'
+      const cnt = r.cnt ?? 0
+      return { context: `${agg.toUpperCase()} ${metric}: ${val}\nRecords: ${cnt}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 91: get-payment-clearance — Calculate payment clearance percentages
+const getPaymentClearance: ToolDefinition = {
+  name: 'get-payment-clearance',
+  description: 'Get payment clearance percentages for a deal or across deals. Use for "receipt clearance", "installment clearance", "invoice clearance", "payment percentage", "has customer cleared all".',
+  params: [
+    { name: 'deal', type: 'string', description: 'Deal name/ID (optional — if omitted, returns aggregate)', required: false },
+    { name: 'clearanceType', type: 'string', description: 'Type: receipt, installment, invoice (default: all)', required: false },
+    { name: 'belowPercent', type: 'number', description: 'Filter: only deals below this %', required: false },
+  ],
+  keywords: ['receipt clearance', 'installment clearance', 'invoice clearance', 'payment percentage', 'cleared all', 'payment below'],
+  execute: async (params) => {
+    const deal = params.deal as string | undefined
+    const belowPercent = params.belowPercent as number | undefined
+    if (deal) {
+      const query = `SELECT Name, Receipt_Clearance__c, Installment_Clearance__c, Invoice_Clearance__c, Total_Payments__c, DP_Amount__c, Service_Fee_Outstanding__c FROM Opportunity WHERE Name LIKE '%${deal}%' LIMIT 5`
+      try {
+        const result = await soql(query)
+        if (result.records.length === 0) return { context: `No deal found matching "${deal}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+        return { context: `Payment Clearance for "${deal}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      } catch { return null }
+    }
+    // Aggregate: deals with low clearance
+    let where = 'WHERE IsClosed = false'
+    if (belowPercent) where += ` AND Receipt_Clearance__c < ${belowPercent}`
+    const query = `SELECT COUNT(Id) cnt, AVG(Receipt_Clearance__c) avgReceipt, AVG(Installment_Clearance__c) avgInstallment, AVG(Invoice_Clearance__c) avgInvoice FROM Opportunity ${where}`
+    try {
+      const result = await soql(query)
+      return { context: `Payment Clearance Summary:\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 92: lookup-account-detail — Single Account profile lookup
+const lookupAccountDetail: ToolDefinition = {
+  name: 'lookup-account-detail',
+  description: 'Look up a single customer/account by name. Use for "who is this customer", "customer details", "customer address", "nationality", "customer type", "company info".',
+  params: [
+    { name: 'name', type: 'string', description: 'Account name to search', required: true },
+  ],
+  keywords: ['customer details', 'who is this customer', 'customer address', 'nationality', 'company info', 'account info', 'customer profile'],
+  execute: async (params) => {
+    const name = params.name as string
+    const query = `SELECT Name, RecordType.Name, Display_Address__c, Country_of_Residence_Billing_country__c, cm_Nationality__pc, Age__c, Opportunity_Count__c, Phone, PersonEmail, Primary_Contact__r.Name FROM Account WHERE Name LIKE '%${name}%' LIMIT 5`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No customer found matching "${name}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Customer Profile:\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 93: lookup-case-detail — Single Case lookup by CaseNumber
+const lookupCaseDetail: ToolDefinition = {
+  name: 'lookup-case-detail',
+  description: 'Look up a single case by CaseNumber or subject. Use for "case details", "what is this case about", "case status", "case type", "service request details".',
+  params: [
+    { name: 'caseNumber', type: 'string', description: 'Case number or subject to search', required: true },
+  ],
+  keywords: ['case details', 'case status', 'case type', 'service request', 'case info', 'what is this case'],
+  execute: async (params) => {
+    const cn = params.caseNumber as string
+    const query = `SELECT CaseNumber, Subject, Status, Type, Priority, Origin, eService_Admin_Name__c, RecordType.Name, Account.Name, Contact.Name, Opportunity_Name__r.Name, CreatedDate, ClosedDate, Description FROM Case WHERE CaseNumber LIKE '%${cn}%' OR Subject LIKE '%${cn}%' LIMIT 5`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No case found matching "${cn}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Case Details:\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 94: get-milestone-detail — Per-deal milestone sub-fields
+const getMilestoneDetail: ToolDefinition = {
+  name: 'get-milestone-detail',
+  description: 'Get detailed milestone status for a deal. Use for "has quality inspection been approved", "is there a snag list", "has deep cleaning been completed", "key release scheduled", "handover notification sent".',
+  params: [
+    { name: 'deal', type: 'string', description: 'Deal name/ID', required: true },
+  ],
+  keywords: ['quality inspection', 'snag list', 'deep cleaning', 'key release', 'handover notification', 'customer informed', 'appointment scheduled', 'milestone detail'],
+  execute: async (params) => {
+    const deal = params.deal as string
+    const query = `SELECT Name, Milestone_Current_Status__c, Quality_Inspection__c, Snag_List__c, Deep_Cleaning__c, Handover_Notification__c, Key_Release__c, Customer_Informed__c, Customer_Appointment_Scheduled__c, Appointment_Reschedule__c, Target_Handover_Date__c FROM Opportunity WHERE Name LIKE '%${deal}%' LIMIT 5`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No deal found matching "${deal}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Milestone Details for "${deal}":\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 95: get-inventory-by-building-status — Status + Usage combo filtering
+const getInventoryByBuildingStatus: ToolDefinition = {
+  name: 'get-inventory-by-building-status',
+  description: 'Count inventory units by building, status, and usage combination. Use for "available sales units", "available rental units", "leased rental units", "booked sales units".',
+  params: [
+    { name: 'building', type: 'string', description: 'Filter by building name', required: false },
+    { name: 'status', type: 'string', description: 'Filter by status: Available, Reserved, Booked, Sold, Blocked, Leased, etc.', required: false },
+    { name: 'usage', type: 'string', description: 'Filter by usage: Sale, Rent, etc.', required: false },
+  ],
+  keywords: ['available sales units', 'available rental units', 'leased units', 'booked sales', 'units by building and status', 'sales inventory', 'rental inventory'],
+  execute: async (params) => {
+    const building = params.building as string | undefined
+    const status = params.status as string | undefined
+    const usage = params.usage as string | undefined
+    const conditions: string[] = []
+    if (building) conditions.push(`Building_Name__c LIKE '%${building}%'`)
+    if (status) conditions.push(`Property_Status__c = '${status}'`)
+    if (usage) conditions.push(`Property_Usage__c = '${usage}'`)
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const groupBy = building ? 'Building_Name__c, Property_Status__c' : 'Property_Status__c, Property_Usage__c'
+    const query = `SELECT ${groupBy}, COUNT(Id) cnt FROM Property_Inventory__c ${where} GROUP BY ${groupBy} ORDER BY COUNT(Id) DESC`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No inventory found for the specified filters.`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Inventory by ${building ? 'Building + Status' : 'Status + Usage'}:\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 96: get-data-quality — Detect missing field values
+const getDataQuality: ToolDefinition = {
+  name: 'get-data-quality',
+  description: 'Check data quality — find records with missing fields. Use for "records with missing address", "customers without phone", "deals with no amount", "data quality report".',
+  params: [
+    { name: 'object', type: 'string', description: 'Object: Account, Opportunity, Case, Property_Inventory__c', required: true },
+    { name: 'field', type: 'string', description: 'Field to check for nulls', required: false },
+  ],
+  keywords: ['missing data', 'data quality', 'null fields', 'incomplete records', 'missing address', 'no phone'],
+  execute: async (params) => {
+    const obj = params.object as string
+    const field = params.field as string | undefined
+    const allowedObjects = ['Account', 'Opportunity', 'Case', 'Property_Inventory__c']
+    if (!allowedObjects.includes(obj)) return { context: `Object "${obj}" not supported. Use: ${allowedObjects.join(', ')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    if (field) {
+      const query = `SELECT COUNT(Id) cnt FROM ${obj} WHERE ${field} = null`
+      try {
+        const result = await soql(query)
+        const totalQ = `SELECT COUNT(Id) cnt FROM ${obj}`
+        const total = await soql(totalQ)
+        const missing = Number(result.records[0]?.cnt ?? 0)
+        const totalRecords = Number(total.records[0]?.cnt ?? 0)
+        const pct = totalRecords > 0 ? ((missing / totalRecords) * 100).toFixed(1) : '0'
+        return { context: `${obj}.${field}: ${missing} records missing (${pct}% of ${totalRecords} total)`, citation: { documentName: 'Salesforce (live CRM)' } }
+      } catch { return null }
+    }
+    // General data quality summary for key fields
+    const fieldMap: Record<string, string[]> = {
+      'Account': ['Phone', 'PersonEmail', 'Display_Address__c', 'cm_Nationality__pc'],
+      'Opportunity': ['Amount', 'Net_Amount__c', 'cm_Sales_Person__r.Name', 'Building_Community__c'],
+      'Case': ['Type', 'Priority', 'Origin', 'eService_Admin_Name__c'],
+      'Property_Inventory__c': ['Property_Status__c', 'Type__c', 'Selling_Price__c', 'Building_Community__c'],
+    }
+    const fields = fieldMap[obj] || []
+    const results: string[] = []
+    for (const f of fields) {
+      try {
+        const q = `SELECT COUNT(Id) cnt FROM ${obj} WHERE ${f} = null`
+        const r = await soql(q)
+        const totalQ = `SELECT COUNT(Id) cnt FROM ${obj}`
+        const total = await soql(totalQ)
+        const missing = Number(r.records[0]?.cnt ?? 0)
+        const totalRecords = Number(total.records[0]?.cnt ?? 0)
+        const pct = totalRecords > 0 ? ((missing / totalRecords) * 100).toFixed(1) : '0'
+        results.push(`${f}: ${missing} missing (${pct}%)`)
+      } catch { results.push(`${f}: error`) }
+    }
+    return { context: `Data Quality for ${obj}:\n${results.join('\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+}
+
+// Tool 97: get-inventory-price-by-attribute — Price grouped by view/type/building
+const getInventoryPriceByAttribute: ToolDefinition = {
+  name: 'get-inventory-price-by-attribute',
+  description: 'Get inventory pricing grouped by view, position, type, or building. Use for "average price by building", "price by view", "price by unit type", "highest price per sq ft".',
+  params: [
+    { name: 'groupBy', type: 'string', description: 'Group by: building, type, view, position', required: true },
+    { name: 'metric', type: 'string', description: 'Metric: avg-price, avg-sqft, count, total-value (default avg-price)', required: false },
+    { name: 'status', type: 'string', description: 'Filter by status', required: false },
+  ],
+  keywords: ['price by building', 'price by view', 'price by type', 'avg price', 'price per sqft', 'highest price'],
+  execute: async (params) => {
+    const groupBy = params.groupBy as string
+    const metric = (params.metric as string) || 'avg-price'
+    const status = params.status as string | undefined
+    const groupMap: Record<string, string> = {
+      'building': 'Building_Name__c', 'type': 'Type__c', 'view': 'Unit_View__c', 'position': 'Unit_Position__c',
+    }
+    const groupField = groupMap[groupBy]
+    if (!groupField) return { context: `Unknown groupBy "${groupBy}". Available: ${Object.keys(groupMap).join(', ')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    const metricMap: Record<string, string> = {
+      'avg-price': 'AVG(Selling_Price__c)', 'avg-sqft': 'AVG(Selling_Price_Per_Sq_Ft__c)',
+      'count': 'COUNT(Id)', 'total-value': 'SUM(Selling_Price__c)',
+    }
+    const selectMetric = metricMap[metric] || metricMap['avg-price']
+    let where = `WHERE ${groupField} != null`
+    if (status) where += ` AND Property_Status__c = '${status}'`
+    const query = `SELECT ${groupField}, ${selectMetric} val, COUNT(Id) cnt FROM Property_Inventory__c ${where} GROUP BY ${groupField} ORDER BY ${selectMetric} DESC`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No data found for ${groupBy} pricing.`, citation: { documentName: 'Salesforce (live CRM)' } }
+      return { context: `Pricing by ${groupBy}:\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 98: get-completion-filter — Filter by Estimated_Completion_Date__c
+const getCompletionFilter: ToolDefinition = {
+  name: 'get-completion-filter',
+  description: 'Filter inventory by estimated completion date. Use for "units completing this year", "upcoming completions", "completed units", "completion this quarter".',
+  params: [
+    { name: 'period', type: 'string', description: 'Time period: this-year, next-year, this-quarter, next-quarter, completed, upcoming', required: true },
+    { name: 'building', type: 'string', description: 'Filter by building', required: false },
+  ],
+  keywords: ['completing this year', 'upcoming completions', 'completed units', 'completion this quarter', 'estimated completion', 'construction status'],
+  execute: async (params) => {
+    const period = params.period as string
+    const building = params.building as string | undefined
+    const now = new Date()
+    const year = now.getFullYear()
+    let where = 'WHERE Estimated_Completion_Date__c != null'
+    if (period === 'this-year') where += ` AND Estimated_Completion_Date__c >= ${year}-01-01 AND Estimated_Completion_Date__c <= ${year}-12-31`
+    else if (period === 'next-year') where += ` AND Estimated_Completion_Date__c >= ${year + 1}-01-01 AND Estimated_Completion_Date__c <= ${year + 1}-12-31`
+    else if (period === 'this-quarter') {
+      const qStart = Math.ceil((now.getMonth() + 1) / 3)
+      const qEnd = qStart * 3
+      where += ` AND Estimated_Completion_Date__c >= ${year}-${String((qStart - 1) * 3 + 1).padStart(2, '0')}-01 AND Estimated_Completion_Date__c <= ${year}-${String(qEnd).padStart(2, '0')}-31`
+    }
+    else if (period === 'completed') where += ` AND Estimated_Completion_Date__c < ${now.toISOString().split('T')[0]}`
+    else if (period === 'upcoming') where += ` AND Estimated_Completion_Date__c > ${now.toISOString().split('T')[0]}`
+    if (building) where += ` AND Building_Name__c LIKE '%${building}%'`
+    const query = `SELECT COUNT(Id) cnt FROM Property_Inventory__c ${where}`
+    try {
+      const result = await soql(query)
+      const count = result.records[0]?.cnt ?? 0
+      return { context: `Units ${period === 'completed' ? 'already completed' : `completing ${period}`}: ${count}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 99: get-inventory-status-combo — Multiple status combinations
+const getInventoryStatusCombo: ToolDefinition = {
+  name: 'get-inventory-status-combo',
+  description: 'Count inventory with specific status combinations. Use for "blocked including online blocked", "temporarily unavailable", "available but for rent", "available but for sale".',
+  params: [
+    { name: 'statuses', type: 'string', description: 'Comma-separated statuses: Available,Reserved,Booked,Sold,Blocked,Online Blocked,Leased', required: true },
+    { name: 'usage', type: 'string', description: 'Filter by usage: Sale, Rent', required: false },
+  ],
+  keywords: ['blocked including online', 'temporarily unavailable', 'available for rent', 'available for sale', 'status combination'],
+  execute: async (params) => {
+    const statuses = (params.statuses as string).split(',').map(s => s.trim())
+    const usage = params.usage as string | undefined
+    const statusList = statuses.map(s => `'${s}'`).join(',')
+    let where = `WHERE Property_Status__c IN (${statusList})`
+    if (usage) where += ` AND Property_Usage__c = '${usage}'`
+    const query = `SELECT Property_Status__c, Property_Usage__c, COUNT(Id) cnt FROM Property_Inventory__c ${where} GROUP BY Property_Status__c, Property_Usage__c ORDER BY COUNT(Id) DESC`
+    try {
+      const result = await soql(query)
+      if (result.records.length === 0) return { context: `No inventory found with statuses: ${statuses.join(', ')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+      const total = result.records.reduce((sum: number, r: Record<string, unknown>) => sum + ((r.cnt as number) || 0), 0)
+      return { context: `Inventory (${statuses.join(' + ')})${usage ? ` [${usage}]` : ''}: ${total} total\n\n${formatResult(result)}`, citation: { documentName: 'Salesforce (live CRM)' } }
+    } catch { return null }
+  }
+}
+
+// Tool 100: get-customer-summary — Composite customer summary
+const getCustomerSummary: ToolDefinition = {
+  name: 'get-customer-summary',
+  description: 'Get a comprehensive customer summary with deals, cases, and contacts. Use for "customer summary", "summary of this customer", "customer overview", "360 view".',
+  params: [
+    { name: 'name', type: 'string', description: 'Customer/account name', required: true },
+  ],
+  keywords: ['customer summary', 'customer overview', '360 view', 'summary of customer', 'customer profile'],
+  execute: async (params) => {
+    const name = params.name as string
+    const parts: string[] = []
+    // Account info
+    try {
+      const acct = await soql(`SELECT Name, RecordType.Name, Display_Address__c, Country_of_Residence_Billing_country__c, Opportunity_Count__c FROM Account WHERE Name LIKE '%${name}%' LIMIT 1`)
+      if (acct.records.length > 0) parts.push(`Account:\n${formatResult(acct)}`)
+    } catch { /* skip */ }
+    // Deals
+    try {
+      const deals = await soql(`SELECT Name, StageName, Amount, Building_Name__c, CloseDate FROM Opportunity WHERE Account.Name LIKE '%${name}%' ORDER BY CloseDate DESC LIMIT 5`)
+      if (deals.records.length > 0) parts.push(`Recent Deals:\n${formatResult(deals)}`)
+    } catch { /* skip */ }
+    // Cases
+    try {
+      const cases = await soql(`SELECT CaseNumber, Subject, Status, Type FROM Case WHERE Account.Name LIKE '%${name}%' ORDER BY CreatedDate DESC LIMIT 5`)
+      if (cases.records.length > 0) parts.push(`Cases:\n${formatResult(cases)}`)
+    } catch { /* skip */ }
+    // Contacts
+    try {
+      const contacts = await soql(`SELECT Name, Title, Phone, Email FROM Contact WHERE Account.Name LIKE '%${name}%' LIMIT 5`)
+      if (contacts.records.length > 0) parts.push(`Contacts:\n${formatResult(contacts)}`)
+    } catch { /* skip */ }
+    if (parts.length === 0) return { context: `No information found for customer "${name}".`, citation: { documentName: 'Salesforce (live CRM)' } }
+    return { context: `Customer Summary — ${name}:\n\n${parts.join('\n\n')}`, citation: { documentName: 'Salesforce (live CRM)' } }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // EXISTING TOOLS CATALOG
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2307,6 +2907,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getCaseBreakdownByStatus,
   getCaseBreakdownByPriority,
   getPropertyByCommunity,
+  listAllCommunities,
   getCaseCount,
   getSalesByMonth,
   getWinRate,
@@ -2314,7 +2915,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getPropertyStatusBreakdown,
   getPropertyByType,
   getInventoryPricing,
-  getCaseBreakdownByOrigin,
+  // getCaseBreakdownByOrigin removed — duplicate of getCasesByChannel
   getCaseCountByEservice,
   getCaseCountByRecordType,
   getLeadsConversion,
@@ -2324,7 +2925,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   getSalesByAgent,
   getBookingTrend,
   getTopCustomersByTransaction,
-  getAccountByType,
+  // getAccountByType removed — duplicate of getCustomersByType
   getCancellationsByCommunity,
   // Contact tools
   getContactByAccount,
@@ -2373,8 +2974,37 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   compareYearsByProject,
   getCustomerBreakdown,
   getBedroomByYear,
+  // New tools (85-88): Case associations, multi-dimensional, month compare
+  getCasesForAccount,
+  getCasesForContact,
+  getSalesByCommunityAndBedroom,
+  compareMonths,
+  // Gap-closing tools (89-100)
+  lookupInventoryUnit,
+  getOppPropertyAggregate,
+  getPaymentClearance,
+  lookupAccountDetail,
+  lookupCaseDetail,
+  getMilestoneDetail,
+  getInventoryByBuildingStatus,
+  getDataQuality,
+  getInventoryPriceByAttribute,
+  getCompletionFilter,
+  getInventoryStatusCombo,
+  getCustomerSummary,
 ]
 
 export function getToolByName(name: string): ToolDefinition | undefined {
   return TOOL_CATALOG.find(t => t.name === name)
+}
+
+/**
+ * Get a compact text representation of all tools for LLM prompts.
+ * Used by the ReAct loop and tool matcher.
+ */
+export function getToolCatalogText(): string {
+  return TOOL_CATALOG.map(t => {
+    const params = t.params.map(p => `${p.name}${p.required ? '*' : ''}: ${p.description}`).join(', ')
+    return `- ${t.name}: ${t.description}${params ? ` [params: ${params}]` : ''}`
+  }).join('\n')
 }
