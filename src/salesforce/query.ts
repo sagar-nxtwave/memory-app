@@ -10,6 +10,9 @@ import { validateFollowUp } from './schemas'
 import { recordMetric, recordError, type QueryMetric } from './observability'
 import { verifyAnswer, quickCheck } from './verifier'
 import { todayStr, currentYear, dateContext } from './today'
+import { expandQuery } from './query-expansion'
+import { compressContext, quickCompress } from './context-compression'
+import { understandQuery, quickUnderstand, type UnderstoodQuery } from './query-understanding'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -59,10 +62,17 @@ function hasDateReference(query: string): boolean {
 }
 
 // Vague follow-ups that reference prior context — skip direct fallback, let follow-up resolver + tool matcher handle
-const VAGUE_FOLLOWUP_RE = /^(can you |could you )?\b(list|show|show me|get|give me|tell me|display)\b\s*(them|it|those|these|that|the ones|the list|the data|the results|the records)\b/i
+const VAGUE_FOLLOWUP_RE = /^((yes|no|ok|and|what about|how about) .{0,30}|(can you |could you )?\b(list|show|show me|get|give me|tell me|display)\b\s*(them|it|those|these|that|the ones|the list|the data|the results|the records)\b)/i
 
 function isVagueFollowUp(query: string): boolean {
   return VAGUE_FOLLOWUP_RE.test(query.trim())
+}
+
+// Queries that need the tool matcher (not direct fallback)
+const TOOL_MATCHER_EXCLUSIONS_RE = /\b(cancellation rate|cancel percentage|cancel rate|recent cancelled|cancelled deals|individual vs corporate|customer type|account type|top.*customer.*revenue|highest spending|won vs lost|win.?loss|cases by channel|phone vs email|escalated cases?|case escalat|mortgage status|mortgage type|mortgaged vs|active mortgage|cancellation rate by|sales room|bedroom wise|bedroom data|room wise|call inquiries|call channel|phone inquiries|most selling|what selling|best selling|which project|most popular|bedroom.*breakdown|unit type|breakdown by customer|customer names|quarterly|quarter|project.*compare|compare.*project|bedroom.*year|year.*bedroom)\b/i
+
+function needsToolMatcher(query: string): boolean {
+  return TOOL_MATCHER_EXCLUSIONS_RE.test(query)
 }
 
 // Meta/overview questions — short-circuit with canned answer.
@@ -106,22 +116,46 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
     return null
   }
 
-  // Step 1: Resolve conversational follow-ups
-  const query = await resolveFollowUp(rawQuery, history)
-  console.log('[salesforce] resolved query:', query)
+  // Step 0: QUERY UNDERSTANDING — LLM "thinking" step
+  // Corrects grammar, understands intent, extracts parameters, resolves references
+  // ALWAYS use LLM understanding — this is the "reasoning" step before routing
+  let understanding: UnderstoodQuery
+  if (history && history.length > 0) {
+    // With history: use LLM to understand context + resolve references
+    understanding = await understandQuery(rawQuery, history)
+  } else {
+    // Without history: ALWAYS use LLM to correct grammar, understand intent
+    understanding = await understandQuery(rawQuery)
+  }
+  
+  // Use the clarified version for routing, but log the original
+  const query = understanding.clarified || rawQuery
+  if (query !== rawQuery) {
+    console.log(`[salesforce] query understood: "${rawQuery}" → "${query}" (intent=${understanding.intent}, confidence=${understanding.confidence})`)
+  } else {
+    console.log('[salesforce] resolved query:', query)
+  }
 
   // Step 2: Meta/overview short-circuit
   if (isMetaOverviewQuery(query)) return metaOverviewContext()
 
-  // Step 3: DIRECT keyword fallback — BUT skip if query has date references or is a vague follow-up
-  const skipDirect = hasDateReference(query) || isVagueFollowUp(query)
+  // Step 3: DIRECT keyword fallback — BUT skip if query has date references, is a vague follow-up, or needs tool matcher
+  // Check BOTH original and clarified query — query understanding may transform keywords
+  const skipDirect = hasDateReference(query) || isVagueFollowUp(query) || needsToolMatcher(query) || needsToolMatcher(rawQuery)
   if (skipDirect) {
-    console.log(`[salesforce] skipping direct fallback (dateRef=${hasDateReference(query)}, vagueFollowUp=${isVagueFollowUp(query)})`)
+    console.log(`[salesforce] skipping direct fallback (dateRef=${hasDateReference(query)}, vagueFollowUp=${isVagueFollowUp(query)}, needsTool=${needsToolMatcher(query) || needsToolMatcher(rawQuery)})`)
   }
   if (!skipDirect) {
     const directResult = await directFallback(query)
     if (directResult) {
       console.log('[salesforce] direct fallback returned result (no LLM needed)')
+
+      // ── CONTEXT COMPRESSION ──
+      if (directResult.context.length > 3000) {
+        directResult.context = await compressContext(directResult.context)
+      } else {
+        directResult.context = quickCompress(directResult.context)
+      }
 
       // ── REAL-TIME VERIFICATION ──
       const quick = quickCheck(query, directResult.context, 'direct')
@@ -148,8 +182,42 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
   const synonyms = resolveSynonyms(query)
   console.log('[salesforce] synonyms found:', synonyms.map(s => `${s.field}${s.value ? '=' + s.value : ''}`).join(', ') || 'none')
 
+  // Step 4.5: Query expansion (break complex questions into sub-queries)
+  const expansion = await expandQuery(query)
+  if (expansion.expand && expansion.subQueries.length >= 2) {
+    console.log('[salesforce] query expanded:', expansion.subQueries)
+    // Execute each sub-query and merge results
+    const subResults: string[] = []
+    for (const subQ of expansion.subQueries) {
+      try {
+        const subMatch = await matchTool(subQ)
+        if (subMatch.tool) {
+          const subTool = getToolByName(subMatch.tool)
+          if (subTool) {
+            const subResult = await subTool.execute(subMatch.params)
+            if (subResult?.context) subResults.push(subResult.context)
+          }
+        }
+      } catch (err) {
+        console.warn('[salesforce] sub-query failed:', subQ, err)
+      }
+    }
+    if (subResults.length > 0) {
+      const merged = subResults.join('\n\n')
+      console.log('[salesforce] merged sub-query results')
+      recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: 'expanded', confidence: 'high', method: 'expansion', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: subResults.length })
+      return { context: merged, citation: { documentName: 'Salesforce (live CRM)' } }
+    }
+  }
+
   // Step 5: LLM tool matcher (only if direct fallback didn't match)
-  const match = await matchTool(query)
+  // Enrich query with extracted entities so the tool matcher can use them
+  let matcherQuery = query
+  if (understanding.entities.length > 0) {
+    const entityStr = understanding.entities.map(e => `${e.type}: ${e.value}`).join(', ')
+    matcherQuery = `${query} [entities: ${entityStr}]`
+  }
+  const match = await matchTool(matcherQuery)
   console.log('[salesforce] tool match:', JSON.stringify(match))
 
   // Step 6: Execute the matched tool
@@ -158,6 +226,12 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
     if (tool) {
       console.log(`[salesforce] executing tool: ${match.tool}`)
       const enrichedParams = { ...match.params }
+      // Enrich params with extracted entities from query understanding
+      for (const entity of understanding.entities) {
+        if (entity.type === 'project' && !enrichedParams.community) enrichedParams.community = entity.value
+        if (entity.type === 'customer' && !enrichedParams.name) enrichedParams.name = entity.value
+        if (entity.type === 'salesperson' && !enrichedParams.person) enrichedParams.person = entity.value
+      }
       for (const syn of synonyms) {
         if (syn.value) {
           if (syn.field === 'Building_Community__c' && !enrichedParams.community) enrichedParams.community = syn.value
@@ -176,6 +250,15 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
       const result = await tool.execute(enrichedParams)
       if (result) {
         console.log('[salesforce] tool returned result successfully')
+
+        // ── CONTEXT COMPRESSION ──
+        let context = result.context
+        if (context.length > 3000) {
+          context = await compressContext(context)
+          result.context = context
+        } else {
+          result.context = quickCompress(context)
+        }
 
         // ── REAL-TIME VERIFICATION ──
         const quick = quickCheck(query, result.context, 'tool')
@@ -248,6 +331,12 @@ export async function answerSalesforceQuery(rawQuery: string, history?: ChatTurn
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DATA QUALITY FILTER — excludes test/placeholder records from results
+// NOTE: SOQL doesn't support NOT(...) well; use individual AND conditions
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_RECORD_AND = " AND Amount != 1 AND CloseDate != 2032-12-28 AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DIRECT KEYWORD FALLBACK — runs when query has no date references and is not a vague follow-up.
 // Handles the most common CRM queries with hardcoded SOQL.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,37 +351,37 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // List/show won opportunities
   if (q.includes('won') && (q.includes('list') || q.includes('show') || q.includes('opportunit') || q.includes('deal') || q.includes('sale'))) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // List/show lost opportunities — IsLost doesn't exist, use IsClosed + IsWon
   if (q.includes('lost') && (q.includes('list') || q.includes('show') || q.includes('opportunit') || q.includes('deal'))) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsClosed = true AND IsWon = false ORDER BY CloseDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsClosed = true AND IsWon = false${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // List/show opportunities (no won/lost specified — default to won) — but NOT salesperson/agent queries
   if ((q.includes('list') || q.includes('show') || q.includes('top')) && (q.includes('opportunit') || q.includes('deal') || q.includes('sale')) && !q.includes('lost') && !q.includes('pipeline') && !q.includes('open') && !q.includes('salesperson') && !q.includes('by person') && !q.includes('by agent') && !q.includes('who is the top')) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // "list them" / "show them" / "show me" — catch vague follow-ups that reference previous context
   if ((q.includes('list them') || q.includes('show them') || q.includes('show me') || q.includes('list it') || q.includes('show it')) && !q.includes('document') && !q.includes('report')) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT 20`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE IsWon = true${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT 20`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // List/show cancelled
   if ((q.includes('list') || q.includes('show') || q.includes('top')) && (q.includes('cancel') || q.includes('cancelled') || q.includes('canceled'))) {
-    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED') ORDER BY CloseDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // List/show recent/latest deals — but NOT "top salesperson/agent/person" (those go to aggregate)
   if ((q.includes('list') || q.includes('show') || q.includes('recent') || q.includes('latest') || q.includes('top')) && (q.includes('deal') || q.includes('sale') || q.includes('opportunit')) && !q.includes('salesperson') && !q.includes('by person') && !q.includes('by agent') && !q.includes('who is the top')) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CreatedDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE Amount != 1 AND CloseDate != 2032-12-28 ORDER BY CreatedDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -336,7 +425,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // Recent deals (no list/show keyword)
   if (q.includes('recent') || q.includes('latest')) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CreatedDate DESC LIMIT 10`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE Amount != 1 AND CloseDate != 2032-12-28 ORDER BY CreatedDate DESC LIMIT 10`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -346,7 +435,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')`)
       return formatDirectResult(result, 'Opportunity')
     }
-    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED') ORDER BY CloseDate DESC LIMIT 20`)
+    const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT 20`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -380,7 +469,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       const result = await soql(`SELECT Status, COUNT(Id) cnt FROM Case GROUP BY Status ORDER BY COUNT(Id) DESC`)
       return formatDirectResult(result, 'Case')
     }
-    if (q.includes('priority') || q.includes('escalat') || q.includes('urgent')) {
+    if (q.includes('priority') || q.includes('urgent')) {
       const result = await soql(`SELECT Priority, COUNT(Id) cnt FROM Case GROUP BY Priority ORDER BY COUNT(Id) DESC`)
       return formatDirectResult(result, 'Case')
     }
@@ -411,7 +500,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       }
     }
     if (q.includes('top') || q.includes('most') || q.includes('revenue') || q.includes('by')) {
-      const result = await soql(`SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`)
+      const result = await soql(`SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`)
       return formatDirectResult(result, 'Opportunity')
     }
     const result = await soql(`SELECT COUNT(Id) cnt FROM Account`)
@@ -442,7 +531,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // Bedroom/unit type queries — BUT skip multi-filter queries ("deals in X with 3 bedrooms")
   if ((q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) && !q.includes(' in ') && !q.includes('deals in')) {
-    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 

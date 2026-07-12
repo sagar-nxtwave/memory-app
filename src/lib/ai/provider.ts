@@ -172,10 +172,10 @@ export async function rerankWithScores<T extends { content: string }>(
 
 // ── Chat: OpenRouter ────────────────────────────────────────────────────────
 // Switch models by setting OPENROUTER_CHAT_MODEL in .env.local.
-// Recommended: anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)
-//              anthropic/claude-sonnet-4-6 (best quality)
+// Recommended: anthropic/claude-sonnet-4-6 (best quality)
+//              anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)
 //              mistralai/mistral-large     (cheaper, good quality)
-export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-haiku-4-5'
+export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-sonnet-4-6'
 
 // ── PDF/OCR parsing via OpenRouter's file-parser plugin ─────────────────────
 // No direct Mistral API key used anywhere in this file — OpenRouter's "mistral-ocr" engine

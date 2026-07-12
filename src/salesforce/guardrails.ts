@@ -75,6 +75,15 @@ export function validateSOQL(query: string): GuardrailResult {
     return { safe: false, reason: 'Select clause contains suspicious characters' }
   }
 
+  // 10. Block Building_Community__c in GROUP BY (Salesforce limitation — this field cannot be grouped)
+  const groupByMatch = query.match(/\bGROUP\s+BY\b(.+?)(?:\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|$)/i)
+  if (groupByMatch) {
+    const groupByClause = groupByMatch[1]
+    if (/Building_Community__c/i.test(groupByClause)) {
+      return { safe: false, reason: 'Building_Community__c cannot be grouped — use Building_Name__c instead' }
+    }
+  }
+
   return { safe: true }
 }
 

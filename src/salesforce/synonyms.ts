@@ -248,6 +248,26 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   'deal parking': { field: 'Parking_Count__c', object: 'Opportunity_Property__c', description: 'parking for deal' },
   'deal areas': { field: 'Total_Area__c', object: 'Opportunity_Property__c', description: 'area details for deal' },
   'unit attributes': { field: 'Unit_Type__c', object: 'Opportunity_Property__c', description: 'unit attributes' },
+
+  // Cancellation rate
+  'cancellation rate': { field: 'IsWon', object: 'Opportunity', description: 'cancellation percentage' },
+  'cancel percentage': { field: 'IsWon', object: 'Opportunity', description: 'cancel rate' },
+
+  // Customer types
+  'individual vs corporate': { field: 'RecordType.Name', object: 'Account', description: 'customer type breakdown' },
+  'customer types': { field: 'RecordType.Name', object: 'Account', description: 'account types' },
+
+  // Win/loss
+  'won vs lost': { field: 'IsWon', object: 'Opportunity', description: 'win loss comparison' },
+  'win loss comparison': { field: 'IsWon', object: 'Opportunity', description: 'deals won and lost' },
+
+  // Escalated
+  'escalated cases': { field: 'IsEscalated', object: 'Case', description: 'escalated support cases' },
+  'case escalation': { field: 'IsEscalated', object: 'Case', description: 'escalation count' },
+
+  // Channel
+  'cases by channel': { field: 'Origin', object: 'Case', description: 'cases by origin channel' },
+  'phone vs email': { field: 'Origin', object: 'Case', description: 'case origin breakdown' },
 }
 
 // Resolve user terms to field names and values

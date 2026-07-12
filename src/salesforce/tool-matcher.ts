@@ -93,7 +93,20 @@ Rules:
 38. For "related deals", "linked deals", "old opportunity", "new opportunity", "deal linked to" → get-related-deals.
 39. For "project details", "building info", "what projects", "project list", "developments" → get-project-details.
 40. For "deal unit details", "unit attributes", "deal parking", "deal areas", "property for deal" → get-deal-property-details.
-41. NEVER ask for clarification — always try to answer with the best available tool.
+41. For "cancellation rate", "cancel percentage", "cancelled per community" → get-cancellation-rate.
+42. For "recent cancelled deals", "cancelled deals", "lost deals recently" → get-recent-cancelled-deals.
+43. For "individual vs corporate", "customer types", "account type breakdown" → get-customers-by-type.
+44. For "top customers by revenue", "highest spending customers", "top 10 customers" → get-top-customers-by-revenue.
+45. For "won vs lost", "win loss comparison", "deals won and lost" → get-win-loss-comparison.
+46. For "cases by channel", "phone vs email cases", "case origin breakdown" → get-cases-by-channel.
+47. For "escalated cases", "how many escalated", "case escalation count" → get-escalated-cases.
+48. For "mortgage status", "mortgage type", "mortgaged vs non-mortgaged", "active mortgages" → get-mortgage-status-full.
+49. For "what's selling", "most selling", "top selling", "best selling project/community" → get-sales-by-community (sorted by count, limit 1-5).
+50. For "quarterly sales", "sales by quarter", "Q1/Q2/Q3/Q4", "quarterly breakdown", "quarterly units" → get-sales-by-quarter.
+51. For "compare [project] [year1] vs [year2]", "project comparison", "Alton/Kaya/Hayat comparison" → compare-years-by-project.
+52. For "breakdown by customer", "customer names", "sales by customer name", "which customers bought" → get-customer-breakdown.
+53. For "bedroom by year", "bedroom comparison", "unit type by year", "bedroom trend" → get-bedroom-by-year.
+54. NEVER ask for clarification — always try to answer with the best available tool.
 
 Respond with ONLY JSON:
 {
