@@ -80,10 +80,12 @@ export function classifyQueryIntent(query: string): IntentCategory[] {
 }
 
 export async function getSkillFiles(): Promise<SkillFile[]> {
+  await ensureSeeded()
   return db.select().from(skillFiles).orderBy(asc(skillFiles.createdAt))
 }
 
 export async function getActiveSkillFiles(): Promise<SkillFile[]> {
+  await ensureSeeded()
   return db.select().from(skillFiles).where(eq(skillFiles.active, true)).orderBy(asc(skillFiles.createdAt))
 }
 
@@ -139,12 +141,298 @@ export async function deleteSkillFile(id: string): Promise<void> {
   await db.delete(skillFiles).where(eq(skillFiles.id, id))
 }
 
+// ─── BUILT-IN SEED DEFAULTS ──────────────────────────────────────────────────
+// When the DB has zero skill files, auto-seed these. Users can edit/delete them
+// via Settings UI — the seeds only fire once on first load.
+
+const SEED_DEFAULTS: Array<{ name: string; category: string; triggerWords: string; content: string }> = [
+  {
+    name: 'Unit Ownership Lookup Guide',
+    category: 'ownership',
+    triggerWords: 'who owns, buyer, customer, purchased, bought, owner, customer name, contact, email, phone, account name',
+    content: `## CRITICAL: How to Look Up Unit Ownership
+
+### Which Object to Query
+- **ALWAYS query Opportunity** for ownership/customer questions
+- NEVER query Property_Inventory__c for owner data — it has NO owner fields
+- Property_Inventory__c is ONLY the property catalog (unit details, pricing, availability)
+
+### Standard Ownership Query Pattern
+\`\`\`
+SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Status__c
+FROM Opportunity
+WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
+\`\`\`
+
+### Field Mappings for Ownership
+| What the user asks | What to query |
+|---|---|
+| Who owns unit X? | Opportunity.Account.Name WHERE Name LIKE '%X%' AND IsWon=true |
+| Buyer/buyer name | Opportunity.Account.Name |
+| Customer contact | Opportunity.Account.Phone, Opportunity.Account.Email__c |
+| When purchased? | Opportunity.CloseDate |
+| Deal amount | Opportunity.Amount (may be null for some won deals) |
+| Unit code/name | Opportunity.Name (e.g. "MNT-V-1234") |
+
+### Unit Code Patterns
+- Format varies: "MNT-V-1234", "SAFI-TH-001", "BRT-A-010", "NSH-V-567", "JLT-V-0123", etc.
+- If user says "Villa 6" or "unit 6", search with Name LIKE '%V-6%' or Name LIKE '%-%6'
+- If user says "V-401", search with Name LIKE '%V-401%'
+- Use LIKE '%...%' for fuzzy matching — never exact match on unit codes
+
+### Project Name Mapping
+- Use Building_Name__c (on Opportunity) — NOT Building_Community__c
+- Common aliases: "Safi" = Building_Name__c LIKE '%Safi%', "Barsha" = LIKE '%Barsha%'
+- "Safi Townhouse" = Building_Name__c LIKE '%Safi%' (covers "Safi Townhouse V-6" etc.)
+- "MNT" or "Mantle" = Building_Name__c LIKE '%MNT%' or LIKE '%Mantle%'
+- "NSH" = Building_Name__c LIKE '%NSH%' or LIKE '%Nshama%'
+
+### Transfer / Cancellation Scenarios
+- If IsWon=false AND IsClosed=true → deal is Lost (cancellation or rejected)
+- If Status__c contains "cancel" or "transfer" → look at that status
+- To find all transfers: WHERE Status__c LIKE '%Transfer%' AND IsWon=true
+
+### Multi-Step Pattern (if first query returns nothing)
+1. First try Opportunity WHERE Name LIKE '%<unit code>%'
+2. If no result, try Property_Inventory__c WHERE Name LIKE '%<unit code>%' — this confirms the unit EXISTS but may not be sold
+3. Then query Opportunity WHERE Property__r.Name LIKE '%<unit code>%' (relationship query)
+4. If still nothing, say "No ownership record found — the unit may not be sold yet"
+`,
+  },
+  {
+    name: 'Sales & Revenue Calculation Rules',
+    category: 'sales',
+    triggerWords: 'deals, revenue, closed, won, sold, amount, total sales, deal count, number of deals, total revenue, sales total, average deal, highest deal, biggest deal, how many deals',
+    content: `## How to Calculate Sales & Revenue
+
+### Key Date Field
+- **CloseDate** = when the deal was signed/closed (use this for year comparisons)
+- NEVER use CreatedDate for "by year" sales questions — use CloseDate
+- For "this year" filter: CloseDate >= CURRENT_YEAR-01-01 AND CloseDate <= CURRENT_YEAR-12-31
+
+### What Counts as a "Deal" / "Sale"
+- Each row in Opportunity = one deal/transaction
+- "Closed Won" = IsWon = true (the deal is finalized and revenue)
+- "Closed Lost" = IsClosed = true AND IsWon = false (deal fell through)
+
+### Standard Revenue Query
+\`\`\`
+SELECT COUNT(Id) dealCount, SUM(Amount) totalRevenue
+FROM Opportunity
+WHERE IsWon = true
+  AND CloseDate >= 2024-01-01 AND CloseDate <= 2024-12-31
+  AND Amount > 0
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+  AND Account.Name NOT LIKE 'Test%'
+\`\`\`
+
+### Filtering Rules
+- ALWAYS exclude test records: Amount = 1, CloseDate = 2032-12-28, cm_Sales_Person__r.Name = 'Salesforce Admin'
+- ALWAYS exclude test accounts: Account.Name NOT LIKE 'Test%' AND NOT LIKE 'Do not update%'
+- For "total revenue" → SUM(Amount) WHERE Amount > 0 (some won deals have null Amount)
+- For "deal count" → COUNT(Id) WHERE IsWon = true
+
+### Aggregate vs Row-Level
+- If user asks "total revenue" → use COUNT(Id) + SUM(Amount) in one query
+- If user asks "list of deals" → use SELECT Name, Account.Name, Amount, CloseDate LIMIT 200
+- If user asks "how many deals in 2024" → use COUNT(Id) with date filter
+`,
+  },
+  {
+    name: 'Property & Community Listing Rules',
+    category: 'property',
+    triggerWords: 'community, communities, project, projects, building, buildings, inventory, available, vacant, list units, show units, unit type, bedroom, property list, building list',
+    content: `## How to List Properties & Communities
+
+### Which Object for What
+| Data | Object | Key Fields |
+|---|---|---|
+| Master list of ALL units | Property_Inventory__c | Name, Building_Community__c, Unit_Details__c, Status__c |
+| List of communities/projects | Property_Inventory__c | Building_Community__c (groupable here) |
+| Sales data per unit | Opportunity | Building_Name__c, Name, Amount, IsWon |
+| Unit type (bedroom count) | Opportunity | Sales_Room__c (= bedroom count) |
+
+### List All Communities (DISTINCT)
+\`\`\`
+SELECT Building_Community__c, COUNT(Id) unitCount
+FROM Property_Inventory__c
+WHERE Building_Community__c != null
+GROUP BY Building_Community__c
+ORDER BY COUNT(Id) DESC
+LIMIT 200
+\`\`\`
+
+### List Units in a Community
+\`\`\`
+SELECT Name, Unit_Details__c, Status__c, Unit_Type__c
+FROM Property_Inventory__c
+WHERE Building_Community__c LIKE '%<community>%'
+  AND Status__c != 'Draft'
+LIMIT 200
+\`\`\`
+
+### Count Units by Status
+\`\`\`
+SELECT Status__c, COUNT(Id) count
+FROM Property_Inventory__c
+WHERE Building_Community__c LIKE '%<community>%'
+GROUP BY Status__c
+\`\`\`
+
+### Available/Vacant Units
+\`\`\`
+SELECT Name, Unit_Details__c, Unit_Type__c, Building_Community__c
+FROM Property_Inventory__c
+WHERE Status__c = 'Available' OR Status__c LIKE '%Vacant%'
+LIMIT 200
+\`\`\`
+
+### Important Notes
+- Building_Community__c on Property_Inventory__c has 52 distinct real values — use this to list communities
+- Building_Community__c on Opportunity is NOT groupable (Salesforce restriction) — use Opportunity.Building_Name__c instead
+- Unit_Details__c = type description (e.g. "2 BR Villa", "Studio Apartment")
+- Sales_Room__c on Opportunity = bedroom count (NOT on Property_Inventory__c)
+`,
+  },
+  {
+    name: 'Reporting & Comparison Rules',
+    category: 'reporting',
+    triggerWords: 'breakdown, comparison, compare, chart, table, report, summary, overview, vs, versus, against, performance, by year, by month, by quarter, by salesperson, by project, by community, top, best, worst',
+    content: `## How to Do Comparisons & Reporting
+
+### By Project/Community
+\`\`\`
+SELECT Building_Name__c, COUNT(Id) deals, SUM(Amount) revenue
+FROM Opportunity
+WHERE IsWon = true AND Amount > 0
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+GROUP BY Building_Name__c
+ORDER BY SUM(Amount) DESC
+LIMIT 50
+\`\`\`
+
+### By Year
+\`\`\`
+SELECT CALENDAR_YEAR(CloseDate) year, COUNT(Id) deals, SUM(Amount) revenue
+FROM Opportunity
+WHERE IsWon = true AND Amount > 0
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+GROUP BY CALENDAR_YEAR(CloseDate)
+ORDER BY CALENDAR_YEAR(CloseDate) DESC
+LIMIT 50
+\`\`\`
+
+### By Salesperson
+\`\`\`
+SELECT cm_Sales_Person__r.Name, COUNT(Id) deals, SUM(Amount) revenue
+FROM Opportunity
+WHERE IsWon = true AND Amount > 0
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+GROUP BY cm_Sales_Person__r.Name
+ORDER BY SUM(Amount) DESC
+LIMIT 50
+\`\`\`
+
+### By Month (Current Year)
+\`\`\`
+SELECT CALENDAR_MONTH(CloseDate) month, COUNT(Id) deals, SUM(Amount) revenue
+FROM Opportunity
+WHERE IsWon = true AND Amount > 0
+  AND CloseDate >= 2026-01-01 AND CloseDate <= 2026-12-31
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+GROUP BY CALENDAR_MONTH(CloseDate)
+ORDER BY CALENDAR_MONTH(CloseDate) ASC
+LIMIT 50
+\`\`\`
+
+### By Bedroom Count
+\`\`\`
+SELECT Sales_Room__c, COUNT(Id) deals, SUM(Amount) revenue
+FROM Opportunity
+WHERE IsWon = true AND Amount > 0 AND Sales_Room__c != null
+  AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+GROUP BY Sales_Room__c
+ORDER BY Sales_Room__c ASC
+\`\`\`
+
+### Comparison Template (Year vs Year)
+Run TWO queries:
+1. Current year: SUM(Amount) + COUNT(Id) WHERE IsWon=true AND Amount>0
+2. Previous year: Same but different date range
+Then compute % change in your answer.
+
+### Formatting Guidelines
+- Always show AED amounts with comma separators: AED 1,234,567
+- Show percentages with 1 decimal: +12.3%
+- For tables: use markdown table format
+- Include both count AND revenue where possible
+- Sort by revenue descending unless user specifies otherwise
+
+### GROUP BY Restrictions
+- Opportunity: Building_Name__c OK, Building_Community__c NOT GROUPABLE
+- Property_Inventory__c: Building_Community__c OK, Building_Name__c OK
+- Sales_Room__c, cm_Sales_Person__r.Name, CALENDAR_YEAR/MONTH all OK
+`,
+  },
+  {
+    name: 'General CRM Query Rules',
+    category: 'general',
+    triggerWords: '',
+    content: `## General Nshama CRM Query Rules
+
+### Always Apply These Filters
+When querying Opportunity, always add:
+- AND cm_Sales_Person__r.Name != 'Salesforce Admin'
+- AND Account.Name NOT LIKE 'Test%'
+- AND Account.Name NOT LIKE 'Do not update%'
+- AND Account.Name NOT LIKE '%Miscellaneous%'
+- AND Account.Name NOT LIKE '%Contractor%'
+
+### Date Context
+- Today is 2026-07-13
+- Current year: 2026
+- When user says "this year" → 2026
+- When user says "last year" → 2025
+- When user says "this month" → July 2026
+
+### Common Acronyms
+- MNT = Mantle (project)
+- NSH = Nshama (project)
+- BRT = Barsha (project)
+- SAFI = Safi (project)
+- JVC = Jumeirah Village Circle
+- JLT = Jumeirah Lake Towers
+
+### Answer Format
+- Always respond in natural language, not raw data
+- For numbers, use comma separators: AED 1,234,567
+- For comparisons, show % change
+- For lists, use bullet points or markdown tables
+- Always acknowledge the source: "Based on the CRM data..."
+`,
+  },
+]
+
+let seeded = false
+
+async function ensureSeeded(): Promise<void> {
+  if (seeded) return
+  const existing = await db.select().from(skillFiles).where(eq(skillFiles.active, true))
+  if (existing.length > 0) { seeded = true; return }
+  console.log('[skill-files] DB empty — seeding built-in defaults')
+  for (const s of SEED_DEFAULTS) {
+    await addSkillFile(s.name, s.category, s.triggerWords, s.content)
+  }
+  seeded = true
+}
+
 /**
  * Builds the skill files text block for injection into the MCP system prompt.
  * Uses conditional loading: only includes files matching the query intent.
  * Returns both the text and the list of loaded file names (for streaming to UI).
  */
 export async function getSkillFilesPromptText(query?: string): Promise<{ text: string; loadedFiles: string[] }> {
+  await ensureSeeded()
   const files = query ? await getMatchingSkillFiles(query) : await getActiveSkillFiles()
   if (files.length === 0) return { text: '', loadedFiles: [] }
 
