@@ -319,8 +319,8 @@ export async function POST(req: NextRequest) {
   // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
   // mcpStepsLog captures each MCP tool call/SOQL query (when MCP mode is on) so they can be
   // surfaced in the "thinking process" UI — see emission near the stream start below.
-  const mcpStepsLog: { action: string; detail: string }[] = []
-  const onMcpStep = (step: { action: string; detail: string }) => mcpStepsLog.push(step)
+  const mcpStepsLog: { action: string; detail: string; result?: string }[] = []
+  const onMcpStep = (step: { action: string; detail: string; result?: string }) => mcpStepsLog.push(step)
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, sfHistory, onMcpStep) : null
   // Note: thinking steps for Salesforce are emitted inside the stream start block above
   if (salesforceResult) {
@@ -426,6 +426,10 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
         // Salesforce MCP reasoning auditable instead of a black box (client-requested).
         for (const s of mcpStepsLog) {
           emitStep(s.action === 'soqlQuery' ? `SOQL: ${s.detail}` : `MCP tool: ${s.action}(${s.detail})`)
+          if (s.result) {
+            steps.push(s.result)
+            send({ type: 'thinking', step: `Result: ${s.result}`, index: steps.length })
+          }
         }
 
         let fullContent = ''

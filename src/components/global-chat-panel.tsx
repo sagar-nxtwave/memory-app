@@ -794,14 +794,33 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionCli
                 </button>
                 {thinkingOpen && (
                   <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
-                    {message.thinkingSteps.map((step, i) => (
-                      <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>{step}</span>
-                      </div>
-                    ))}
+                    {message.thinkingSteps.map((step, i) => {
+                      const isResult = step.startsWith('Result: ')
+                      const isSoql = step.startsWith('SOQL: ')
+                      return (
+                        <div key={i} className={`${isResult ? 'ml-4' : ''}`}>
+                          <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>{isResult ? step.slice(8) : step}</span>
+                          </div>
+                          {isSoql && (message.thinkingSteps ?? [])[i + 1]?.startsWith('Result: ') && (
+                            <pre className="ml-5 mt-0.5 text-[10px] text-gray-300 dark:text-gray-600 bg-gray-50 dark:bg-gray-900/50 rounded p-1.5 overflow-x-auto max-h-32 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+                              {(() => {
+                                try {
+                                  const raw = (message.thinkingSteps ?? [])[i + 1].slice(8)
+                                  const parsed = JSON.parse(raw)
+                                  return JSON.stringify(parsed, null, 2)
+                                } catch {
+                                  return (message.thinkingSteps ?? [])[i + 1].slice(8)
+                                }
+                              })()}
+                            </pre>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

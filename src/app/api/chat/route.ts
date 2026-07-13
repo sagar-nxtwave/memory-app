@@ -356,7 +356,7 @@ export async function POST(req: NextRequest) {
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
   // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
-    try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+    try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})`, result: step.result || undefined }) } catch {}
   }) : null
 
   // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
@@ -368,7 +368,7 @@ export async function POST(req: NextRequest) {
     if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
       console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
       salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
-        try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+        try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})`, result: step.result || undefined }) } catch {}
       })
     }
   }

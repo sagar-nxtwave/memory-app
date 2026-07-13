@@ -117,7 +117,7 @@ function metaOverviewContext(): SalesforceResult {
 export async function answerSalesforceQuery(
   rawQuery: string,
   history?: ChatTurn[],
-  onMcpStep?: (step: { action: string; detail: string }) => void
+  onMcpStep?: (step: { action: string; detail: string; result?: string }) => void
 ): Promise<SalesforceResult | null> {
   const startTime = Date.now()
   if (!getSalesforceConfig().enabled) {

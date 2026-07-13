@@ -85,6 +85,17 @@ CRITICAL — NEVER HALLUCINATE DATA:
 - If a tool returns 10 items, report exactly those 10 — never pad the list
 - If a tool returns 0 items, say "No results found" — do not fabricate entries
 
+READING TOOL RESULTS (CRITICAL):
+- SOQL queries return JSON arrays. Each row is a JSON object.
+- Relationship fields appear as NESTED objects. Example: if you queried "Account.Name", the result looks like:
+  [{"Name":"OPP-001","Account":{"Name":"John Doe","Phone":"+971501234567"},"Amount":1500000}]
+  The buyer/owner name is INSIDE the nested "Account" object → Account.Name = "John Doe"
+- Similarly, cm_Sales_Person__r.Name returns as: {"cm_Sales_Person__r":{"Name":"Ahmed"}}
+  The salesperson name is → cm_Sales_Person__r.Name = "Ahmed"
+- ALWAYS extract values from nested objects using dot notation (Account.Name, cm_Sales_Person__r.Name)
+- If the result shows [{"Name":"...","Account":null}], the account link is missing — report "Account not linked"
+- If the result shows an empty array [], say "No records found" — do NOT ask follow-up questions
+
 RESPONSE FORMAT — respond with ONLY one JSON object per step:
 {
   "thought": "What I'm reasoning about and why",
@@ -94,7 +105,13 @@ RESPONSE FORMAT — respond with ONLY one JSON object per step:
   "foundInCrm": true | false
 }
 
-For "finish" action, the "answer" field MUST contain the final response to the user, and "foundInCrm" MUST be true if you found real, relevant Salesforce data, or false if the CRM genuinely has nothing relevant to this question (not just "the exact search term didn't match" — try alternate lookups per the glossary before concluding this).
+For "finish" action:
+- The "answer" field MUST reproduce the EXACT data from tool observations — copy values verbatim
+- Extract nested fields: Account.Name = buyer name, cm_Sales_Person__r.Name = salesperson
+- If observations contain rows, the answer MUST include the specific values (names, amounts, dates)
+- NEVER say "I couldn't find" or ask follow-up questions when the data IS in the observations
+- Format numbers with commas: AED 1,234,567
+- "foundInCrm" MUST be true if you found real data, false if CRM genuinely has nothing
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
 
   return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories }
@@ -103,6 +120,7 @@ For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery nee
 export interface McpStepInfo {
   action: string
   detail: string // the SOQL query (for soqlQuery), SOSL (for find), or params summary for other tools
+  result?: string // truncated observation data (first 500 chars) — shown in UI thinking steps
 }
 
 export interface McpAnswerResult extends SalesforceResult {
@@ -181,7 +199,6 @@ export async function answerViaMcp(
       // be shown in the UI's "thinking process" — this is what makes MCP's reasoning
       // transparent/auditable instead of a black box.
       const detail = typeof params.q === 'string' ? params.q : JSON.stringify(params)
-      onStep?.({ action, detail })
 
       let observation: string
       try {
@@ -191,6 +208,9 @@ export async function answerViaMcp(
         observation = `Tool call failed: ${err instanceof Error ? err.message : String(err)}`
         console.warn(`[mcp-query] tool call failed:`, err)
       }
+
+      // Send the step with truncated result (first 500 chars) so the UI can show the data
+      onStep?.({ action, detail, result: observation?.slice(0, 500) })
 
       steps.push({ thought, action, observation })
       input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
