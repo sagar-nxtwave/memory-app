@@ -18,6 +18,40 @@ const MAX_STEPS = 8
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
+/**
+ * Flatten nested objects in a JSON string so the LLM doesn't have to parse nested JSON.
+ * e.g. {"Account":{"Name":"John"}} → {"Account.Name":"John"}
+ * e.g. [{"Account":{"Name":"John"},"Name":"OPP-001"}] → [{"Account.Name":"John","Name":"OPP-001"}]
+ */
+function flattenNestedJson(json: string): string {
+  try {
+    const parsed = JSON.parse(json)
+    const flatten = (obj: Record<string, unknown>): Record<string, unknown> => {
+      const result: Record<string, unknown> = {}
+      for (const [key, val] of Object.entries(obj)) {
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const nested = flatten(val as Record<string, unknown>)
+          for (const [nk, nv] of Object.entries(nested)) {
+            result[`${key}.${nk}`] = nv
+          }
+        } else {
+          result[key] = val
+        }
+      }
+      return result
+    }
+    if (Array.isArray(parsed)) {
+      return JSON.stringify(parsed.map(item => typeof item === 'object' && item !== null ? flatten(item) : item), null, 2)
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      return JSON.stringify(flatten(parsed), null, 2)
+    }
+    return json
+  } catch {
+    return json
+  }
+}
+
 // Object-level cheat sheet for query mechanics (GROUP BY restrictions, relationship
 // traversal syntax) — distinct from the business glossary below, which covers WHAT the
 // fields/terms MEAN, not SOQL syntax quirks.
@@ -86,14 +120,14 @@ CRITICAL — NEVER HALLUCINATE DATA:
 - If a tool returns 0 items, say "No results found" — do not fabricate entries
 
 READING TOOL RESULTS (CRITICAL):
-- SOQL queries return JSON arrays. Each row is a JSON object.
-- Relationship fields appear as NESTED objects. Example: if you queried "Account.Name", the result looks like:
-  [{"Name":"OPP-001","Account":{"Name":"John Doe","Phone":"+971501234567"},"Amount":1500000}]
-  The buyer/owner name is INSIDE the nested "Account" object → Account.Name = "John Doe"
-- Similarly, cm_Sales_Person__r.Name returns as: {"cm_Sales_Person__r":{"Name":"Ahmed"}}
+- SOQL queries return JSON arrays. Observations have been FLATTENED — nested objects use dot notation.
+- Example: if you queried "Account.Name", the result looks like:
+  [{"Name":"OPP-001","Account.Name":"John Doe","Account.Phone":"+971501234567","Amount":1500000}]
+  The buyer/owner name is directly under "Account.Name" = "John Doe"
+- Similarly, cm_Sales_Person__r.Name appears as: {"cm_Sales_Person__r.Name":"Ahmed"}
   The salesperson name is → cm_Sales_Person__r.Name = "Ahmed"
-- ALWAYS extract values from nested objects using dot notation (Account.Name, cm_Sales_Person__r.Name)
-- If the result shows [{"Name":"...","Account":null}], the account link is missing — report "Account not linked"
+- ALWAYS read dot-notation keys directly — they are already flattened for you
+- If the result shows "Account.Name": null, the account link is missing — report "Account not linked"
 - If the result shows an empty array [], say "No records found" — do NOT ask follow-up questions
 
 RESPONSE FORMAT — respond with ONLY one JSON object per step:
@@ -107,9 +141,9 @@ RESPONSE FORMAT — respond with ONLY one JSON object per step:
 
 For "finish" action:
 - The "answer" field MUST reproduce the EXACT data from tool observations — copy values verbatim
-- Extract nested fields: Account.Name = buyer name, cm_Sales_Person__r.Name = salesperson
-- If observations contain rows, the answer MUST include the specific values (names, amounts, dates)
-- NEVER say "I couldn't find" or ask follow-up questions when the data IS in the observations
+- Read dot-notation keys directly from flattened observations (Account.Name, cm_Sales_Person__r.Name, etc.)
+- If observations contain rows with these keys, the answer MUST include the specific values (names, amounts, dates)
+- NEVER say "I couldn't find" or "No owner information" when the data IS in the observations
 - Format numbers with commas: AED 1,234,567
 - "foundInCrm" MUST be true if you found real data, false if CRM genuinely has nothing
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
@@ -209,10 +243,14 @@ export async function answerViaMcp(
         console.warn(`[mcp-query] tool call failed:`, err)
       }
 
-      // Send the step with truncated result (first 500 chars) so the UI can show the data
-      onStep?.({ action, detail, result: observation?.slice(0, 500) })
+      // Flatten nested JSON so the LLM sees dot-notation keys (Account.Name)
+      // instead of nested objects it may fail to parse
+      const flatObservation = flattenNestedJson(observation)
 
-      steps.push({ thought, action, observation })
+      // Send the step with truncated result (first 500 chars) so the UI can show the data
+      onStep?.({ action, detail, result: flatObservation?.slice(0, 500) })
+
+      steps.push({ thought, action, observation: flatObservation })
       input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
     }
 
