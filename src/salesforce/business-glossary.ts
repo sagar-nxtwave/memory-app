@@ -82,8 +82,12 @@ const SEED_TERMS: Omit<GlossaryTerm, 'id'>[] = [
   },
 ]
 
-/** Seeds the DB with default terms if the table is empty (first run only). */
+/** Seeds the DB with default terms once per serverless instance lifetime (first call only).
+ *  After that, user deletions are respected — re-seeding only happens on a fresh cold start. */
+let glossarySeeded = false
 async function ensureSeeded(): Promise<void> {
+  if (glossarySeeded) return
+  glossarySeeded = true
   const existing = await db.select({ id: glossaryTerms.id }).from(glossaryTerms).limit(1)
   if (existing.length > 0) return
   await db.insert(glossaryTerms).values(SEED_TERMS)

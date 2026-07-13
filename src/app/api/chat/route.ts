@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       createdAt: messages.createdAt,
       citations: messages.citations,
       documentImages: messages.documentImages,
+      thinkingSteps: messages.thinkingSteps,
     })
     .from(messages)
     .where(eq(messages.spaceId, spaceId))
@@ -557,6 +558,7 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
             content: fullContent || 'No response generated.',
             citations: citations.length > 0 ? citations : null,
             documentImages: documentImages.length > 0 ? documentImages : null,
+            thinkingSteps: steps.length > 0 ? steps : null,
           })
           .returning()
 

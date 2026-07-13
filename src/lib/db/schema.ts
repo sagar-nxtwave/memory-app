@@ -228,6 +228,7 @@ export const messages = pgTable('messages', {
   // asked from within this space's chat — see crossSpaceIntent.ts).
   citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string }[]>(),
+  thinkingSteps: jsonb('thinking_steps').$type<string[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
@@ -250,6 +251,7 @@ export const globalMessages = pgTable('global_messages', {
   content: text('content').notNull(),
   citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string; spaceName?: string }[]>(),
+  thinkingSteps: jsonb('thinking_steps').$type<string[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
