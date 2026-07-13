@@ -161,9 +161,6 @@ body {
   border-collapse: collapse;
   font-size: 0.8rem;
   margin: 0.9em 0;
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 .markdown-body thead tr {
   background: #f3f4f6;

@@ -682,6 +682,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
 
 function normalizeMarkdown(text: string): string {
   return text
+    .replace(/\r/g, '')
     // Strip any model-emitted "[WEB-1], [WEB-3] — web source(s)" attribution line…
     .replace(/\[(?:INT|WEB)-\d+\](?:\s*,\s*\[(?:INT|WEB)-\d+\])*\s*[—–-]\s*(?:web|internal)?\s*sources?\.?/gi, '')
     // …and any remaining inline [INT-n] / [WEB-n] citation tags (sources are shown as chips).
@@ -809,6 +810,9 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionCli
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                table: ({ children }) => (
+                  <div className="overflow-x-auto my-3"><table>{children}</table></div>
+                ),
                 img: ({ src, alt }) => {
                   const url = typeof src === 'string' ? src : undefined
                   return (
