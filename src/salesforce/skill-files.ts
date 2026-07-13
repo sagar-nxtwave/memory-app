@@ -159,7 +159,7 @@ const SEED_DEFAULTS: Array<{ name: string; category: string; triggerWords: strin
 
 ### Standard Ownership Query Pattern (single-hop)
 \`\`\`
-SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Status__c
+SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Milestone_Current_Status__c
 FROM Opportunity
 WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
 \`\`\`
@@ -211,9 +211,8 @@ WHERE cm_Opportunity__r.IsWon = true
 
 ### Transfer / Cancellation Scenarios
 - If IsWon=false AND IsClosed=true → deal is Lost (cancellation or rejected)
-- If Status__c contains "cancel" or "transfer" → look at that status
-- To find all transfers: WHERE Status__c LIKE '%Transfer%' AND IsWon=true
-- Use Old_Opportunity__r.Name and New_Opportunity__r.Name to trace transfer chains
+- To find transfers: use Old_Opportunity__r.Name and New_Opportunity__r.Name to trace transfer chains
+- A transfer means the deal moved from one Opportunity to another via these self-referential lookups
 
 ### Multi-Step Pattern (if first query returns nothing)
 1. First try Opportunity WHERE Name LIKE '%<unit code>%'
@@ -358,7 +357,7 @@ WHERE IsWon = true
 ### Which Object for What
 | Data | Object | Key Fields |
 |---|---|---|
-| Master list of ALL units | Property_Inventory__c | Name, Building_Community__c, Unit_Details__c, Status__c |
+| Master list of ALL units | Property_Inventory__c | Name, Building_Community__c, Unit_Details__c, Property_Status__c |
 | List of communities/projects | Property_Inventory__c | Building_Community__c (groupable here) |
 | Sales data per unit | Opportunity | Building_Name__c, Name, Amount, IsWon |
 | Unit type (bedroom count) | Opportunity | Sales_Room__c (= bedroom count) |
@@ -375,26 +374,26 @@ LIMIT 200
 
 ### List Units in a Community
 \`\`\`
-SELECT Name, Unit_Details__c, Status__c, Unit_Type__c
+SELECT Name, Unit_Details__c, Property_Status__c, Unit_Type__c
 FROM Property_Inventory__c
 WHERE Building_Community__c LIKE '%<community>%'
-  AND Status__c != 'Draft'
+  AND Property_Status__c != 'Draft'
 LIMIT 200
 \`\`\`
 
 ### Count Units by Status
 \`\`\`
-SELECT Status__c, COUNT(Id) count
+SELECT Property_Status__c, COUNT(Id) count
 FROM Property_Inventory__c
 WHERE Building_Community__c LIKE '%<community>%'
-GROUP BY Status__c
+GROUP BY Property_Status__c
 \`\`\`
 
 ### Available/Vacant Units
 \`\`\`
 SELECT Name, Unit_Details__c, Unit_Type__c, Building_Community__c
 FROM Property_Inventory__c
-WHERE Status__c = 'Available' OR Status__c LIKE '%Vacant%'
+WHERE Property_Status__c = 'Available' OR Property_Status__c LIKE '%Vacant%'
 LIMIT 200
 \`\`\`
 

@@ -32,7 +32,7 @@ OWNER/CUSTOMER LOOKUP (CRITICAL — read this before answering any "who owns" / 
   - Owner/Buyer data lives on Account, linked via Opportunity.Account
   - Property_Inventory__c is ONLY the property catalog — it has NO owner/customer fields
   - To find who owns/bought a specific unit, query Opportunity (NOT Property_Inventory__c):
-    SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Status__c
+    SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Milestone_Current_Status__c
     FROM Opportunity
     WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
   - The Account.Name field = the owner/buyer name. Account.Phone/Email = their contact info.

@@ -72,7 +72,7 @@ function displayName(col: string): string {
     'Account.Email__c': 'Email',
     'Amount': 'Amount',
     'CloseDate': 'Close Date',
-    'Status__c': 'Status',
+    'Milestone_Current_Status__c': 'Status',
     'StageName': 'Stage',
     'cm_Sales_Person__r.Name': 'Salesperson',
     'cm_Agency_Name__r.Name': 'Agency',
