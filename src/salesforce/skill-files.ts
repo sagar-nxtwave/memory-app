@@ -202,6 +202,14 @@ WHERE cm_Opportunity__r.IsWon = true
 - If user says "V-401", search with Name LIKE '%V-401%'
 - Use LIKE '%...%' for fuzzy matching — never exact match on unit codes
 
+### Fuzzy Search Strategy (CRITICAL — use when exact code doesn't match)
+When a user types a unit code like "TS SAF TH-V-6", the prefix may be wrong. Do NOT give up after one failed query.
+1. **Extract the core unit code** — strip the project prefix. From "TS SAF TH-V-6", extract "TH-V-6"
+2. **Search with just the core code**: SELECT Name, Account.Name, Amount FROM Opportunity WHERE Name LIKE '%TH-V-6%' AND IsWon=true
+3. **If still no results, try SOSL**: Use the find tool with searchTerm="TH-V-6" to search across all objects
+4. **Never say "no data" until you've tried at least 2 different search strategies**
+5. Common prefix mistakes users make: "SAF" for "Safi" but unit is in "HYT" (Hayat), "MNT" for "Mudon", etc.
+
 ### Project Name Mapping
 - Use Building_Name__c (on Opportunity) — NOT Building_Community__c
 - Common aliases: "Safi" = Building_Name__c LIKE '%Safi%', "Barsha" = LIKE '%Barsha%'

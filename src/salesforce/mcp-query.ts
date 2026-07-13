@@ -71,6 +71,13 @@ OWNER/CUSTOMER LOOKUP (CRITICAL — read this before answering any "who owns" / 
     WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
   - The Account.Name field = the owner/buyer name. Account.Phone/Email = their contact info.
   - If the unit name doesn't match in Opportunity.Name, try Property_Inventory__c.Name or Unit_Details__c
+
+FUZZY SEARCH (CRITICAL — when user-provided unit code doesn't match exactly):
+  - Users often mistype prefixes (e.g. "SAF" when unit is in "HYT"/Hayat)
+  - Step 1: Extract the CORE unit code from what the user typed. E.g. from "TS SAF TH-V-6", extract "TH-V-6"
+  - Step 2: Search with just the core: WHERE Name LIKE '%TH-V-6%' AND IsWon=true
+  - Step 3: If still nothing, use the find tool (SOSL) with searchTerm="TH-V-6"
+  - NEVER give up after one failed SOQL — try at least 2 search strategies before saying "not found"
 `.trim()
 
 async function buildSystemPrompt(query?: string): Promise<{ prompt: string; loadedSkills: string[]; intentCategories: string[] }> {
@@ -107,9 +114,11 @@ RULES:
 1. Think step-by-step — break complex questions into sub-tasks
 2. Call ONE tool at a time, wait for the result, then decide the next step
 3. Maximum ${MAX_STEPS} tool calls — be efficient. Prefer the SOQL MECHANICS and BUSINESS TERMINOLOGY above over calling getObjectSchema when they already answer your question.
-4. If a tool returns no data, TRY THE BUSINESS TERMINOLOGY MAPPING ABOVE FIRST before giving up — e.g. if searching for a unit code in Property_Inventory__c returns nothing, try Opportunity.Name instead (per the "Unit / Property code" glossary entry above) before telling the user it doesn't exist.
-   - For owner/customer questions: if Property_Inventory__c has no owner data (it never does), switch to Opportunity WHERE Building_Name__c LIKE '%X%' AND Name LIKE '%Y%' AND IsWon = true, then get Account.Name
-   - If a query returns aggregate stats instead of individual records, add a specific WHERE filter to get row-level data
+4. If a tool returns no data, TRY THE FUZZY SEARCH STRATEGY ABOVE FIRST before giving up:
+   - For unit code searches: extract the core code (e.g. "TH-V-6" from "TS SAF TH-V-6") and search with LIKE '%TH-V-6%'
+   - If SOQL LIKE fails, use the find tool (SOSL) with the core code as searchTerm
+   - For owner/customer questions: if Property_Inventory__c has no owner data (it never does), switch to Opportunity WHERE Name LIKE '%<core code>%' AND IsWon = true, then get Account.Name
+   - NEVER say "no data" or "not found" until you've tried at least 2 different search approaches
 5. ALWAYS finish with a clear, natural-language answer — NEVER return raw JSON, raw SOQL result objects, or tool output verbatim as your final answer. If you're running low on steps, compose the best answer you can from what you have rather than dumping raw data.
 6. If the question asks about something genuinely NOT in Salesforce (e.g. a company's industry/website/background — see the glossary entry on this), say so plainly in your answer and set "foundInCrm": false so the system can offer other sources. Do NOT cite Salesforce as your source when you found nothing relevant.
 
