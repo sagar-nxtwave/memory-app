@@ -334,6 +334,22 @@ export const glossaryTerms = pgTable('glossary_terms', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
+// Skill Files — free-form instruction documents (markdown/text) that get injected into
+// the MCP system prompt. Unlike glossary terms (structured term→field mappings), skill
+// files contain detailed business rules, query patterns, and domain knowledge that help
+// the LLM answer questions correctly. Users can add/edit these via Settings UI.
+// triggerWords: comma-separated keywords that trigger loading this skill (e.g. "owner,buyer,customer")
+export const skillFiles = pgTable('skill_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(), // e.g. "Sales Rules", "Property Lookup Guide"
+  category: text('category').notNull().default('general'), // general, sales, property, ownership, etc.
+  triggerWords: text('trigger_words').notNull().default(''), // comma-separated keywords for conditional loading
+  content: text('content').notNull(), // free-form markdown/text with instructions
+  active: boolean('active').notNull().default(true), // toggle without deleting
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   spaces: many(spaces),

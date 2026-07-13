@@ -4,10 +4,14 @@
 //
 // This is the "MCP mode" toggle — see SALESFORCE_USE_MCP in .env.local. When enabled,
 // answerSalesforceQuery() in query.ts delegates entirely to this module.
+//
+// STREAMING: Every action (intent classification, skill loading, MCP calls, verification)
+// is streamed to the UI via the onStep callback, so users see the full reasoning process.
 import { chatJson } from '@/lib/ai/provider'
 import { getMcpToolCatalogText, callMcpTool } from './mcp-client'
 import { todayStr, currentYear } from './today'
 import { getBusinessGlossaryText } from './business-glossary'
+import { getSkillFilesPromptText, classifyQueryIntent } from './skill-files'
 import type { SalesforceResult, ChatTurn } from './query'
 
 const MAX_STEPS = 8
@@ -23,12 +27,27 @@ Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit 
   - Traverse to customer via Account.Name, to salesperson via cm_Sales_Person__r.Name
 Property_Inventory__c — the MASTER catalog of every physical unit/property (sold, available, rented).
   - Building_Community__c IS groupable here (100%-populated, 52 distinct real values) — use THIS object+field for "list all communities"
+
+OWNER/CUSTOMER LOOKUP (CRITICAL — read this before answering any "who owns" / "who bought" / "customer" question):
+  - Owner/Buyer data lives on Account, linked via Opportunity.Account
+  - Property_Inventory__c is ONLY the property catalog — it has NO owner/customer fields
+  - To find who owns/bought a specific unit, query Opportunity (NOT Property_Inventory__c):
+    SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Status__c
+    FROM Opportunity
+    WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
+  - The Account.Name field = the owner/buyer name. Account.Phone/Email = their contact info.
+  - If the unit name doesn't match in Opportunity.Name, try Property_Inventory__c.Name or Unit_Details__c
 `.trim()
 
-async function buildSystemPrompt(): Promise<string> {
+async function buildSystemPrompt(query?: string): Promise<{ prompt: string; loadedSkills: string[]; intentCategories: string[] }> {
   const toolCatalog = await getMcpToolCatalogText()
   const glossary = await getBusinessGlossaryText(['Account', 'Opportunity', 'Property_Inventory__c', 'Case'])
-  return `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
+
+  // Conditional skill loading — only load matching skill files for this query
+  const skillResult = await getSkillFilesPromptText(query)
+  const intentCategories = query ? classifyQueryIntent(query) : []
+
+  const prompt = `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
 You have DIRECT access to Salesforce's own live data tools (via Salesforce's official MCP server). Your job is to answer the user's question by calling these tools as needed, then composing a clear, natural-language answer.
 
@@ -39,6 +58,7 @@ SOQL MECHANICS (query-construction rules, tested and correct — use instead of 
 ${SOQL_MECHANICS}
 
 ${glossary}
+${skillResult.text}
 
 DATA QUALITY — ALWAYS EXCLUDE TEST/PLACEHOLDER RECORDS:
 - Opportunity: Amount = 1, CloseDate = 2032-12-28, cm_Sales_Person__r.Name = 'Salesforce Admin' are test/dummy records — filter these out in your WHERE clause
@@ -54,6 +74,8 @@ RULES:
 2. Call ONE tool at a time, wait for the result, then decide the next step
 3. Maximum ${MAX_STEPS} tool calls — be efficient. Prefer the SOQL MECHANICS and BUSINESS TERMINOLOGY above over calling getObjectSchema when they already answer your question.
 4. If a tool returns no data, TRY THE BUSINESS TERMINOLOGY MAPPING ABOVE FIRST before giving up — e.g. if searching for a unit code in Property_Inventory__c returns nothing, try Opportunity.Name instead (per the "Unit / Property code" glossary entry above) before telling the user it doesn't exist.
+   - For owner/customer questions: if Property_Inventory__c has no owner data (it never does), switch to Opportunity WHERE Building_Name__c LIKE '%X%' AND Name LIKE '%Y%' AND IsWon = true, then get Account.Name
+   - If a query returns aggregate stats instead of individual records, add a specific WHERE filter to get row-level data
 5. ALWAYS finish with a clear, natural-language answer — NEVER return raw JSON, raw SOQL result objects, or tool output verbatim as your final answer. If you're running low on steps, compose the best answer you can from what you have rather than dumping raw data.
 6. If the question asks about something genuinely NOT in Salesforce (e.g. a company's industry/website/background — see the glossary entry on this), say so plainly in your answer and set "foundInCrm": false so the system can offer other sources. Do NOT cite Salesforce as your source when you found nothing relevant.
 
@@ -74,6 +96,8 @@ RESPONSE FORMAT — respond with ONLY one JSON object per step:
 
 For "finish" action, the "answer" field MUST contain the final response to the user, and "foundInCrm" MUST be true if you found real, relevant Salesforce data, or false if the CRM genuinely has nothing relevant to this question (not just "the exact search term didn't match" — try alternate lookups per the glossary before concluding this).
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
+
+  return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories }
 }
 
 export interface McpStepInfo {
@@ -94,8 +118,24 @@ export async function answerViaMcp(
   onStep?: (step: McpStepInfo) => void
 ): Promise<McpAnswerResult | null> {
   const startTime = Date.now()
+
+  // Stream: classify intent
+  const intents = classifyQueryIntent(query)
+  if (intents.length > 0) {
+    onStep?.({ action: 'classifyIntent', detail: `Detected intent: ${intents.join(', ')}` })
+  }
+
   try {
-    const systemPrompt = await buildSystemPrompt()
+    // Build system prompt with conditional skill loading
+    const { prompt: systemPrompt, loadedSkills, intentCategories } = await buildSystemPrompt(query)
+
+    // Stream: loaded skills
+    if (loadedSkills.length > 0) {
+      onStep?.({ action: 'loadSkills', detail: `Loaded ${loadedSkills.length} skill file(s): ${loadedSkills.join(', ')}` })
+    }
+    if (intentCategories.length > 0) {
+      onStep?.({ action: 'classifyIntent', detail: `Matched categories: ${intentCategories.join(', ')}` })
+    }
 
     let context = ''
     if (history && history.length > 0) {
@@ -131,6 +171,9 @@ export async function answerViaMcp(
         finalAnswer = answer || 'No answer composed'
         if (typeof decision.foundInCrm === 'boolean') foundInCrm = decision.foundInCrm
         steps.push({ thought, action, observation: finalAnswer })
+
+        // Stream: composing answer
+        onStep?.({ action: 'composeAnswer', detail: 'Composing final answer...' })
         break
       }
 
@@ -150,7 +193,7 @@ export async function answerViaMcp(
       }
 
       steps.push({ thought, action, observation })
-      input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation.slice(0, 1500)}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
+      input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
     }
 
     if (!finalAnswer) {
@@ -158,7 +201,8 @@ export async function answerViaMcp(
       // a clean natural-language answer from what was gathered, instead of returning raw
       // tool output/JSON (which happened before this safety net was added).
       console.log('[mcp-query] max steps reached without finish — forcing final answer composition')
-      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation.slice(0, 1500)}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
+      onStep?.({ action: 'composeAnswer', detail: 'Forcing answer composition (max steps reached)...' })
+      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
       try {
         const raw = await chatJson(systemPrompt, composePrompt)
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw

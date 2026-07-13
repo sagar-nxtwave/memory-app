@@ -1627,45 +1627,10 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
           ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
           : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
-        {!isUser && message.thinkingSteps && message.thinkingSteps.length > 0 ? (
-          <div>
-            <div className="mb-2">
-              <button
-                onClick={() => setThinkingOpen((o) => !o)}
-                className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-                <span className="font-medium">Thinking process</span>
-                <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
-              </button>
-              {thinkingOpen && (
-                <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
-                  {message.thinkingSteps.map((step, i) => (
-                    <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      <span>{step}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {showDots ? (
-              <span className="flex gap-1 items-center py-0.5">
-                {[0, 1, 2].map((i) => (
-                  <motion.span key={i} className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full inline-block"
-                    animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }} />
-                ))}
-              </span>
-            ) : (
-              <div>{displayed.split('\n').map((line, i, arr) => (
-                <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
-              ))}</div>
-            )}
-          </div>
+        {isUser ? (
+          message.content.split('\n').map((line, i, arr) => (
+            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
+          ))
         ) : showDots ? (
           <span className="flex gap-1 items-center py-0.5">
             {[0, 1, 2].map((i) => (
@@ -1673,123 +1638,147 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                 animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }} />
             ))}
           </span>
-        ) : isUser ? (
-          message.content.split('\n').map((line, i, arr) => (
-            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
-          ))
         ) : (
-          <div className="markdown-body">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                table: ({ children }) => (
-                  <div className="overflow-x-auto my-3"><table>{children}</table></div>
-                ),
-                img: ({ src, alt }) => {
-                  const url = typeof src === 'string' && src ? src : null
-                  if (!url) return null
-                  return (
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={url}
-                        alt={alt ?? ''}
-                        className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                      />
-                    </a>
-                  )
-                },
-              }}
-            >{normalizeMarkdown(displayed)}</ReactMarkdown>
-            {message.isTyping && (
-              <motion.span
-                animate={{ opacity: [1, 0, 1] }}
-                transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-                className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
-              />
-            )}
-            {!message.isTyping && message.documentImages && message.documentImages.length > 0 && (
-              <div className="mt-3">
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
-                  Images from document ({message.documentImages.length})
-                </p>
-                <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
-                  {message.documentImages.slice(0, 8).map((img, i) => (
-                    <ChatImage key={img.url} url={img.url} alt={img.alt || img.documentName} />
-                  ))}
-                </div>
+          <div>
+            {message.thinkingSteps && message.thinkingSteps.length > 0 && (
+              <div className="mb-2">
+                <button
+                  onClick={() => setThinkingOpen((o) => !o)}
+                  className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                  <span className="font-medium">Thinking process</span>
+                  <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
+                </button>
+                {thinkingOpen && (
+                  <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
+                    {message.thinkingSteps.map((step, i) => (
+                      <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-            {!message.isTyping && message.citations && message.citations.length > 0 && (() => {
-              const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
-              const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
-              const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
-              const chipLink = `${chip} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`
-              return (
-                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
-                  {internalCites.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
-                      {internalCites.map((c, i) => {
-                        const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
-                        return c.documentId ? (
-                          <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={chipLink}>{label}</a>
-                        ) : (
-                          <span key={i} title={label} className={chip}>{label}</span>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {webCites.length > 0 && (
-                    <>
-                      <p className="text-[10px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
+            <div className="markdown-body">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-3"><table>{children}</table></div>
+                  ),
+                  img: ({ src, alt }) => {
+                    const url = typeof src === 'string' && src ? src : null
+                    if (!url) return null
+                    return (
+                      <a href={url} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={url}
+                          alt={alt ?? ''}
+                          className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
+                          loading="lazy"
+                        />
+                      </a>
+                    )
+                  },
+                }}
+              >{normalizeMarkdown(displayed)}</ReactMarkdown>
+              {message.isTyping && (
+                <motion.span
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                  className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
+                />
+              )}
+              {!message.isTyping && message.documentImages && message.documentImages.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
+                    Images from document ({message.documentImages.length})
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+                    {message.documentImages.slice(0, 8).map((img, i) => (
+                      <ChatImage key={img.url} url={img.url} alt={img.alt || img.documentName} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!message.isTyping && message.citations && message.citations.length > 0 && (() => {
+                const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
+                const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
+                const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+                const chipLink = `${chip} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`
+                return (
+                  <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
+                    {internalCites.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
-                        {webCites.map((c, i) => {
-                          let host = c.documentName
-                          try { host = new URL(c.url!).hostname.replace(/^www\./, '') } catch {}
-                          return (
-                            <a key={i} href={c.url} target="_blank" rel="noopener noreferrer" title={c.documentName} className={chipLink}>{host}</a>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
+                        {internalCites.map((c, i) => {
+                          const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
+                          return c.documentId ? (
+                            <a key={i} href={`/api/documents/${c.documentId}/file`} target="_blank" rel="noopener noreferrer" title={label} className={chipLink}>{label}</a>
+                          ) : (
+                            <span key={i} title={label} className={chip}>{label}</span>
                           )
                         })}
                       </div>
-                    </>
-                  )}
-                </div>
-              )
-            })()}
-            {!message.isTyping && !isStreaming && (
-              <div className="mt-1.5 flex gap-0.5">
-                <button onClick={() => handleVote('up')} title="Helpful"
-                  className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
-                    <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-                  </svg>
-                </button>
-                <button onClick={() => handleVote('down')} title="Not helpful"
-                  className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
-                    <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
-                  </svg>
-                </button>
-              </div>
-            )}
-            {message.suggestions && message.suggestions.length > 0 && !message.isTyping && !isStreaming && message.role !== 'user' && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {message.suggestions.map((s: string, i: number) => (
-                  <button
-                    key={i}
-                    onClick={() => onSuggestionClick?.(s)}
-                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
-                  >
-                    {s}
+                    )}
+                    {webCites.length > 0 && (
+                      <>
+                        <p className="text-[10px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
+                          {webCites.map((c, i) => {
+                            let host = c.documentName
+                            try { host = new URL(c.url!).hostname.replace(/^www\./, '') } catch {}
+                            return (
+                              <a key={i} href={c.url} target="_blank" rel="noopener noreferrer" title={c.documentName} className={chipLink}>{host}</a>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
+              {!message.isTyping && !isStreaming && (
+                <div className="mt-1.5 flex gap-0.5">
+                  <button onClick={() => handleVote('up')} title="Helpful"
+                    className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                      <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                    </svg>
                   </button>
-                ))}
-              </div>
-            )}
+                  <button onClick={() => handleVote('down')} title="Not helpful"
+                    className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
+                      <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
+              {message.suggestions && message.suggestions.length > 0 && !message.isTyping && !isStreaming && message.role !== 'user' && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {message.suggestions.map((s: string, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => onSuggestionClick?.(s)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+          </div>
         )}
       </div>
     </div>
