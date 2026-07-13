@@ -149,19 +149,39 @@ const SEED_DEFAULTS: Array<{ name: string; category: string; triggerWords: strin
   {
     name: 'Unit Ownership Lookup Guide',
     category: 'ownership',
-    triggerWords: 'who owns, buyer, customer, purchased, bought, owner, customer name, contact, email, phone, account name',
+    triggerWords: 'who owns, buyer, customer, purchased, bought, owner, customer name, contact, email, phone, account name, linked, related, associated',
     content: `## CRITICAL: How to Look Up Unit Ownership
 
 ### Which Object to Query
 - **ALWAYS query Opportunity** for ownership/customer questions
-- NEVER query Property_Inventory__c for owner data — it has NO owner fields
+- NEVER query Property_Inventory__c for owner data — it has NO owner fields and NO direct link to Opportunity/Account
 - Property_Inventory__c is ONLY the property catalog (unit details, pricing, availability)
 
-### Standard Ownership Query Pattern
+### Standard Ownership Query Pattern (single-hop)
 \`\`\`
 SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Status__c
 FROM Opportunity
 WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
+\`\`\`
+
+### Multi-Hop Pattern (via Opportunity_Property__c bridge)
+When querying from Property_Inventory__c (e.g. "show me owners of all units in Safi"):
+\`\`\`
+-- Step 1: Get unit IDs from Property_Inventory__c
+SELECT Id, Name FROM Property_Inventory__c WHERE Building_Community__c = 'Safi'
+
+-- Step 2: Bridge through Opportunity_Property__c to find the linked Opportunity
+SELECT cm_Opportunity__r.Name, cm_Opportunity__r.Account.Name,
+       cm_Opportunity__r.CloseDate, cm_Opportunity__r.Amount
+FROM Opportunity_Property__c
+WHERE cm_Property_Inventory__c = '<unit_id>'
+
+-- Or combined: Get all sold units with their buyers
+SELECT cm_Property_Inventory__r.Name, cm_Opportunity__r.Name,
+       cm_Opportunity__r.Account.Name, cm_Opportunity__r.Amount
+FROM Opportunity_Property__c
+WHERE cm_Opportunity__r.IsWon = true
+  AND cm_Property_Inventory__r.Building_Community__c = 'Safi'
 \`\`\`
 
 ### Field Mappings for Ownership
@@ -173,6 +193,8 @@ WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = t
 | When purchased? | Opportunity.CloseDate |
 | Deal amount | Opportunity.Amount (may be null for some won deals) |
 | Unit code/name | Opportunity.Name (e.g. "MNT-V-1234") |
+| Salesperson | Opportunity.cm_Sales_Person__r.Name |
+| Agency | Opportunity.cm_Agency_Name__r.Name |
 
 ### Unit Code Patterns
 - Format varies: "MNT-V-1234", "SAFI-TH-001", "BRT-A-010", "NSH-V-567", "JLT-V-0123", etc.
@@ -191,12 +213,101 @@ WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = t
 - If IsWon=false AND IsClosed=true → deal is Lost (cancellation or rejected)
 - If Status__c contains "cancel" or "transfer" → look at that status
 - To find all transfers: WHERE Status__c LIKE '%Transfer%' AND IsWon=true
+- Use Old_Opportunity__r.Name and New_Opportunity__r.Name to trace transfer chains
 
 ### Multi-Step Pattern (if first query returns nothing)
 1. First try Opportunity WHERE Name LIKE '%<unit code>%'
 2. If no result, try Property_Inventory__c WHERE Name LIKE '%<unit code>%' — this confirms the unit EXISTS but may not be sold
-3. Then query Opportunity WHERE Property__r.Name LIKE '%<unit code>%' (relationship query)
+3. Then bridge through Opportunity_Property__c: WHERE cm_Property_Inventory__c = '<property_id>'
 4. If still nothing, say "No ownership record found — the unit may not be sold yet"
+`,
+  },
+  {
+    name: 'Object Associations & Relationship Traversal',
+    category: 'general',
+    triggerWords: 'linked, related, associated, connection, bridge, relationship, join, link, connect, cross-object',
+    content: `## Salesforce Object Associations (CRITICAL for Cross-Object Queries)
+
+### The Association Graph
+\`\`\`
+Account ← Opportunity (via AccountId)
+Account ← Case (via AccountId)
+Account ← Contact (via AccountId, Primary_Contact__r)
+Opportunity ← User (via cm_Sales_Person__r — salesperson)
+Opportunity ← Agency (via cm_Agency_Name__r)
+Opportunity ← Agent (via cm_Agent_Name__r)
+Opportunity ← Property__c (via Property__r)
+Opportunity ← Self (via Old_Opportunity__r, New_Opportunity__r — transfer chains)
+Case ← Account (via AccountId)
+Case ← Contact (via ContactId)
+Case ← Opportunity (via Opportunity_Name__r — note: field has typo "Opporutniy")
+Case ← Self (via New_Opportunity__c)
+Lead ← Account (via ConvertedAccountId, after conversion)
+Lead ← Opportunity (via ConvertedOpportunityId, after conversion)
+Task ← Account/Opportunity/Case (via WhatId — polymorphic)
+Task ← Contact/Lead (via WhoId — polymorphic)
+Task ← User (via Owner)
+\`\`\`
+
+### CRITICAL: Property_Inventory__c Bridge Pattern
+Property_Inventory__c has **NO direct link** to Opportunity or Account.
+To connect a unit to its buyer, you MUST go through Opportunity_Property__c:
+
+\`\`\`
+Property_Inventory__c → Opportunity_Property__c → Opportunity → Account
+(unit)                   (bridge record)           (deal)       (buyer)
+\`\`\`
+
+**Example: "Who owns all units in Safi?"**
+\`\`\`
+-- WRONG: Property_Inventory__c has no Account/owner field
+SELECT Name, Account__c FROM Property_Inventory__c -- WILL NOT WORK
+
+-- CORRECT: Bridge through Opportunity_Property__c
+SELECT cm_Property_Inventory__r.Name, cm_Opportunity__r.Name,
+       cm_Opportunity__r.Account.Name, cm_Opportunity__r.Amount
+FROM Opportunity_Property__c
+WHERE cm_Opportunity__r.IsWon = true
+  AND cm_Property_Inventory__r.Building_Community__c = 'Safi'
+\`\`\`
+
+### One-Hop Traversal Patterns (field → related field)
+| From Object | Traversal | Target |
+|---|---|---|
+| Opportunity | Account.Name | Buyer/customer name |
+| Opportunity | Account.Phone | Customer phone |
+| Opportunity | Account.Email__c | Customer email |
+| Opportunity | cm_Sales_Person__r.Name | Salesperson name |
+| Opportunity | cm_Agency_Name__r.Name | Agency name |
+| Opportunity | cm_Agent_Name__r.Name | Agent/broker name |
+| Opportunity | Property__r.Name | Property project name |
+| Case | Account.Name | Customer who raised case |
+| Case | Contact.Name | Contact who raised case |
+| Case | Opportunity_Name__r.Name | Linked deal |
+| Contact | Account.Name | Parent account |
+| Account | Primary_Contact__r.Name | Primary contact person |
+| Task | Owner.Name | Task owner |
+
+### Multi-Hop Traversal Patterns
+| From | Via | To | Use Case |
+|---|---|---|---|
+| Property_Inventory__c | Opportunity_Property__c.cm_Opportunity__r | Account.Name | Find buyer of a unit |
+| Lead | ConvertedAccountId | Account.Name | Find account from converted lead |
+| Lead | ConvertedOpportunityId | Opportunity.Name | Find deal from converted lead |
+| Task | WhatId → Account | Account.Name | Find account linked to task |
+
+### Self-Referential (Transfer Chains)
+| Field | Meaning |
+|---|---|
+| Old_Opportunity__r.Name | Previous deal (before transfer) |
+| New_Opportunity__r.Name | Replacement deal (after transfer) |
+Use these to trace: "This unit was transferred from Deal A to Deal B"
+
+### Polymorphic Fields (WhatId / WhoId)
+- Task.WhatId can point to Account, Opportunity, or Case
+- Task.WhoId can point to Contact or Lead
+- To filter: add \`AND WhatId IN (SELECT Id FROM Account)\` or check the type via \`What.Type\`
+\`\`\`
 `,
   },
   {
