@@ -17,6 +17,8 @@ import { answerSalesforceQuery } from '@/salesforce'
 import { dateContext } from '@/salesforce/today'
 import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
+import { features } from '@/lib/feature-flags'
+import { generateFollowUpSuggestions } from '@/salesforce/follow-up-suggestions'
 import { webContextNote } from '@/lib/ai/prompts'
 import { hasCrossSpaceIntent, findMentionedSpaces, findMentionedDocs, formatCandidate, type CrossSpaceCandidate } from '@/lib/utils/crossSpaceIntent'
 
@@ -39,7 +41,6 @@ export async function GET(req: NextRequest) {
     .from(messages)
     .where(eq(messages.spaceId, spaceId))
     .orderBy(messages.createdAt)
-    .limit(50)
 
   return NextResponse.json(history)
 }
@@ -340,14 +341,23 @@ export async function POST(req: NextRequest) {
   // Run a safe SQL query over the stored table and hand the LLM the authoritative figure.
   const tabularResult = skipRetrieval ? null : await answerTabularQuery(content, crossSpaceIds)
 
+  // Create the SSE stream early so MCP tool calls can emit thinking steps in real-time.
+  // The stream's start() callback is called synchronously, so ctrl is available immediately.
+  let ctrl!: ReadableStreamDefaultController<Uint8Array>
+  const stream = new ReadableStream({
+    start(controller) { ctrl = controller }
+  })
+  const sseSend = (data: object) => {
+    try { ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch {}
+  }
+
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  // mcpStepsLog captures each MCP tool call/SOQL query (when MCP mode is on) so they can be
-  // surfaced in the "thinking process" UI — see emission near the stream start below.
-  const mcpStepsLog: { action: string; detail: string }[] = []
-  const onMcpStep = (step: { action: string; detail: string }) => mcpStepsLog.push(step)
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, onMcpStep) : null
+  // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
+  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
+    try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+  }) : null
 
   // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
   // user's current message is a vague follow-up ("can you do it?", "do it", "run it", "yes"),
@@ -357,7 +367,9 @@ export async function POST(req: NextRequest) {
     const isFollowUp = /^(can you |could you |please |yes|sure|go ahead|do it|run it|execute it|go for it)/i.test(content.trim())
     if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
       console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
-      salesforceResult = await answerSalesforceQuery(content, conversationHistory, onMcpStep)
+      salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
+        try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+      })
     }
   }
 
@@ -429,7 +441,9 @@ export async function POST(req: NextRequest) {
   // anymore — a regex can never recognize an arbitrary project/customer name, so "try Salesforce
   // whenever everything else came up empty" is the safer default for a CRM-first tool.
   if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content, conversationHistory, onMcpStep)
+    const fallback = await answerSalesforceQuery(content, conversationHistory, (step) => {
+      try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+    })
     if (fallback) {
       salesforceResult = fallback
       if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
@@ -492,49 +506,41 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
     .slice(0, -1)
     .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: object) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+  // The stream and sseSend() were created earlier (before MCP processing) so MCP steps
+  // are already emitted in real-time. Now populate the stream with the LLM response.
+  ;(async () => {
+    try {
+      sseSend({ type: 'start', userMessageId: userMsg.id })
 
-      try {
-        send({ type: 'start', userMessageId: userMsg.id })
+      const steps: string[] = []
+      const emitStep = (step: string) => { steps.push(step); sseSend({ type: 'thinking', step, index: steps.length }) }
 
-        const steps: string[] = []
-        const emitStep = (step: string) => { steps.push(step); send({ type: 'thinking', step, index: steps.length }) }
+      if (skipRetrieval) {
+        emitStep('Processing your message...')
+      } else {
+        emitStep('Understanding your question...')
+        if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
+        if (intent.documents) emitStep('Searching documents for relevant content...')
+        if (intent.web) emitStep('Searching the web for supplementary information...')
+      }
 
-        if (skipRetrieval) {
-          emitStep('Processing your message...')
-        } else {
-          emitStep('Understanding your question...')
-          if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
-          if (intent.documents) emitStep('Searching documents for relevant content...')
-          if (intent.web) emitStep('Searching the web for supplementary information...')
-        }
-
-        // Surface each MCP tool call/SOQL query as its own thinking step — makes the
-        // Salesforce MCP reasoning auditable instead of a black box (client-requested).
-        for (const s of mcpStepsLog) {
-          emitStep(s.action === 'soqlQuery' ? `SOQL: ${s.detail}` : `MCP tool: ${s.action}(${s.detail})`)
-        }
-
-        let fullContent = ''
-        for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
-          fullContent += chunk
-          send({ type: 'delta', content: chunk })
-        }
+      let fullContent = ''
+      for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
+        fullContent += chunk
+        sseSend({ type: 'delta', content: chunk })
+      }
 
         // Post-generation hallucination check — compares the composed prose against the
         // raw Salesforce data it was supposed to summarize. Can't un-stream what the user
-        // already saw, but this logs every occurrence so we can track/fix hallucination
-        // rate over time, and catches the "fabricated community/customer name" class of bug.
+        // already saw, but this sends a follow-up disclaimer and logs for tracking.
         if (salesforceResult) {
           const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
           const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
           if (!validation.valid || !listCheck.valid) {
+            const allIssues = [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])]
             console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
               question: content.slice(0, 200),
-              issues: [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])],
+              issues: allIssues,
               hallucinatedTerms: validation.hallucinatedTerms,
               hallucinatedNumbers: validation.hallucinatedNumbers,
             })
@@ -553,7 +559,18 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
           })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages })
+        // Follow-up suggestions — generate 2-3 clickable follow-up questions
+        // Wrapped in try-catch so a failure here NEVER blocks the done event
+        let suggestions: string[] = []
+        if (features.followUpSuggestions && salesforceResult && fullContent.length > 50) {
+          try {
+            suggestions = await generateFollowUpSuggestions(content, fullContent)
+          } catch (sErr) {
+            console.warn('[chat] Follow-up suggestions failed (non-blocking):', sErr)
+          }
+        }
+
+        sseSend({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages, suggestions })
       } catch (err) {
         console.error('[chat] Stream error:', err)
         try {
@@ -561,13 +578,15 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
             .insert(messages)
             .values({ spaceId, userId, role: 'assistant', content: 'I encountered an error. Please try again.' })
             .returning()
-          send({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
-        } catch {}
+          sseSend({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
+        } catch (dbErr) {
+          console.error('[chat] Failed to save error message to DB:', dbErr)
+          sseSend({ type: 'error', message: 'Something went wrong. Please try again.' })
+        }
       } finally {
-        controller.close()
+        ctrl.close()
       }
-    },
-  })
+  })()
 
   return new Response(stream, {
     headers: {

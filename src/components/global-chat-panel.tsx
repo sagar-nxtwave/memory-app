@@ -9,7 +9,7 @@ import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
-interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[] }
+interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[]; suggestions?: string[] }
 interface SpaceDoc { id: string; name: string; fileType: string }
 interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
 
@@ -192,7 +192,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], suggestions: event.suggestions ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -367,7 +367,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
                   <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show" layout>
-                    <GlobalChatMessage message={msg} isStreaming={streamingId === msg.id} onTypingDone={handleTypingDone} />
+                    <GlobalChatMessage message={msg} isStreaming={streamingId === msg.id} onTypingDone={handleTypingDone} onSuggestionClick={(s) => { setInput(s); setTimeout(() => sendMessage(s), 0) }} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -715,10 +715,11 @@ const GlobalChatImage = React.memo(function GlobalChatImage({ url, alt }: { url:
   )
 })
 
-function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
+function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: {
   message: Message
   isStreaming?: boolean
   onTypingDone?: (id: string) => void
+  onSuggestionClick?: (suggestion: string) => void
 }) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
@@ -896,6 +897,19 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone }: {
                     <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
                   </svg>
                 </button>
+              </div>
+            )}
+            {message.suggestions && message.suggestions.length > 0 && !message.isTyping && !isStreaming && !isUser && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {message.suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onSuggestionClick?.(s)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
             )}
             </div>

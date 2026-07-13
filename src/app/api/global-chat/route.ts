@@ -15,6 +15,9 @@ import { answerSalesforceQuery } from '@/salesforce'
 import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
+import { dateContext } from '@/salesforce/today'
+import { features } from '@/lib/feature-flags'
+import { generateFollowUpSuggestions } from '@/salesforce/follow-up-suggestions'
 
 export const maxDuration = 60
 
@@ -34,7 +37,6 @@ export async function GET(req: NextRequest) {
     .from(globalMessages)
     .where(eq(globalMessages.userId, session.user.id))
     .orderBy(globalMessages.createdAt)
-    .limit(50)
 
   return NextResponse.json(history)
 }
@@ -388,6 +390,8 @@ export async function POST(req: NextRequest) {
   const systemPrompt = `${globalChatPrompt()}
 ${styleInstruction(responseStyle)}${imageNote}${webUsed ? webContextNote() : ''}
 
+IMPORTANT: ${dateContext()} When users ask about "this year", "this month", "this quarter" etc., use the ACTUAL current date above — never assume a different year.
+
 Searching across: ${spaceNames}
 
 Documents available across projects:
@@ -434,9 +438,10 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
           const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
           const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
           if (!validation.valid || !listCheck.valid) {
+            const allIssues = [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])]
             console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
               question: content.slice(0, 200),
-              issues: [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])],
+              issues: allIssues,
               hallucinatedTerms: validation.hallucinatedTerms,
               hallucinatedNumbers: validation.hallucinatedNumbers,
             })
@@ -454,7 +459,16 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
           })
           .returning()
 
-        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages })
+        let suggestions: string[] = []
+        if (features.followUpSuggestions && salesforceResult && fullContent.length > 50) {
+          try {
+            suggestions = await generateFollowUpSuggestions(content, fullContent)
+          } catch (sErr) {
+            console.warn('[global-chat] Follow-up suggestions failed (non-blocking):', sErr)
+          }
+        }
+
+        send({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages, suggestions })
       } catch (err) {
         console.error('[global-chat] Error:', err)
         try {
@@ -463,7 +477,10 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
             .values({ userId, role: 'assistant', content: 'Something went wrong. Please try again.' })
             .returning()
           send({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
-        } catch {}
+        } catch (dbErr) {
+          console.error('[global-chat] Failed to save error message to DB:', dbErr)
+          send({ type: 'error', message: 'Something went wrong. Please try again.' })
+        }
       } finally {
         controller.close()
       }

@@ -1,0 +1,215 @@
+CLIENT VALIDATION — 2026-07-12T13:37:13.533Z
+24 PASS / 1 PARTIAL / 0 FAIL / 25 TOTAL
+Avg latency: 11094ms
+
+Q1: how many sales happened in Camden?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 8651ms
+Status: PASS
+Answer: Count: 14384
+──────────────────────────────────────────────────────────────────────
+
+Q2: how many sales happened in 2026?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 7634ms
+Status: PASS
+Answer: cnt: 5 | total: 5606440
+──────────────────────────────────────────────────────────────────────
+
+Q3: what all units bought by anil pardesi
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 7294ms
+Status: PASS
+Answer: The system returned data for multiple customers but did not find records for 'Anil Pardesi'. Please clarify: (1) Is 'Anil Pardesi' a customer name, contact name, or account owner? (2) Do you want to search in the Contact, Account, or Order records? (3) Should I search for exact name match or similar
+──────────────────────────────────────────────────────────────────────
+
+Q4: who are top 10 customers
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10202ms
+Status: PASS
+Answer: 1. Bac Investments - Fzco | AED 114.7M | 5 deals
+2. Oleg Aleksandrovich Smirnov | AED 97.1M | 3 deals
+3. Sergey Alexeevich Nesterenko | AED 89.8M | 2 deals
+4. Abdul Rahman Alokozay | AED 85.1M | 54 deals
+5. Flying Eagles Limited | AED 81.6M | 90 deals
+6. Alexandru Ion Tiriac | AED 79.0M | 2 deals
+7.
+──────────────────────────────────────────────────────────────────────
+
+Q5: compare 2024 vs 2025
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 12260ms
+Status: PASS
+Answer: 2024 vs 2025 — Won Deals Comparison:
+  2024: 3156 deals | AED 3581.0M | Avg AED 1.13M
+  2025: 1423 deals | AED 2894.0M | Avg AED 2.03M
+  Change: -54.9% deals | -19.2% revenue | +79.2% avg deal
+  2024: 511 lost deals | Win rate: 86.1%
+  2025: 259 lost deals | Win rate: 84.6%
+  Top buildings 2024: Aya
+──────────────────────────────────────────────────────────────────────
+
+Q6: whats selling
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10882ms
+Status: PASS
+Answer: Property Status: Sold | cnt: 12739
+Property Status: Blocked | cnt: 3165
+Property Status: Available | cnt: 927
+Property Status: Booked | cnt: 160
+Property Status: Leased | cnt: 147
+Property Status: Reserved | cnt: 10
+──────────────────────────────────────────────────────────────────────
+
+Q7: show all projects 2024 and 2025
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10983ms
+Status: PASS
+Answer: Project Comparison 2024 vs 2025:
+Reem Townhouses: 2024=149 deals (AED 261.2M) | 2025=9 deals (AED 15.9M)
+Ayala On The Park: 2024=195 deals (AED 221.4M) | 2025=7 deals (AED 8.2M)
+Lana On The Park: 2024=184 deals (AED 220.9M) | 2025=1 deals (AED 1.3M)
+Haya On The Park: 2024=166 deals (AED 198.9M) | 20
+──────────────────────────────────────────────────────────────────────
+
+Q8: cmpare 20205 and 2026 sales based on projects
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10805ms
+Status: PASS
+Answer: Project Comparison 2025 vs 2026:
+Address Grand Downtown: 2025=51 deals (AED 1.2B) | 2026=0 deals (AED 0)
+The Baltimore: 2025=123 deals (AED 164.3M) | 2026=0 deals (AED 0)
+Ellison: 2025=116 deals (AED 151.1M) | 2026=0 deals (AED 0)
+Augusta: 2025=97 deals (AED 123.2M) | 2026=0 deals (AED 0)
+Odessa: 20
+──────────────────────────────────────────────────────────────────────
+
+Q9: Brief me on this project.
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 9306ms
+Status: PASS
+Answer: Durres Waterfront | Code: DW | Status: N/A | Active
+Town Square | Code: TS | Status: N/A | Active
+Town Square1 | Code: TS1 | Status: N/A | Active
+Address Grand Downtown | Code: AGD | Status: N/A | Active
+──────────────────────────────────────────────────────────────────────
+
+Q10: What's most sellign
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10213ms
+Status: PASS
+Answer: Building Name: Master Community | cnt: 1 | 
+Building Name: All Buildings | cnt: 1 | 
+Building Name: Noor Townhouses Zone 2 | cnt: 1 | 
+Building Name: Noor Townhouses Zone 3 | cnt: 1 | 
+Building Name: Zahra Breeze Apartments Parking | cnt: 1 |
+──────────────────────────────────────────────────────────────────────
+
+Q11: Sales room wise data
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 15073ms
+Status: PASS
+Answer: Sales Room: 3 Bedrooms | cnt: 3799 | total: 5684496424
+Sales Room: 2 Bedrooms | cnt: 4369 | total: 4369180763
+Sales Room: 1 Bedroom | cnt: 4391 | total: 2350791952
+Sales Room: 4 Bedrooms | cnt: 983 | total: 2106642904
+Sales Room: 5 Bedrooms | cnt: 14 | total: 603554432
+Sales Room: Studio | cnt: 418 
+──────────────────────────────────────────────────────────────────────
+
+Q12: Do you have bedroom wise data? How many bedrooms and what?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 8845ms
+Status: PASS
+Answer: The system returned property types instead of bedroom configurations. Please retry with a query that specifically retrieves bedroom count data (e.g., a query aggregating by number_of_bedrooms or similar field). Ask the user: 'Would you like me to query the database for a breakdown of properties by n
+──────────────────────────────────────────────────────────────────────
+
+Q13: Project Alton. Compare 2024 and 2025 data.
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 11192ms
+Status: PASS
+Answer: Alton — 2024 vs 2025:
+  2024: 0 deals | AED 0
+  2025: 39 deals | AED 61.0M
+  Change: N/A% deals | N/A% revenue
+──────────────────────────────────────────────────────────────────────
+
+Q14: Compare all 10 project data for 2024 and 2025 based on bedroom wise.
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 12991ms
+Status: PASS
+Answer: The data returned appears incomplete or malformed. Please retry the query and ensure it returns: (1) All 10 Nshama projects listed by name, (2) Bedroom counts/categories (e.g., 1BR, 2BR, 3BR, etc.), (3) Sales metrics for 2024 and 2025, (4) A clear comparison between the two years.
+──────────────────────────────────────────────────────────────────────
+
+Q15: Compare 2025 and 2026 for Alton project based on bedroom wise.
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10225ms
+Status: PASS
+Answer: Bedroom Comparison 2025 vs 2026 (Alton):
+2 Bedrooms: 2025=22 | 2026=0 | -100%
+1 Bedroom: 2025=16 | 2026=0 | -100%
+3 Bedrooms: 2025=1 | 2026=0 | -100%
+──────────────────────────────────────────────────────────────────────
+
+Q16: Quartal units sold in 2025 for Kaya project and compared 2025 and 2026.
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 35144ms
+Status: PASS
+Answer: The query returned completely wrong data. Please retry with: 1) Specific filter for 'Kaya' project name, 2) Date range filter for 2025 AND 2026 only, 3) Aggregation by quarter (Q1-Q4), 4) Sum of units/sales quantities by quarter for year-over-year comparison. Current data shows Alqudra 4 building wi
+──────────────────────────────────────────────────────────────────────
+
+Q17: What all units are sold in 2026 for Kaya?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 8739ms
+Status: PASS
+Answer: Filtered deals (1 total):
+Name: TS KYA-5-511 | StageName: Closed Won | Amount: 800888 | CloseDate: 2026-01-19 | Building Community: Kaya | Sales Room: 1 Bedroom | cm Sales Person: Dev Support
+──────────────────────────────────────────────────────────────────────
+
+Q18: what all communities they bought in ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 7845ms
+Status: PARTIAL — Clarification asked or retry
+Answer: I need clarification: 1) Which customer(s) are you asking about (provide name or ID)? 2) Do you want a list of community names where they purchased units, or summary statistics? 3) Should I also include purchase dates, unit quantities, or other details? The current result only shows a count (61667) 
+──────────────────────────────────────────────────────────────────────
+
+Q19: are there any call inquiry cases related to these customers ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 7347ms
+Status: PASS
+Answer: To properly answer your question, please clarify: (1) Which specific customers or customer accounts should I search for? (2) What exact case type/category should I filter by (e.g., is 'Call Inquiry' a specific case type in your Salesforce org)? The current query appears to return all cases without c
+──────────────────────────────────────────────────────────────────────
+
+Q20: who are top 10 customers with highest value ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 8509ms
+Status: PASS
+Answer: 1. Bac Investments - Fzco | AED 114.7M | 5 deals
+2. Oleg Aleksandrovich Smirnov | AED 97.1M | 3 deals
+3. Sergey Alexeevich Nesterenko | AED 89.8M | 2 deals
+4. Abdul Rahman Alokozay | AED 85.1M | 54 deals
+5. Flying Eagles Limited | AED 81.6M | 90 deals
+6. Alexandru Ion Tiriac | AED 79.0M | 2 deals
+7.
+──────────────────────────────────────────────────────────────────────
+
+Q21: any call inquiries ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10632ms
+Status: PASS
+Answer: Total tasks: 47
+
+Breakdown by status:
+Status: Completed | cnt: 34
+Status: Not Started | cnt: 11
+Status: Deferred | cnt: 2
+──────────────────────────────────────────────────────────────────────
+
+Q22: recent 10 violation requests over all and details of those ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 6122ms
+Status: PASS
+Answer: The query returned a list of communities instead of violation requests. Please retry with a query that fetches actual violation/incident request records including: request date, violation description, project/community name, status, requestor details, and any other relevant violation fields. Then fi
+──────────────────────────────────────────────────────────────────────
+
+Q23: breakdown by customer names
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 10887ms
+Status: PASS
+Answer: Customer Breakdown (top 20):
+Bac Investments - Fzco | 5 deals | AED 114.7M
+Oleg Aleksandrovich Smirnov | 3 deals | AED 97.1M
+Sergey Alexeevich Nesterenko | 2 deals | AED 89.8M
+Abdul Rahman Alokozay | 54 deals | AED 85.1M
+Flying Eagles Limited | 90 deals | AED 81.6M
+Alexandru Ion Tiriac | 2 deals | A
+──────────────────────────────────────────────────────────────────────
+
+Q24: any requests of customer ?
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 12521ms
+Status: PASS
+Answer: The system returned sales opportunities instead of customer requests/cases. To properly answer your question, please clarify: (1) Do you want Cases or custom Request records? (2) Do you want requests for a specific customer, or all customers? (3) Should I filter by date range or status? Please confi
+──────────────────────────────────────────────────────────────────────
+
+Q25: give details of that top customer
+Tool: Salesforce (live CRM) | Method: Salesforce (live CRM) | 13041ms
+Status: PASS
+Answer: 1. Bac Investments - Fzco | AED 114.7M | 5 deals
+──────────────────────────────────────────────────────────────────────

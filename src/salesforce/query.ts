@@ -2,21 +2,22 @@ import { chatJson } from '@/lib/ai/provider'
 import { followUpResolverPrompt } from '@/lib/ai/prompts'
 import { getSalesforceConfig } from './config'
 import { soql } from './client'
-import { resolveSynonyms, type SynonymEntry } from './synonyms'
-import { matchTool, type ToolMatch } from './tool-matcher'
-import { getToolByName, type ToolResult } from './tools'
+import { resolveSynonyms } from './synonyms'
+import { matchTool } from './tool-matcher'
+import { getToolByName } from './tools'
 import { executeAdHocSpec } from './spec-executor'
 import { validateFollowUp } from './schemas'
-import { recordMetric, recordError, type QueryMetric } from './observability'
+import { recordMetric } from './observability'
 import { verifyAnswer, quickCheck } from './verifier'
-import { todayStr, currentYear, dateContext } from './today'
 import { expandQuery } from './query-expansion'
 import { compressContext, quickCompress } from './context-compression'
-import { understandQuery, quickUnderstand, type UnderstoodQuery } from './query-understanding'
+import { understandQuery, type UnderstoodQuery } from './query-understanding'
 import { executeReActLoop, needsReActLoop } from './react-loop'
-import { maskSensitiveData } from './privacy-filter'
 import { ragFallback } from './rag-searcher'
 import { answerViaMcp } from './mcp-query'
+import { crossCheckMcpAnswer } from './cross-check'
+import { sanitizeSOQLInput } from './guardrails'
+import { features } from '@/lib/feature-flags'
 
 // Cheap pre-filter so we only spend LLM calls when a question is plausibly about the CRM.
 const CRM_HINT_RE =
@@ -149,7 +150,42 @@ export async function answerSalesforceQuery(
     })
 
     if (mcpResult && mcpResult.foundInCrm) {
-      return mcpResult
+      if (features.mcpVerification) {
+        // ── MCP VERIFICATION ── same checks tools get, using raw observations as baseline
+        const mcpRaw = mcpResult.rawObservations || mcpResult.context
+        const quick = quickCheck(rawQuery, mcpRaw, 'mcp')
+        if (!quick.ok) {
+          console.log('[salesforce] MCP quick check flagged issue:', quick.issue)
+        }
+        const verification = await verifyAnswer(rawQuery, null, mcpRaw, 'mcp')
+        console.log(`[salesforce] MCP verification score: ${verification.score}/100 (${verification.confidence})`)
+        if (verification.issues.length > 0) {
+          console.log('[salesforce] MCP verification issues:', verification.issues)
+        }
+
+        // Low-confidence MCP answer — fall through to tools/RAG which may do better
+        if (verification.score < 40 && verification.recommendation !== 'return') {
+          console.log('[salesforce] MCP verification low (score=' + verification.score + '), falling through to tools/RAG')
+          console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')
+        } else {
+          if (features.mcpCrossCheck) {
+            // ── INDEPENDENT CROSS-CHECK ── verify claimed numbers against a fresh SOQL
+            try {
+              const crossCheck = await crossCheckMcpAnswer(rawQuery, mcpResult.context)
+              if (!crossCheck.verified) {
+                console.warn('[salesforce] MCP cross-check discrepancies:', crossCheck.discrepancies)
+                const note = `\n\n⚠ **Cross-check note:** ${crossCheck.discrepancies.join(' | ')}`
+                mcpResult.context += note
+              }
+            } catch (err) {
+              console.warn('[salesforce] MCP cross-check failed (non-blocking):', err)
+            }
+          }
+          return mcpResult
+        }
+      } else {
+        return mcpResult
+      }
     }
     console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')
   }
@@ -490,7 +526,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // List/show recent/latest deals — but NOT "top salesperson/agent/person" (those go to aggregate)
   if ((q.includes('list') || q.includes('show') || q.includes('recent') || q.includes('latest') || q.includes('top')) && (q.includes('deal') || q.includes('sale') || q.includes('opportunit')) && !q.includes('salesperson') && !q.includes('by person') && !q.includes('by agent') && !q.includes('who is the top')) {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE Amount != 1 AND CloseDate != 2032-12-28 ORDER BY CreatedDate DESC LIMIT ${limit}`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE StageName = 'Closed Won'${TEST_RECORD_AND} ORDER BY CreatedDate DESC LIMIT ${limit}`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -543,7 +579,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   // Cancelled — "how many" → count; otherwise → list
   if (q.includes('cancel') || q.includes('cancelled')) {
     if (q.includes('how many') || q.includes('count') || q.includes('total')) {
-      const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')`)
+      const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')${TEST_RECORD_AND}`)
       return formatDirectResult(result, 'Opportunity')
     }
     const result = await soql(`SELECT Name, Building_Community__c, Amount, Order_Stattus__c FROM Opportunity WHERE Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')${TEST_RECORD_AND} ORDER BY CloseDate DESC LIMIT 20`)
@@ -605,7 +641,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
     if (isLookup) {
       const nameMatch = q.match(/(?:customer|account|buyer)s?\s+(?:named?|called?|info(?:rmation)?(?:\s+on)?|about|details?\s+on)?\s*(.+)/i)
       if (nameMatch && nameMatch[1].trim().length > 1) {
-        const searchName = nameMatch[1].trim().replace(/[?.!]$/, '')
+        const searchName = sanitizeSOQLInput(nameMatch[1].trim().replace(/[?.!]$/, ''))
         const result = await soql(`SELECT Name, Phone, Email__c, PersonEmail, RecordType.Name FROM Account WHERE Name LIKE '%${searchName}%' LIMIT 10`)
         return formatDirectResult(result, 'Account')
       }
@@ -730,7 +766,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       // Extract community name from "how many deals in Camden" pattern
       const communityMatch = q.match(/(?:how many|number of|count)\s+(?:deals?|sales?|opportunit\w*)\s+(?:in|for)\s+(.+?)(?:\?|$)/i)
       if (communityMatch) {
-        const community = communityMatch[1].trim().replace(/'/g, "")
+        const community = sanitizeSOQLInput(communityMatch[1].trim().replace(/'/g, ""))
         const result = await soql(`SELECT COUNT(Id) cnt FROM Opportunity WHERE (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%') AND StageName = 'Closed Won'`)
         return formatDirectResult(result, 'Opportunity')
       }
@@ -843,7 +879,7 @@ async function catchAllFallback(query: string): Promise<SalesforceResult | null>
       if (isLookup) {
         const nameMatch = q.match(/(?:customer|account|buyer)s?\s+(?:named?|called?|info(?:rmation)?(?:\s+on)?|about|details?\s+on)?\s*(.+)/i)
         if (nameMatch && nameMatch[1].trim().length > 1) {
-          const searchName = nameMatch[1].trim().replace(/[?.!]$/, '')
+          const searchName = sanitizeSOQLInput(nameMatch[1].trim().replace(/[?.!]$/, ''))
           const result = await soql(`SELECT Name, Phone, Email__c, PersonEmail, RecordType.Name FROM Account WHERE Name LIKE '%${searchName}%' LIMIT 10`)
           return formatDirectResult(result, 'Account')
         }
@@ -864,14 +900,14 @@ async function catchAllFallback(query: string): Promise<SalesforceResult | null>
   // Opportunity queries (generic — any mention of opportunity/deal/sale/property)
   if (q.includes('opportunit') || q.includes('deal') || q.includes('sale') || q.includes('property') || q.includes('unit') || q.includes('sold') || q.includes('revenue') || q.includes('pipeline')) {
     try {
-      const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ORDER BY CloseDate DESC LIMIT 20`)
+      const result = await soql(`SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity WHERE Amount != 1 AND CloseDate < 2032-01-01 ORDER BY CloseDate DESC LIMIT 20`)
       return formatDirectResult(result, 'Opportunity')
     } catch { /* fall through */ }
   }
 
   // Absolute last resort — just query Opportunities
   try {
-    const result = await soql(`SELECT Name, StageName, Amount, CloseDate FROM Opportunity ORDER BY CloseDate DESC LIMIT 10`)
+    const result = await soql(`SELECT Name, StageName, Amount, CloseDate FROM Opportunity WHERE Amount != 1 AND CloseDate < 2032-01-01 ORDER BY CloseDate DESC LIMIT 10`)
     return formatDirectResult(result, 'Opportunity')
   } catch { return null }
 }

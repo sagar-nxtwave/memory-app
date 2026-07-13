@@ -11,7 +11,7 @@ import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string }
-interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[] }
+interface Message { id: string; role: MessageRole; content: string; createdAt: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[]; suggestions?: string[] }
 interface Doc { id: string; name: string; fileType: string; status: string; summary: string | null; failureReason: string | null; createdAt: string; fileSize: number; version: number }
 interface PendingUpload { id: string; file: File; title: string; description: string; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; error?: string }
 interface DocDetail extends Doc {
@@ -166,7 +166,7 @@ export default function SpacePage() {
 
   useEffect(() => {
     fetch(`/api/spaces/${spaceId}`).then((r) => r.ok ? r.json() : null).then((d) => d && setSpace(d))
-    fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.json()).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
+    fetch(`/api/chat?spaceId=${spaceId}`).then((r) => r.ok ? r.json() : []).then((d) => { setMessages(Array.isArray(d) ? d : []); setChatLoading(false) }).catch(() => setChatLoading(false))
     fetch(`/api/documents?spaceId=${spaceId}`).then((r) => r.ok ? r.json() : []).then((d: Doc[]) => { if (Array.isArray(d)) setReadyDocs(d.filter((doc) => doc.status === 'ready').map((doc) => ({ id: doc.id, name: doc.name, fileType: doc.fileType }))) })
   }, [spaceId])
 
@@ -338,7 +338,7 @@ export default function SpacePage() {
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], suggestions: event.suggestions ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -730,7 +730,7 @@ export default function SpacePage() {
             {space?.description && (
               <p className="text-xs text-gray-900 dark:text-gray-500 truncate">{space.description}</p>
             )}
-          </div>
+            </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <NavBtn label="Chat" active={view === 'chat'} onClick={() => setView('chat')} />
@@ -761,7 +761,7 @@ export default function SpacePage() {
                   <AnimatePresence initial={false}>
                     {messages.map((msg) => (
                       <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show">
-                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onTypingDone={handleTypingDone} />
+                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onTypingDone={handleTypingDone} onSuggestionClick={(s) => { setInput(s); setTimeout(() => sendMessage(s), 0) }} />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -1575,10 +1575,11 @@ function normalizeMarkdown(text: string): string {
     .join('\n')
 }
 
-function ChatMessage({ message, isStreaming, onTypingDone }: {
+function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: {
   message: Message
   isStreaming?: boolean
   onTypingDone?: (id: string) => void
+  onSuggestionClick?: (suggestion: string) => void
 }) {
   const isUser = message.role === 'user'
   const showDots = isStreaming && message.content === ''
@@ -1624,7 +1625,46 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
           ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
           : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
-        {showDots ? (
+        {!isUser && message.thinkingSteps && message.thinkingSteps.length > 0 ? (
+          <div>
+            <div className="mb-2">
+              <button
+                onClick={() => setThinkingOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+                <span className="font-medium">Thinking process</span>
+                <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
+              </button>
+              {thinkingOpen && (
+                <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
+                  {message.thinkingSteps.map((step, i) => (
+                    <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {showDots ? (
+              <span className="flex gap-1 items-center py-0.5">
+                {[0, 1, 2].map((i) => (
+                  <motion.span key={i} className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full inline-block"
+                    animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }} />
+                ))}
+              </span>
+            ) : (
+              <div>{displayed.split('\n').map((line, i, arr) => (
+                <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
+              ))}</div>
+            )}
+          </div>
+        ) : showDots ? (
           <span className="flex gap-1 items-center py-0.5">
             {[0, 1, 2].map((i) => (
               <motion.span key={i} className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full inline-block"
@@ -1636,33 +1676,6 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))
         ) : (
-          <div>
-            {message.thinkingSteps && message.thinkingSteps.length > 0 && (
-              <div className="mb-2">
-                <button
-                  onClick={() => setThinkingOpen((o) => !o)}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
-                    <path d="M9 18l6-6-6-6" />
-                  </svg>
-                  <span className="font-medium">Thinking process</span>
-                  <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
-                </button>
-                {thinkingOpen && (
-                  <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
-                    {message.thinkingSteps.map((step, i) => (
-                      <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           <div className="markdown-body">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -1758,8 +1771,20 @@ function ChatMessage({ message, isStreaming, onTypingDone }: {
                 </button>
               </div>
             )}
+            {message.suggestions && message.suggestions.length > 0 && !message.isTyping && !isStreaming && message.role !== 'user' && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {message.suggestions.map((s: string, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => onSuggestionClick?.(s)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             </div>
-          </div>
         )}
       </div>
     </div>

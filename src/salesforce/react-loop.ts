@@ -12,6 +12,7 @@
 
 import { chatJson } from '@/lib/ai/provider'
 import { getToolByName, getToolCatalogText } from './tools'
+import { getBusinessGlossaryText } from './business-glossary'
 import { todayStr, currentYear } from './today'
 
 export interface ReActStep {
@@ -35,12 +36,15 @@ const STEP_TIMEOUT_MS = 30000
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
-const REACT_SYSTEM_PROMPT = `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
+function buildReactSystemPrompt(glossary: string): string {
+  return `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
 You have access to pre-built tools that query Salesforce CRM. Your job is to answer complex questions by reasoning step-by-step, calling tools as needed, and composing a final answer.
 
 AVAILABLE TOOLS:
 ${getToolCatalogText()}
+
+${glossary}
 
 RULES:
 1. Think step-by-step — break complex questions into sub-tasks
@@ -50,6 +54,7 @@ RULES:
 5. Maximum ${MAX_STEPS} tool calls — be efficient
 6. If a tool returns no data, try a different approach
 7. Always finish with a comprehensive answer, not just raw data
+8. Use the business glossary above to understand what field names and terms map to — e.g. "Units" means count of deals, "Value" means Amount field, comparisons should use the definitions provided
 
 CRITICAL — NEVER HALLUCINATE DATA:
 - When tools return data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the tool results
@@ -69,6 +74,7 @@ You must respond with ONLY one JSON object per step:
 
 For "finish" action, the "answer" field MUST contain the final response to the user.
 For tool actions, "params" must match the tool's parameter schema.`
+}
 
 const OBSERVATION_PROMPT = `You are observing the result of a tool execution. Analyze the result and decide:
 1. Does this answer the original question completely? If yes, compose the final answer.
@@ -100,6 +106,10 @@ export async function executeReActLoop(
   const toolsUsed: string[] = []
   let confidence: 'high' | 'medium' | 'low' = 'medium'
 
+  // Fetch business glossary for field definitions and terminology
+  const glossary = await getBusinessGlossaryText(['Account', 'Opportunity', 'Property_Inventory__c', 'Case'])
+  const systemPrompt = buildReactSystemPrompt(glossary)
+
   // Build context with conversation history
   let context = ''
   if (history && history.length > 0) {
@@ -116,7 +126,7 @@ export async function executeReActLoop(
   for (let stepNum = 0; stepNum < MAX_STEPS; stepNum++) {
     try {
       // Get LLM's next action
-      const raw = await chatJson(REACT_SYSTEM_PROMPT, input)
+      const raw = await chatJson(systemPrompt, input)
       let decision: Record<string, unknown>
       try {
         decision = typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, unknown>)

@@ -83,6 +83,9 @@ export interface McpStepInfo {
 
 export interface McpAnswerResult extends SalesforceResult {
   foundInCrm: boolean
+  /** Raw SOQL/SOSL observations from MCP tool calls — used by verifier to check
+   *  whether the composed prose actually matches the data retrieved. */
+  rawObservations: string
 }
 
 export async function answerViaMcp(
@@ -172,10 +175,11 @@ export async function answerViaMcp(
       }
     }
 
+    const rawObservations = steps.map(s => s.observation).join('\n\n')
     console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms), foundInCrm=${foundInCrm}`)
-    return { context: finalAnswer, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm }
+    return { context: finalAnswer, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm, rawObservations }
   } catch (err) {
     console.error('[mcp-query] failed:', err)
-    return { context: `I encountered an error querying Salesforce via MCP: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm: false }
+    return { context: `I encountered an error querying Salesforce via MCP: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm: false, rawObservations: '' }
   }
 }
