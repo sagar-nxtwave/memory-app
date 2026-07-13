@@ -9,7 +9,7 @@ import { useSpacesList } from '@/lib/hooks/useSpacesList'
 
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
-interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[]; suggestions?: string[] }
+interface Message { id: string; role: 'user' | 'assistant'; content: string; createdAt?: string; isTyping?: boolean; citations?: Citation[]; documentImages?: DocumentImage[]; thinkingSteps?: string[]; thinkingStepActions?: string[]; thinkingStepResults?: string[]; suggestions?: string[] }
 interface SpaceDoc { id: string; name: string; fileType: string }
 interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
 
@@ -184,7 +184,9 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
                 const steps = [...(m.thinkingSteps ?? []), event.step]
-                return { ...m, thinkingSteps: steps }
+                const actions = [...(m.thinkingStepActions ?? []), event.action ?? '']
+                const results = [...(m.thinkingStepResults ?? []), event.result ?? '']
+                return { ...m, thinkingSteps: steps, thinkingStepActions: actions, thinkingStepResults: results }
               }))
             } else if (event.type === 'delta') {
               accumulated += event.content
@@ -795,28 +797,58 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionCli
                 {thinkingOpen && (
                   <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
                     {message.thinkingSteps.map((step, i) => {
-                      const isResult = step.startsWith('Result: ')
-                      const isSoql = step.startsWith('SOQL: ')
+                      const action = (message.thinkingStepActions ?? [])[i] ?? ''
+                      const result = (message.thinkingStepResults ?? [])[i] ?? ''
+                      const isResult = action === 'result' || step.startsWith('Result: ')
+                      const displayStep = isResult ? step.replace(/^Result:\s*/, '') : step
+
+                      let iconColor = 'text-gray-300 dark:text-gray-600'
+                      let bgColor = ''
+                      let badge = null
+                      if (['classifyIntent', 'loadSkills', 'understandQuery', 'resolveSynonyms'].includes(action)) {
+                        iconColor = 'text-blue-400 dark:text-blue-500'
+                      } else if (['soqlQuery', 'find', 'executeTool', 'toolResult', 'mcpStart'].includes(action)) {
+                        iconColor = 'text-gray-400 dark:text-gray-500'
+                      } else if (action === 'verifyAnswer' || action === 'quickCheck') {
+                        iconColor = 'text-emerald-400 dark:text-emerald-500'
+                        const scoreMatch = displayStep.match(/(\d+)\/100/)
+                        if (scoreMatch) {
+                          const score = parseInt(scoreMatch[1])
+                          const scoreColor = score >= 70 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : score >= 40 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                          badge = <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-medium ${scoreColor}`}>{score}/100</span>
+                        }
+                      } else if (['crossCheck', 'detectHallucination'].includes(action)) {
+                        iconColor = 'text-yellow-500 dark:text-yellow-400'
+                        bgColor = 'bg-yellow-50/50 dark:bg-yellow-900/10'
+                      } else if (['reactLoop', 'adhocSpec', 'catchAll', 'ragFallback'].includes(action)) {
+                        iconColor = 'text-orange-400 dark:text-orange-500'
+                      } else if (action === 'composeAnswer') {
+                        iconColor = 'text-purple-400 dark:text-purple-500'
+                      } else if (action === 'fallthrough') {
+                        iconColor = 'text-orange-400 dark:text-orange-500'
+                      } else if (action === 'verifierOverride' || action === 'verifierRetry') {
+                        iconColor = 'text-yellow-500 dark:text-yellow-400'
+                      }
+
                       return (
-                        <div key={i} className={`${isResult ? 'ml-4' : ''}`}>
+                        <div key={i} className={`${isResult ? 'ml-4' : ''} ${bgColor} rounded px-1`}>
                           <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 text-gray-300 dark:text-gray-600">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 mt-0.5 ${iconColor}`}>
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            <span>{isResult ? step.slice(8) : step}</span>
+                            <span>{displayStep}{badge}</span>
                           </div>
-                          {isSoql && (message.thinkingSteps ?? [])[i + 1]?.startsWith('Result: ') && (
-                            <pre className="ml-5 mt-0.5 text-[10px] text-gray-300 dark:text-gray-600 bg-gray-50 dark:bg-gray-900/50 rounded p-1.5 overflow-x-auto max-h-32 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+                          {result && !isResult && (
+                            <div className="ml-5 mt-0.5 text-[10px] text-gray-300 dark:text-gray-600">
                               {(() => {
                                 try {
-                                  const raw = (message.thinkingSteps ?? [])[i + 1].slice(8)
-                                  const parsed = JSON.parse(raw)
-                                  return JSON.stringify(parsed, null, 2)
+                                  const parsed = JSON.parse(result)
+                                  return <pre className="bg-gray-50 dark:bg-gray-900/50 rounded p-1.5 overflow-x-auto max-h-32 overflow-y-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(parsed, null, 2)}</pre>
                                 } catch {
-                                  return (message.thinkingSteps ?? [])[i + 1].slice(8)
+                                  return <span className="italic">{result}</span>
                                 }
                               })()}
-                            </pre>
+                            </div>
                           )}
                         </div>
                       )

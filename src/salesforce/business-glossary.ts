@@ -88,9 +88,16 @@ let glossarySeeded = false
 async function ensureSeeded(): Promise<void> {
   if (glossarySeeded) return
   glossarySeeded = true
-  const existing = await db.select({ id: glossaryTerms.id }).from(glossaryTerms).limit(1)
-  if (existing.length > 0) return
-  await db.insert(glossaryTerms).values(SEED_TERMS)
+  // Check if ANY seed terms already exist in the DB (by matching term text).
+  // If at least one exists → user hasn't deleted everything → don't re-seed.
+  // If none exist → either fresh DB or user deleted everything → re-seed.
+  const existingTerms = await db.select({ term: glossaryTerms.term }).from(glossaryTerms)
+  const existingTexts = new Set(existingTerms.map(r => r.term))
+  const missingSeeds = SEED_TERMS.filter(s => !existingTexts.has(s.term))
+  if (missingSeeds.length === 0) return // all seed terms present, nothing to do
+  // Only insert the seed terms that are actually missing (preserves user deletions)
+  await db.insert(glossaryTerms).values(missingSeeds)
+  console.log(`[glossary] Re-seeded ${missingSeeds.length} missing glossary terms`)
 }
 
 export async function getCustomGlossaryTerms(): Promise<GlossaryTerm[]> {

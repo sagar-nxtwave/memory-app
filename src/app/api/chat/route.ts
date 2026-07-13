@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
   // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
-    try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})`, result: step.result || undefined }) } catch {}
+    try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
   }) : null
 
   // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
@@ -370,7 +370,7 @@ export async function POST(req: NextRequest) {
     if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
       console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
       salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
-        try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})`, result: step.result || undefined }) } catch {}
+        try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
       })
     }
   }
@@ -444,7 +444,7 @@ export async function POST(req: NextRequest) {
   // whenever everything else came up empty" is the safer default for a CRM-first tool.
   if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
     const fallback = await answerSalesforceQuery(content, conversationHistory, (step) => {
-      try { sseSend({ type: 'thinking', step: step.action === 'soqlQuery' ? `SOQL: ${step.detail}` : `MCP tool: ${step.action}(${step.detail})` }) } catch {}
+      try { sseSend({ type: 'thinking', action: step.action, step: step.detail }) } catch {}
     })
     if (fallback) {
       salesforceResult = fallback
@@ -546,6 +546,9 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
               hallucinatedTerms: validation.hallucinatedTerms,
               hallucinatedNumbers: validation.hallucinatedNumbers,
             })
+            sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.slice(0, 3).join(' | ') })
+          } else {
+            sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
           }
         }
 

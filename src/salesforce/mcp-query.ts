@@ -12,11 +12,78 @@ import { getMcpToolCatalogText, callMcpTool } from './mcp-client'
 import { todayStr, currentYear } from './today'
 import { getBusinessGlossaryText } from './business-glossary'
 import { getSkillFilesPromptText, classifyQueryIntent } from './skill-files'
+import { buildMetadataGraph, findPaths, type RelationshipField } from './metadata-graph'
 import type { SalesforceResult, ChatTurn } from './query'
 
 const MAX_STEPS = 8
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
+
+// Key objects for relationship graph — these are the main objects the LLM queries.
+const GRAPH_OBJECTS = ['Case', 'Opportunity', 'Property_Inventory__c', 'Account', 'Contact', 'Case_Units__c', 'Opportunity_Property__c']
+
+// Module-level graph cache — rebuilt when MCP session expires.
+let metadataGraph: Map<string, RelationshipField[]> | null = null
+
+/** Object name aliases for detecting query context (lowercase). */
+const OBJECT_ALIASES: Record<string, string[]> = {
+  Case: ['case', 'cases', 'service request', 'complaint', 'violation', 'ticket', 'enquiry', 'inquiry'],
+  Opportunity: ['opportunity', 'opportunities', 'deal', 'deals', 'sale', 'sales', 'sold', 'booking'],
+  Property_Inventory__c: ['property', 'unit', 'units', 'inventory', 'community', 'communities', 'building', 'villa', 'apartment', 'townhouse'],
+  Account: ['account', 'accounts', 'customer', 'customers', 'client', 'clients', 'owner', 'owners'],
+  Contact: ['contact', 'contacts'],
+  Case_Units__c: ['case unit', 'case units'],
+  Opportunity_Property__c: ['opportunity property', 'opportunity properties'],
+}
+
+/** Detect which objects the query is likely about. */
+function detectQueryObjects(query: string): string[] {
+  const q = query.toLowerCase()
+  const detected: string[] = []
+  for (const [obj, aliases] of Object.entries(OBJECT_ALIASES)) {
+    if (aliases.some((a) => q.includes(a))) detected.push(obj)
+  }
+  // If no specific object detected, include common ones
+  if (detected.length === 0) detected.push('Opportunity', 'Property_Inventory__c', 'Account')
+  return detected
+}
+
+/** Build relationship paths text for the prompt, based on query context. */
+function buildRelationshipPathsText(query: string): string {
+  if (!metadataGraph) return ''
+
+  const detectedObjects = detectQueryObjects(query)
+  const sections: string[] = []
+
+  // Relationship paths — guides navigation between objects
+  const targets = ['Property_Inventory__c', 'Opportunity', 'Account']
+  const pathLines: string[] = ['\n[OBJECT RELATIONSHIPS — AUTO-DISCOVERED]\nWhen navigating between objects, use these pre-discovered paths:']
+  let pathCount = 0
+
+  for (const fromObj of detectedObjects) {
+    for (const toObj of targets) {
+      if (fromObj === toObj) continue
+      const paths = findPaths(metadataGraph, fromObj, toObj)
+      if (paths.length === 0) continue
+
+      pathLines.push(`\n${fromObj} → ${toObj}:`)
+      paths.slice(0, 2).forEach((path, idx) => {
+        const label = idx === 0 ? 'RECOMMENDED' : `alternative ${idx + 1}`
+        const joinParts = path.steps.map((s) => `${s.viaField} → ${s.to}`)
+        pathLines.push(`  ${idx + 1}. (${label}) ${joinParts.join(' → ')}`)
+        pathCount++
+      })
+    }
+  }
+
+  if (pathCount > 0) {
+    pathLines.push('\nWhen the primary path returns empty results, ALWAYS try the next path before giving up.')
+    pathLines.push('When relationship paths conflict with business rules, prefer relationship paths for object traversal.')
+    sections.push(pathLines.join('\n'))
+  }
+
+  return sections.join('\n')
+}
 
 /**
  * Flatten nested objects in a JSON string so the LLM doesn't have to parse nested JSON.
@@ -62,6 +129,19 @@ Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit 
 Property_Inventory__c — the MASTER catalog of every physical unit/property (sold, available, rented).
   - Building_Community__c IS groupable here (100%-populated, 52 distinct real values) — use THIS object+field for "list all communities"
 
+Case — service requests, complaints, violations. Links to units through:
+  - Case_Units__c junction (RECOMMENDED): links Case to Property_Inventory__c via Property_Inventory__c field — ALWAYS try this first
+  - Case.Unit__c — TEXT field (may be stale/wrong; only use as last resort if Case_Units__c returns nothing)
+  - Case.Opportunity_Name__c — LOOKUP to Opportunity (fallback path via Opportunity → Opportunity_Property__c)
+  - To get unit details for a case: query Case_Units__c WHERE Case__c = '<case_id>' → get Property_Inventory__r.Name, Property_Inventory__r.Building_Community__c, etc.
+  - Key Case fields: eService_Name_Formula__c (case type), Origin, Status, CaseNumber, AccountId, ContactId, ParentId
+  - DLP sub-category fields ON Case (do NOT query separate objects — they don't exist):
+    Civil_Sub_Category__c, Carpentry_Sub_category__c, Painting_Sub_Category__c,
+    Mechanical_Sub_category__c, Electrical_Sub_Category__c, Plumbing_Sub_Category__c
+  - To find DLP cases: WHERE Subject LIKE '%DLP%' AND <SubCategoryField> != null
+  - To find DLP cases with electrical issues: WHERE Subject LIKE '%DLP%' AND Electrical_Sub_Category__c != null
+  - Other Case fields: Violation_Incident_Date__c, Violation_Category__c, Violation_Amount__c, Case_Code__c, Call_Purpose__c, Preferred_Visit_Date__c
+
 OWNER/CUSTOMER LOOKUP (CRITICAL — read this before answering any "who owns" / "who bought" / "customer" question):
   - Owner/Buyer data lives on Account, linked via Opportunity.Account
   - Property_Inventory__c is ONLY the property catalog — it has NO owner/customer fields
@@ -88,6 +168,16 @@ async function buildSystemPrompt(query?: string): Promise<{ prompt: string; load
   const skillResult = await getSkillFilesPromptText(query)
   const intentCategories = query ? classifyQueryIntent(query) : []
 
+  // Build metadata graph (cached) and generate relationship paths for this query
+  if (!metadataGraph) {
+    try {
+      metadataGraph = await buildMetadataGraph(GRAPH_OBJECTS)
+    } catch (err) {
+      console.warn('[mcp-query] Failed to build metadata graph:', err)
+    }
+  }
+  const relationshipPaths = query ? buildRelationshipPathsText(query) : ''
+
   const prompt = `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
 You have DIRECT access to Salesforce's own live data tools (via Salesforce's official MCP server). Your job is to answer the user's question by calling these tools as needed, then composing a clear, natural-language answer.
@@ -100,6 +190,7 @@ ${SOQL_MECHANICS}
 
 ${glossary}
 ${skillResult.text}
+${relationshipPaths ? '\n' + relationshipPaths + '\n' : ''}
 
 DATA QUALITY — ALWAYS EXCLUDE TEST/PLACEHOLDER RECORDS:
 - Opportunity: Amount = 1, CloseDate = 2032-12-28, cm_Sales_Person__r.Name = 'Salesforce Admin' are test/dummy records — filter these out in your WHERE clause

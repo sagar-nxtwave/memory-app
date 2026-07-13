@@ -437,10 +437,11 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
         // Surface each MCP tool call/SOQL query as its own thinking step — makes the
         // Salesforce MCP reasoning auditable instead of a black box (client-requested).
         for (const s of mcpStepsLog) {
-          emitStep(s.action === 'soqlQuery' ? `SOQL: ${s.detail}` : `MCP tool: ${s.action}(${s.detail})`)
+          send({ type: 'thinking', action: s.action, step: s.detail, index: steps.length + 1 })
+          steps.push(s.detail)
           if (s.result) {
             steps.push(s.result)
-            send({ type: 'thinking', step: `Result: ${s.result}`, index: steps.length })
+            send({ type: 'thinking', action: 'result', step: s.result, index: steps.length })
           }
         }
 
@@ -461,6 +462,9 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
               hallucinatedTerms: validation.hallucinatedTerms,
               hallucinatedNumbers: validation.hallucinatedNumbers,
             })
+            send({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.slice(0, 3).join(' | ') })
+          } else {
+            send({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
           }
         }
 

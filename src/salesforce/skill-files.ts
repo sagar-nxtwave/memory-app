@@ -29,6 +29,7 @@ export const INTENT_CATEGORIES = [
   'pricing',    // amount, value, AED, cost
   'reporting',  // breakdown, comparison, chart, table
   'pipeline',   // pending, upcoming, lost, all deals
+  'case',       // cases, service requests, complaints, violations
 ] as const
 
 export type IntentCategory = typeof INTENT_CATEGORIES[number]
@@ -71,6 +72,12 @@ export function classifyQueryIntent(query: string): IntentCategory[] {
   // Pipeline signals
   if (/\b(pipeline|pending|upcoming|lost|cancelled|all\s+deals)\b/.test(q)) scores.pipeline += 2
   if (/\b(stage|status|won|lost)\b/.test(q)) scores.pipeline += 1
+
+  // Case / Service Request signals
+  if (/\b(case|complaint|enquiry|inquiry|ticket|violation|call\s+inquiry)\b/.test(q)) scores.case += 3
+  if (/\b(service\s+request|support\s+ticket|customer\s+request)\b/.test(q)) scores.case += 3
+  if (/\b(call\s+history|call\s+enquir|open\s+ticket|pending\s+ticket)\b/.test(q)) scores.case += 2
+  if (/\b(issues?|problems?)\s+(for|from|of|related)\b/.test(q)) scores.case += 1
 
   // Sort by score, return categories with score > 0
   return (Object.entries(scores) as [string, number][])
@@ -529,6 +536,158 @@ When querying Opportunity, always add:
 - Always acknowledge the source: "Based on the CRM data..."
 `,
   },
+  {
+    name: 'Salesforce Cases',
+    category: 'case',
+    triggerWords: 'case, cases, service request, service requests, complaint, complaints, enquiry, enquiries, inquiry, inquiries, issue, issues, ticket, tickets, support, violation, call, call enquiry, call inquiries, support ticket, customer request, customer service',
+    content: `# Salesforce Cases (Service Requests / Tickets / Complaints / Enquiries)
+
+This skill defines how to search, filter, display, and summarize Salesforce **Case** records via the connected Salesforce MCP, and how to connect Cases to their related **Opportunity**, **Account**, and **Contact**.
+
+## Terminology mapping
+
+Users rarely say "Case". Treat ALL of the following as the Salesforce Case object:
+
+| User says | Meaning |
+|---|---|
+| Service Request / Customer Service Request | Case |
+| Support Ticket / Ticket | Case |
+| Customer Request / Request | Case |
+| Complaint | Case |
+| Enquiry / Inquiry | Case |
+| Issue | Case |
+| Call / Call Enquiry | Case with \`Origin = 'Phone'\` |
+
+## Relationship model
+
+Cases connect to Opportunities three ways. When asked for Cases related to an Opportunity (or a booking/unit that maps to an Opportunity), retrieve Cases matching **any** of these, then de-duplicate by Id:
+
+1. **Direct Case→Opportunity lookup**: the custom field \`Opportunity_Name__c\` on Case (the standard Case object has no Opportunity lookup — always use this custom field for the direct relationship).
+2. **Via Account**: \`Case.AccountId\` = the Opportunity's \`AccountId\`.
+3. **Via Contact**: \`Case.ContactId\` = the Opportunity's primary Contact (e.g., from \`Opportunity.ContactId\` or the primary \`OpportunityContactRole\`).
+
+Example SOQL pattern:
+
+\`\`\`
+SELECT Id, CaseNumber, Origin, Status, CreatedDate, eService_Name_Formula__c,
+       AccountId, Account.Name, ContactId, Contact.Name,
+       Opportunity_Name__c, ParentId
+FROM Case
+WHERE ParentId = null
+  AND (Opportunity_Name__c = :oppId
+       OR AccountId = :oppAccountId
+       OR ContactId = :oppContactId)
+ORDER BY CreatedDate DESC
+\`\`\`
+
+When the user gives an Account, Contact, or customer name instead of an Opportunity, resolve the record first (query Account/Contact by name), then filter Cases on \`AccountId\` / \`ContactId\`.
+
+## Search behaviour
+
+Whenever the user asks about cases using ANY of the terms above — even indirectly ("any complaints from this customer?", "issues pending for this booking?") — run the Case search and show the results. Do not ask the user to rephrase into "Cases".
+
+- "this customer / this account" → filter by AccountId (and/or ContactId for a person).
+- "this booking / this unit / this opportunity" → resolve the Opportunity, then apply the 3-way relationship logic above.
+- "open tickets" → add \`AND IsClosed = false\` (or \`Status != 'Closed'\`).
+- "calls" → filter \`Origin = 'Phone'\`.
+
+## Display logic
+
+### Default filter
+
+**Always filter \`ParentId = null\` by default** — show only parent (top-level) Cases. Include child Cases only if the user explicitly asks for them (e.g., "show child cases", "include sub-cases").
+
+### Default fields (every case, every list)
+
+Show these for ALL cases:
+
+| Column | Source |
+|---|---|
+| Case Number | \`CaseNumber\` |
+| Request Type | see per-type rules below (default: \`eService_Name_Formula__c\`) |
+| Date | \`CreatedDate\` |
+| Origin | \`Origin\` |
+| Status | \`Status\` |
+
+### Per-type rules — evaluate in this exact sequence
+
+Check each case against these rules **in order**; the first match determines how it is displayed.
+
+**Sequence 1 — Phone / Call Enquiry** (\`Origin = 'Phone'\`)
+- Treat the Case itself as a call. If the user asks about "calls" for a unit/customer, these Cases ARE the calls — present them as calls.
+- Request Type = **"Call Enquiry"** (fixed label)
+- Status = **"Closed"** (fixed value — always display Closed regardless of the record's Status field)
+- Date = \`CreatedDate\`
+- Additionally show: \`Description\`, \`Case_Code__c\`, \`Call_Purpose__c\`
+
+**Sequence 2 — Violation penalty** (\`eService_Name_Formula__c = 'Violation penalty'\`)
+- Show the default fields only.
+- If the user asks for more detail (or asks specifically about the violation), additionally show:
+  \`Violation_Incident_Date__c\`, \`Violation_Followup_Date__c\`, \`Violation_Category__c\`, \`Violation_Sub_Category__c\`, \`Violation_Description__c\`, \`Violation_Amount__c\`
+
+**Sequence 3 — NOC for sell** (\`eService_Name_Formula__c LIKE '%NOC for sell%'\`)
+- Request Type = the value of \`eService_Name_Formula__c\`
+- Additionally show: \`Current_Price__c\`, \`New_Selling_Price_AED__c\`
+
+**Sequence 4 — DLP Maintenance** (\`eService_Name_Formula__c = 'DLP - Maintenance Service'\`)
+- Show whichever of these sub-category fields are **not null** (omit null ones):
+  \`Civil_Sub_Category__c\`, \`Carpentry_Sub_category__c\`, \`Painting_Sub_Category__c\`, \`Mechanical_Sub_category__c\`, \`Electrical_Sub_Category__c\`, \`Plumbing_Sub_Category__c\`
+- Also show: \`Description\`, \`Preferred_Visit_Date__c\`, \`Status\`
+- If the user asks for other details, resolve the correct API field by matching the user's wording against Case **field labels** (see "Resolving fields by label" below).
+
+**IMPORTANT — DLP sub-category fields are ON the Case object:**
+DLP cases use fields like \`Electrical_Sub_Category__c\`, \`Civil_Sub_Category__c\`, etc. directly on Case. Do NOT query separate objects like \`Case_Issues__c\` or \`Issue__c\` — they do not exist.
+- Find DLP cases with electrical issues: \`SELECT ... FROM Case WHERE Subject LIKE '%DLP%' AND Electrical_Sub_Category__c != null AND ParentId = null\`
+- Find DLP cases with any specific trade: replace \`Electrical_Sub_Category__c\` with the relevant sub-category field name (\`Civil_Sub_Category__c\`, \`Painting_Sub_Category__c\`, \`Mechanical_Sub_category__c\`, \`Plumbing_Sub_Category__c\`, \`Carpentry_Sub_category__c\`).
+- Count DLP cases by trade: \`SELECT Electrical_Sub_Category__c, COUNT(Id) FROM Case WHERE Subject LIKE '%DLP%' AND Electrical_Sub_Category__c != null GROUP BY Electrical_Sub_Category__c\`
+
+**Sequence 5 — All other eService types** (any other \`eService_Name_Formula__c\` value, including blank)
+- Show the default fields.
+- If the user asks for additional details, resolve fields by label and query them.
+
+### Resolving fields by label
+
+When the user asks for a detail not covered above (e.g., "show the follow-up date", "what's the penalty amount?"):
+1. Describe the Case object via the Salesforce MCP (metadata/describe call, or query \`FieldDefinition\`) to list fields with their labels.
+2. Match the user's wording to the closest field **label**, prefer exact/near-exact label matches.
+3. Query that API field for the relevant cases and display it with its label.
+4. If multiple fields plausibly match, show the candidates and ask the user which one they mean.
+
+## Related record details (Opportunity / Account / Contact from a Case)
+
+From any Case, be able to show and summarize its related records:
+
+- **Opportunity**: via \`Opportunity_Name__c\` (query the Opportunity record: Name, StageName, Amount, CloseDate, Account, and any fields the user asks for).
+- **Account**: via \`AccountId\` (Name, Phone, and requested details).
+- **Contact**: via \`ContactId\` (Name, Email, Phone, and requested details).
+
+If the direct \`Opportunity_Name__c\` lookup is empty, find the Opportunity through the Case's Account or Contact instead, and say which path was used.
+
+## Summarization
+
+When asked to summarize (e.g., "summarize the complaints for this account"):
+- Give counts by Status and by Request Type.
+- Highlight open/pending cases first, then recently closed ones.
+- Call out anything notable (repeated issue types, long-open cases, high violation amounts).
+- Keep the per-case display rules above when listing individual cases inside the summary.
+
+## Output format
+
+- Present case lists as a table with the default columns (plus type-specific columns when a single type dominates the list).
+- For a single case, show a compact detail view: default fields first, then the type-specific fields for its sequence.
+- Use field **labels** as column headers, never raw API names.
+- Format dates in a readable form (e.g., 12 Jul 2026) and amounts with AED where the field is an AED amount.
+- If a query returns no cases, say so plainly and mention which relationship paths were checked (direct opportunity lookup, account, contact).
+
+## Practical querying notes
+
+- Use the connected Salesforce MCP tools for all data access (SOQL query / record retrieve / describe). Never fabricate case data.
+- Always include \`ParentId = null\` in the WHERE clause unless the user asked for child cases.
+- De-duplicate cases when combining the three Opportunity-relationship paths.
+- Order results by \`CreatedDate DESC\` unless the user asks otherwise.
+- If a custom field in this skill doesn't exist in the org (query error), fall back to describing the object and matching by label, and tell the user which field was unavailable.
+`,
+  },
 ]
 
 let seeded = false
@@ -536,7 +695,24 @@ let seeded = false
 async function ensureSeeded(): Promise<void> {
   if (seeded) return
   const existing = await db.select().from(skillFiles).where(eq(skillFiles.active, true))
-  if (existing.length > 0) { seeded = true; return }
+
+  if (existing.length > 0) {
+    // Auto-update stale built-in skills — compare SEED_DEFAULTS content with DB records.
+    // Match by category (handles renamed skills, e.g. old "Case & Service Request Lookup Guide"
+    // → new "Salesforce Cases" both have category='case').
+    for (const s of SEED_DEFAULTS) {
+      const dbRecord = existing.find(e => e.category === s.category)
+      if (dbRecord && dbRecord.content !== s.content) {
+        await db.update(skillFiles)
+          .set({ content: s.content, name: s.name, triggerWords: s.triggerWords })
+          .where(eq(skillFiles.id, dbRecord.id))
+        console.log(`[skill-files] Updated stale skill: ${s.name} (was "${dbRecord.name}")`)
+      }
+    }
+    seeded = true
+    return
+  }
+
   console.log('[skill-files] DB empty — seeding built-in defaults')
   for (const s of SEED_DEFAULTS) {
     await addSkillFile(s.name, s.category, s.triggerWords, s.content)
@@ -563,7 +739,9 @@ export async function getSkillFilesPromptText(query?: string): Promise<{ text: s
 
   const sections = Object.entries(grouped).map(([cat, items]) => {
     const header = cat === 'general' ? '' : `[${cat.toUpperCase()}]\n`
-    return items.map(f => `${header}### ${f.name}\n${f.content}`).join('\n\n')
+    return items.map(f => {
+      return `${header}### ${f.name}\n${f.content}`
+    }).join('\n\n')
   })
 
   return {

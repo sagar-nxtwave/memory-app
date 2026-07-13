@@ -136,6 +136,7 @@ export async function answerSalesforceQuery(
   // tools+RAG (the previous, pre-MCP behavior).
   if (process.env.SALESFORCE_USE_MCP === 'true') {
     console.log('[salesforce] MCP mode enabled — trying answerViaMcp() first (Level 1)')
+    onMcpStep?.({ action: 'mcpStart', detail: 'MCP mode enabled — trying Level 1 (live CRM)...' })
     const mcpResult = await answerViaMcp(rawQuery, history, onMcpStep)
     recordMetric({
       timestamp: new Date().toISOString(),
@@ -157,29 +158,35 @@ export async function answerSalesforceQuery(
         const quick = quickCheck(rawQuery, mcpRaw, 'mcp')
         if (!quick.ok) {
           console.log('[salesforce] MCP quick check flagged issue:', quick.issue)
+          onMcpStep?.({ action: 'quickCheck', detail: `Quick check flagged: ${quick.issue}` })
         }
         const verification = await verifyAnswer(rawQuery, null, mcpRaw, 'mcp')
         console.log(`[salesforce] MCP verification score: ${verification.score}/100 (${verification.confidence})`)
         if (verification.issues.length > 0) {
           console.log('[salesforce] MCP verification issues:', verification.issues)
         }
+        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
 
         // Low-confidence MCP answer — fall through to tools/RAG which may do better
         if (verification.score < 40 && verification.recommendation !== 'return') {
           console.log('[salesforce] MCP verification low (score=' + verification.score + '), falling through to tools/RAG')
+          onMcpStep?.({ action: 'fallthrough', detail: `Low confidence (${verification.score}/100) — falling through to Level 2/3` })
           console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')
         } else {
           if (features.mcpCrossCheck) {
             // ── INDEPENDENT CROSS-CHECK ── verify claimed numbers against a fresh SOQL
             try {
+              onMcpStep?.({ action: 'crossCheck', detail: 'Cross-checking answer against independent query...' })
               const crossCheck = await crossCheckMcpAnswer(rawQuery, mcpResult.context)
               if (!crossCheck.verified) {
                 console.warn('[salesforce] MCP cross-check discrepancies:', crossCheck.discrepancies)
+                onMcpStep?.({ action: 'crossCheck', detail: 'Cross-check found discrepancies', result: crossCheck.discrepancies.slice(0, 3).join(' | ') })
                 const note = `\n\n⚠ **Cross-check note:** ${crossCheck.discrepancies.join(' | ')}`
                 mcpResult.context += note
               }
             } catch (err) {
               console.warn('[salesforce] MCP cross-check failed (non-blocking):', err)
+              onMcpStep?.({ action: 'crossCheck', detail: `Cross-check failed: ${err instanceof Error ? err.message : String(err)}` })
             }
           }
           return mcpResult
@@ -189,6 +196,7 @@ export async function answerSalesforceQuery(
       }
     }
     console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')
+    onMcpStep?.({ action: 'fallthrough', detail: 'MCP found nothing — falling through to Level 2/3...' })
   }
 
   // Step 0: QUERY UNDERSTANDING — LLM "thinking" step
@@ -207,8 +215,10 @@ export async function answerSalesforceQuery(
   const query = understanding.clarified || rawQuery
   if (query !== rawQuery) {
     console.log(`[salesforce] query understood: "${rawQuery}" → "${query}" (intent=${understanding.intent}, confidence=${understanding.confidence})`)
+    onMcpStep?.({ action: 'understandQuery', detail: `"${rawQuery}" → "${query}"`, result: `intent: ${understanding.intent}, confidence: ${understanding.confidence}` })
   } else {
     console.log('[salesforce] resolved query:', query)
+    onMcpStep?.({ action: 'understandQuery', detail: `Query: "${query}"`, result: `intent: ${understanding.intent}, confidence: ${understanding.confidence}` })
   }
 
   // Step 2: Meta/overview short-circuit
@@ -255,12 +265,15 @@ export async function answerSalesforceQuery(
 
   // Step 4: Synonym resolution
   const synonyms = resolveSynonyms(query)
-  console.log('[salesforce] synonyms found:', synonyms.map(s => `${s.field}${s.value ? '=' + s.value : ''}`).join(', ') || 'none')
+  const synonymList = synonyms.map(s => `${s.field}${s.value ? '=' + s.value : ''}`).join(', ') || 'none'
+  console.log('[salesforce] synonyms found:', synonymList)
+  onMcpStep?.({ action: 'resolveSynonyms', detail: `Synonyms: ${synonymList}` })
 
   // Step 4.5: Query expansion (break complex questions into sub-queries)
   const expansion = await expandQuery(query)
   if (expansion.expand && expansion.subQueries.length >= 2) {
     console.log('[salesforce] query expanded:', expansion.subQueries)
+    onMcpStep?.({ action: 'expandQuery', detail: `Query expanded to ${expansion.subQueries.length} sub-queries`, result: expansion.subQueries.join(' | ') })
     // Execute each sub-query and merge results
     const subResults: string[] = []
     for (const subQ of expansion.subQueries) {
@@ -294,12 +307,14 @@ export async function answerSalesforceQuery(
   }
   const match = await matchTool(matcherQuery)
   console.log('[salesforce] tool match:', JSON.stringify(match))
+  onMcpStep?.({ action: 'matchTool', detail: `Tool: ${match.tool ?? 'none'}, confidence: ${match.confidence}`, result: match.params ? JSON.stringify(match.params).slice(0, 300) : undefined })
 
   // Step 6: Execute the matched tool
   if (match.tool && !match.clarify) {
     const tool = getToolByName(match.tool)
     if (tool) {
       console.log(`[salesforce] executing tool: ${match.tool}`)
+      onMcpStep?.({ action: 'executeTool', detail: `Executing ${match.tool}...` })
       const enrichedParams = { ...match.params }
       // Enrich params with extracted entities from query understanding
       for (const entity of understanding.entities) {
@@ -325,6 +340,7 @@ export async function answerSalesforceQuery(
       const result = await tool.execute(enrichedParams)
       if (result) {
         console.log('[salesforce] tool returned result successfully')
+        onMcpStep?.({ action: 'toolResult', detail: 'Tool returned data', result: result.context.slice(0, 500) })
 
         // ── CONTEXT COMPRESSION ──
         let context = result.context
@@ -339,23 +355,27 @@ export async function answerSalesforceQuery(
         const quick = quickCheck(query, result.context, 'tool')
         if (!quick.ok) {
           console.log('[salesforce] quick check flagged issue:', quick.issue)
+          onMcpStep?.({ action: 'quickCheck', detail: `Quick check flagged: ${quick.issue}` })
         }
         const verification = await verifyAnswer(query, null, result.context, `tool:${match.tool}`)
         console.log(`[salesforce] verification score: ${verification.score}/100 (${verification.confidence})`)
         if (verification.issues.length > 0) {
           console.log('[salesforce] verification issues:', verification.issues)
         }
+        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
 
         // Only override with refinedAnswer if score is very low AND there's actual data issues
         // Don't override valid tool results with SOQL suggestions
         if (verification.recommendation === 'clarify' && verification.refinedAnswer && verification.score < 20) {
           console.log('[salesforce] verifier override (score=' + verification.score + '), using refinedAnswer')
+          onMcpStep?.({ action: 'verifierOverride', detail: `Verifier override (score=${verification.score}) — using refined answer` })
           return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
         }
 
         // If verifier says retry, fall through to ad-hoc/catch-all instead of returning
         if (verification.recommendation === 'retry' && verification.score < 40) {
           console.log('[salesforce] verifier recommends retry (score=' + verification.score + '), trying fallback')
+          onMcpStep?.({ action: 'verifierRetry', detail: `Verifier recommends retry (score=${verification.score}) — trying fallback` })
         } else {
           recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: match.tool, confidence: verification.confidence, method: 'tool', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
           return result
@@ -369,6 +389,7 @@ export async function answerSalesforceQuery(
   // If the question needs multi-step reasoning, use the ReAct loop
   if (needsReActLoop(query) || needsReActLoop(rawQuery)) {
     console.log('[salesforce] question needs multi-step reasoning, using ReAct loop')
+    onMcpStep?.({ action: 'reactLoop', detail: 'Multi-step reasoning (ReAct loop)...' })
     try {
       const reactResult = await executeReActLoop(query, history)
       if (reactResult.finalAnswer && reactResult.confidence !== 'low') {
@@ -377,6 +398,7 @@ export async function answerSalesforceQuery(
         // Verify the ReAct result
         const verification = await verifyAnswer(query, null, reactResult.finalAnswer, 'react-loop')
         console.log(`[salesforce] ReAct verification score: ${verification.score}/100`)
+        onMcpStep?.({ action: 'verifyAnswer', detail: `ReAct verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
         
         if (verification.score >= 40) {
           recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: 'react-loop', confidence: verification.confidence, method: 'react-loop', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: reactResult.toolsUsed.length })
@@ -392,6 +414,7 @@ export async function answerSalesforceQuery(
   // Step 7: Ad-hoc SOQL spec fallback
   if (match.confidence !== 'high' || !match.tool) {
     console.log('[salesforce] trying ad-hoc spec fallback')
+    onMcpStep?.({ action: 'adhocSpec', detail: 'Trying ad-hoc SOQL spec...' })
     const fallback = await executeAdHocSpec(query)
     if (fallback) {
       console.log('[salesforce] ad-hoc spec returned result')
@@ -402,6 +425,7 @@ export async function answerSalesforceQuery(
       if (verification.issues.length > 0) {
         console.log('[salesforce] verification issues:', verification.issues)
       }
+      onMcpStep?.({ action: 'verifyAnswer', detail: `Ad-hoc verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
 
       if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
         return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
@@ -414,6 +438,7 @@ export async function answerSalesforceQuery(
 
   // Step 8: Last resort — always return something. Try a generic SOQL query based on keywords.
   console.log('[salesforce] all methods exhausted, attempting keyword-based catch-all')
+  onMcpStep?.({ action: 'catchAll', detail: 'Trying keyword catch-all...' })
   const catchAll = await catchAllFallback(query)
   if (catchAll) {
 
@@ -423,6 +448,7 @@ export async function answerSalesforceQuery(
     if (verification.issues.length > 0) {
       console.log('[salesforce] verification issues:', verification.issues)
     }
+    onMcpStep?.({ action: 'verifyAnswer', detail: `Catch-all verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
 
     if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
       return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
@@ -436,6 +462,7 @@ export async function answerSalesforceQuery(
   // no tool/spec/keyword-match covers (e.g. ad-hoc cross-field breakdowns) by searching
   // actual indexed records instead of giving up or asking the user to clarify.
   console.log('[salesforce] tool/spec/catch-all exhausted, trying RAG semantic search')
+  onMcpStep?.({ action: 'ragFallback', detail: 'Searching RAG (Pinecone)...' })
   const ragResult = await ragFallback(query)
   if (ragResult) {
     const verification = await verifyAnswer(query, null, ragResult.context, 'rag')
@@ -443,6 +470,7 @@ export async function answerSalesforceQuery(
     if (verification.issues.length > 0) {
       console.log('[salesforce] RAG verification issues:', verification.issues)
     }
+    onMcpStep?.({ action: 'verifyAnswer', detail: `RAG verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
 
     if (verification.score >= 25) {
       recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: verification.confidence, method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })
