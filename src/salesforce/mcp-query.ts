@@ -348,7 +348,7 @@ export async function answerViaMcp(
       const flatObservation = flattenNestedJson(observation)
 
       // Send the step with truncated result (first 500 chars) so the UI can show the data
-      onStep?.({ action, detail, result: flatObservation?.slice(0, 500) })
+      onStep?.({ action, detail, result: flatObservation?.slice(0, 1000) })
 
       steps.push({ thought, action, observation: flatObservation })
       input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`

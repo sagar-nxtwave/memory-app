@@ -357,6 +357,19 @@ export async function POST(req: NextRequest) {
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
   // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
+  // Emit generic thinking steps BEFORE the call so they appear in order.
+  if (intent.salesforce) {
+    try { sseSend({ type: 'thinking', action: 'info', step: 'Querying live Salesforce CRM data...' }) } catch {}
+  }
+  if (!skipRetrieval && !intent.salesforce) {
+    try { sseSend({ type: 'thinking', action: 'info', step: 'Understanding your question...' }) } catch {}
+    if (intent.documents) {
+      try { sseSend({ type: 'thinking', action: 'info', step: 'Searching documents for relevant content...' }) } catch {}
+    }
+    if (intent.web) {
+      try { sseSend({ type: 'thinking', action: 'info', step: 'Searching the web for supplementary information...' }) } catch {}
+    }
+  }
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
     try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
   }) : null
@@ -519,11 +532,6 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
 
       if (skipRetrieval) {
         emitStep('Processing your message...')
-      } else {
-        emitStep('Understanding your question...')
-        if (intent.salesforce) emitStep('Querying live Salesforce CRM data...')
-        if (intent.documents) emitStep('Searching documents for relevant content...')
-        if (intent.web) emitStep('Searching the web for supplementary information...')
       }
 
       let fullContent = ''

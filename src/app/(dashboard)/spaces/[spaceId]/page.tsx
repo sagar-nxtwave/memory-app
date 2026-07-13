@@ -1672,12 +1672,12 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                         iconColor = 'text-gray-400 dark:text-gray-500'
                       } else if (action === 'verifyAnswer' || action === 'quickCheck') {
                         iconColor = 'text-emerald-400 dark:text-emerald-500'
-                        // Extract score for badge
+                        // Extract score for color badge (no text duplicate)
                         const scoreMatch = displayStep.match(/(\d+)\/100/)
                         if (scoreMatch) {
                           const score = parseInt(scoreMatch[1])
                           const scoreColor = score >= 70 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : score >= 40 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                          badge = <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-medium ${scoreColor}`}>{score}/100</span>
+                          badge = <span className={`ml-1 px-1 py-0.5 rounded text-[9px] font-medium ${scoreColor}`}>{score}</span>
                         }
                       } else if (['crossCheck', 'detectHallucination'].includes(action)) {
                         iconColor = 'text-yellow-500 dark:text-yellow-400'

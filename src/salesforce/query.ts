@@ -340,7 +340,7 @@ export async function answerSalesforceQuery(
       const result = await tool.execute(enrichedParams)
       if (result) {
         console.log('[salesforce] tool returned result successfully')
-        onMcpStep?.({ action: 'toolResult', detail: 'Tool returned data', result: result.context.slice(0, 500) })
+        onMcpStep?.({ action: 'toolResult', detail: 'Tool returned data', result: result.context.slice(0, 1000) })
 
         // ── CONTEXT COMPRESSION ──
         let context = result.context
