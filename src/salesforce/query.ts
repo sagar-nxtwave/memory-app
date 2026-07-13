@@ -30,6 +30,7 @@ export function isSalesforceQuery(query: string): boolean {
 export interface SalesforceResult {
   context: string
   citation: { documentName: string }
+  rawObservations?: string // raw JSON from SOQL — for server-side table/text rendering
 }
 
 export interface ChatTurn {

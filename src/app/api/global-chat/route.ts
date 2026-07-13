@@ -12,6 +12,7 @@ import { parseQueryFilters, isFinancialQuery, wantsVisual, isChitChat } from '@/
 import { answerTabularQuery } from '@/lib/ai/tableQuery'
 import { retrieveAndMerge, type RetrievalItem, type Citation } from '@/web-search'
 import { answerSalesforceQuery } from '@/salesforce'
+import { formatSalesforceData } from '@/salesforce/format-results'
 import { validateAnswerAgainstData, validateListCompleteness } from '@/salesforce/answer-validator'
 import { classifyIntent, type Intent } from '@/lib/ai/intentRouter'
 import { webContextNote } from '@/lib/ai/prompts'
@@ -397,7 +398,17 @@ Searching across: ${spaceNames}
 Documents available across projects:
 ${docManifest}
 
-${salesforceResult ? `\n${salesforceResult.context}\n` : ''}
+CRITICAL INSTRUCTIONS FOR SALESFORCE CRM DATA:
+- The formatted data below is already clean — present it to the user as-is
+- For tables: render the markdown table directly, then add a 1-2 sentence summary
+- For text lists: present the key facts clearly with labels
+- NEVER rephrase data into vague language — use the exact values provided
+- If data is empty, say "No records found" — don't say "0 records"
+
+${salesforceResult ? (() => {
+  const formattedData = formatSalesforceData(salesforceResult)
+  return `\nSalesforce CRM Data:\n\n${salesforceResult.context}\n${formattedData ? `\nFormatted Data (present this to the user):\n${formattedData}\n` : ''}\n`
+})() : ''}
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
 ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(contextText)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 
