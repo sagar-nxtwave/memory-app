@@ -165,7 +165,7 @@ export async function answerSalesforceQuery(
         if (verification.issues.length > 0) {
           console.log('[salesforce] MCP verification issues:', verification.issues)
         }
-        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
         // Low-confidence MCP answer — fall through to tools/RAG which may do better
         if (verification.score < 40 && verification.recommendation !== 'return') {
@@ -180,7 +180,7 @@ export async function answerSalesforceQuery(
               const crossCheck = await crossCheckMcpAnswer(rawQuery, mcpResult.context)
               if (!crossCheck.verified) {
                 console.warn('[salesforce] MCP cross-check discrepancies:', crossCheck.discrepancies)
-                onMcpStep?.({ action: 'crossCheck', detail: 'Cross-check found discrepancies', result: crossCheck.discrepancies.slice(0, 3).join(' | ') })
+                onMcpStep?.({ action: 'crossCheck', detail: 'Cross-check found discrepancies', result: crossCheck.discrepancies.join(' | ') })
                 const note = `\n\n⚠ **Cross-check note:** ${crossCheck.discrepancies.join(' | ')}`
                 mcpResult.context += note
               }
@@ -307,7 +307,7 @@ export async function answerSalesforceQuery(
   }
   const match = await matchTool(matcherQuery)
   console.log('[salesforce] tool match:', JSON.stringify(match))
-  onMcpStep?.({ action: 'matchTool', detail: `Tool: ${match.tool ?? 'none'}, confidence: ${match.confidence}`, result: match.params ? JSON.stringify(match.params).slice(0, 300) : undefined })
+  onMcpStep?.({ action: 'matchTool', detail: `Tool: ${match.tool ?? 'none'}, confidence: ${match.confidence}`, result: match.params ? JSON.stringify(match.params) : undefined })
 
   // Step 6: Execute the matched tool
   if (match.tool && !match.clarify) {
@@ -340,7 +340,7 @@ export async function answerSalesforceQuery(
       const result = await tool.execute(enrichedParams)
       if (result) {
         console.log('[salesforce] tool returned result successfully')
-        onMcpStep?.({ action: 'toolResult', detail: 'Tool returned data', result: result.context.slice(0, 1000) })
+        onMcpStep?.({ action: 'toolResult', detail: 'Tool returned data', result: result.context })
 
         // ── CONTEXT COMPRESSION ──
         let context = result.context
@@ -362,7 +362,7 @@ export async function answerSalesforceQuery(
         if (verification.issues.length > 0) {
           console.log('[salesforce] verification issues:', verification.issues)
         }
-        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+        onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
         // Only override with refinedAnswer if score is very low AND there's actual data issues
         // Don't override valid tool results with SOQL suggestions
@@ -398,7 +398,7 @@ export async function answerSalesforceQuery(
         // Verify the ReAct result
         const verification = await verifyAnswer(query, null, reactResult.finalAnswer, 'react-loop')
         console.log(`[salesforce] ReAct verification score: ${verification.score}/100`)
-        onMcpStep?.({ action: 'verifyAnswer', detail: `ReAct verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+        onMcpStep?.({ action: 'verifyAnswer', detail: `ReAct verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
         
         if (verification.score >= 40) {
           recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: 'react-loop', confidence: verification.confidence, method: 'react-loop', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: reactResult.toolsUsed.length })
@@ -425,7 +425,7 @@ export async function answerSalesforceQuery(
       if (verification.issues.length > 0) {
         console.log('[salesforce] verification issues:', verification.issues)
       }
-      onMcpStep?.({ action: 'verifyAnswer', detail: `Ad-hoc verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+      onMcpStep?.({ action: 'verifyAnswer', detail: `Ad-hoc verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
       if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
         return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
@@ -448,7 +448,7 @@ export async function answerSalesforceQuery(
     if (verification.issues.length > 0) {
       console.log('[salesforce] verification issues:', verification.issues)
     }
-    onMcpStep?.({ action: 'verifyAnswer', detail: `Catch-all verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+    onMcpStep?.({ action: 'verifyAnswer', detail: `Catch-all verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
     if (verification.recommendation === 'clarify' && verification.refinedAnswer) {
       return { context: verification.refinedAnswer, citation: { documentName: 'Salesforce (live CRM)' } }
@@ -470,7 +470,7 @@ export async function answerSalesforceQuery(
     if (verification.issues.length > 0) {
       console.log('[salesforce] RAG verification issues:', verification.issues)
     }
-    onMcpStep?.({ action: 'verifyAnswer', detail: `RAG verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.slice(0, 3).join(' | ') : 'Passed' })
+    onMcpStep?.({ action: 'verifyAnswer', detail: `RAG verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
     if (verification.score >= 25) {
       recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: verification.confidence, method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: true, guardrailBlocked: false, instructorRetries: 0, resultCount: 1 })

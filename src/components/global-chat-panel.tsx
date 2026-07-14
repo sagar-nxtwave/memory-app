@@ -843,7 +843,7 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionCli
                               {(() => {
                                 try {
                                   const parsed = JSON.parse(result)
-                                  return <pre className="bg-gray-50 dark:bg-gray-900/50 rounded p-1.5 overflow-x-auto max-h-32 overflow-y-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(parsed, null, 2)}</pre>
+                                  return <pre className="bg-gray-50 dark:bg-gray-900/50 rounded p-1.5 overflow-x-auto max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(parsed, null, 2)}</pre>
                                 } catch {
                                   return <span className="italic">{result}</span>
                                 }

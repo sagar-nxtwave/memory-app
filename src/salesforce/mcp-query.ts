@@ -15,7 +15,7 @@ import { getSkillFilesPromptText, classifyQueryIntent } from './skill-files'
 import { buildMetadataGraph, findPaths, type RelationshipField } from './metadata-graph'
 import type { SalesforceResult, ChatTurn } from './query'
 
-const MAX_STEPS = 8
+const MAX_STEPS = 12
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
@@ -347,8 +347,8 @@ export async function answerViaMcp(
       // instead of nested objects it may fail to parse
       const flatObservation = flattenNestedJson(observation)
 
-      // Send the step with truncated result (first 500 chars) so the UI can show the data
-      onStep?.({ action, detail, result: flatObservation?.slice(0, 1000) })
+      // Send the step with full result so the UI can show the data
+      onStep?.({ action, detail, result: flatObservation })
 
       steps.push({ thought, action, observation: flatObservation })
       input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
@@ -359,7 +359,7 @@ export async function answerViaMcp(
       // a clean natural-language answer from what was gathered, instead of returning raw
       // tool output/JSON (which happened before this safety net was added).
       console.log('[mcp-query] max steps reached without finish — forcing final answer composition')
-      onStep?.({ action: 'composeAnswer', detail: 'Forcing answer composition (max steps reached)...' })
+          onStep?.({ action: 'composeAnswer', detail: 'Composing final answer from gathered data...' })
       const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
       try {
         const raw = await chatJson(systemPrompt, composePrompt)

@@ -462,7 +462,7 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
               hallucinatedTerms: validation.hallucinatedTerms,
               hallucinatedNumbers: validation.hallucinatedNumbers,
             })
-            send({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.slice(0, 3).join(' | ') })
+            send({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.join(' | ') })
           } else {
             send({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
           }
