@@ -13,6 +13,7 @@
 import { chatJson } from '@/lib/ai/provider'
 import { getToolByName, getToolCatalogText } from './tools'
 import { getBusinessGlossaryText } from './business-glossary'
+import { parseLlmJson } from './mcp-query'
 import { todayStr, currentYear } from './today'
 
 export interface ReActStep {
@@ -39,7 +40,7 @@ const CURRENT_YEAR = currentYear()
 function buildReactSystemPrompt(glossary: string): string {
   return `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
-You have access to pre-built tools that query Salesforce CRM. Your job is to answer complex questions by reasoning step-by-step, calling tools as needed, and composing a final answer.
+You have access to pre-built tools that query the CRM. Your job is to answer complex questions by reasoning step-by-step, calling tools as needed, and composing a final answer.
 
 AVAILABLE TOOLS:
 ${getToolCatalogText()}
@@ -127,11 +128,9 @@ export async function executeReActLoop(
     try {
       // Get LLM's next action
       const raw = await chatJson(systemPrompt, input)
-      let decision: Record<string, unknown>
-      try {
-        decision = typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, unknown>)
-      } catch {
-        console.warn(`[react] step ${stepNum}: failed to parse LLM response`)
+      const decision = parseLlmJson(raw)
+      if (!decision) {
+        console.warn(`[react] step ${stepNum}: failed to parse LLM response (${raw.length} chars, starts with: ${raw.slice(0, 150)})`)
         confidence = 'low'
         break
       }

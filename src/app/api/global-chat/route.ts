@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
       citations: globalMessages.citations,
       documentImages: globalMessages.documentImages,
       thinkingSteps: globalMessages.thinkingSteps,
+      thinkingStepActions: globalMessages.thinkingStepActions,
+      thinkingStepResults: globalMessages.thinkingStepResults,
     })
     .from(globalMessages)
     .where(eq(globalMessages.userId, session.user.id))
@@ -423,7 +425,14 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
 
         // ── Thinking process steps (emitted as thinking events) ──
         const steps: string[] = []
-        const emitStep = (step: string) => { steps.push(step); send({ type: 'thinking', step, index: steps.length }) }
+        const stepActions: string[] = []
+        const stepResults: string[] = []
+        const collectStep = (step: string, action?: string, result?: string) => {
+          steps.push(step)
+          stepActions.push(action ?? '')
+          stepResults.push(result ?? '')
+        }
+        const emitStep = (step: string) => { collectStep(step); send({ type: 'thinking', step, index: steps.length }) }
 
         if (skipRetrieval) {
           emitStep('Processing your message...')
@@ -438,9 +447,9 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
         // Salesforce MCP reasoning auditable instead of a black box (client-requested).
         for (const s of mcpStepsLog) {
           send({ type: 'thinking', action: s.action, step: s.detail, index: steps.length + 1 })
-          steps.push(s.detail)
+          collectStep(s.detail, s.action, s.result)
           if (s.result) {
-            steps.push(s.result)
+            collectStep(s.result, 'result')
             send({ type: 'thinking', action: 'result', step: s.result, index: steps.length })
           }
         }
@@ -477,6 +486,8 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
             citations: citations.length > 0 ? citations : null,
             documentImages: documentImages.length > 0 ? documentImages : null,
             thinkingSteps: steps.length > 0 ? steps : null,
+            thinkingStepActions: stepActions.length > 0 ? stepActions : null,
+            thinkingStepResults: stepResults.length > 0 ? stepResults : null,
           })
           .returning()
 

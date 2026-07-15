@@ -3,7 +3,7 @@
 
 import { chatJson } from '@/lib/ai/provider'
 
-const EXPANSION_PROMPT = `You are a query expansion engine for a Salesforce CRM assistant.
+const EXPANSION_PROMPT = `You are a query expansion engine for a CRM assistant.
 
 Given a user question, determine if it should be broken into sub-queries.
 

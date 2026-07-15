@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
       citations: messages.citations,
       documentImages: messages.documentImages,
       thinkingSteps: messages.thinkingSteps,
+      thinkingStepActions: messages.thinkingStepActions,
+      thinkingStepResults: messages.thinkingStepResults,
     })
     .from(messages)
     .where(eq(messages.spaceId, spaceId))
@@ -353,6 +355,16 @@ export async function POST(req: NextRequest) {
     try { ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch {}
   }
 
+  // Collect thinking steps, actions, and results for persistence
+  const steps: string[] = []
+  const stepActions: string[] = []
+  const stepResults: string[] = []
+  const collectStep = (step: string, action?: string, result?: string) => {
+    steps.push(step)
+    stepActions.push(action ?? '')
+    stepResults.push(result ?? '')
+  }
+
   // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
   // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
   // over RAG/web for CRM facts; fails soft to those when it can't answer.
@@ -360,18 +372,23 @@ export async function POST(req: NextRequest) {
   // Emit generic thinking steps BEFORE the call so they appear in order.
   if (intent.salesforce) {
     try { sseSend({ type: 'thinking', action: 'info', step: 'Querying live Salesforce CRM data...' }) } catch {}
+    collectStep('Querying live Salesforce CRM data...', 'info')
   }
   if (!skipRetrieval && !intent.salesforce) {
     try { sseSend({ type: 'thinking', action: 'info', step: 'Understanding your question...' }) } catch {}
+    collectStep('Understanding your question...', 'info')
     if (intent.documents) {
       try { sseSend({ type: 'thinking', action: 'info', step: 'Searching documents for relevant content...' }) } catch {}
+      collectStep('Searching documents for relevant content...', 'info')
     }
     if (intent.web) {
       try { sseSend({ type: 'thinking', action: 'info', step: 'Searching the web for supplementary information...' }) } catch {}
+      collectStep('Searching the web for supplementary information...', 'info')
     }
   }
   let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
     try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
+    collectStep(step.detail, step.action, step.result)
   }) : null
 
   // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
@@ -384,6 +401,7 @@ export async function POST(req: NextRequest) {
       console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
       salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
         try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
+        collectStep(step.detail, step.action, step.result)
       })
     }
   }
@@ -527,11 +545,9 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
     try {
       sseSend({ type: 'start', userMessageId: userMsg.id })
 
-      const steps: string[] = []
-      const emitStep = (step: string) => { steps.push(step); sseSend({ type: 'thinking', step, index: steps.length }) }
-
       if (skipRetrieval) {
-        emitStep('Processing your message...')
+        collectStep('Processing your message...', 'info')
+        sseSend({ type: 'thinking', step: 'Processing your message...', index: steps.length })
       }
 
       let fullContent = ''
@@ -570,6 +586,8 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
             citations: citations.length > 0 ? citations : null,
             documentImages: documentImages.length > 0 ? documentImages : null,
             thinkingSteps: steps.length > 0 ? steps : null,
+            thinkingStepActions: stepActions.length > 0 ? stepActions : null,
+            thinkingStepResults: stepResults.length > 0 ? stepResults : null,
           })
           .returning()
 

@@ -71,7 +71,7 @@ function buildQueryUnderstandingPrompt(knownProjects: string): string {
 
 Your job: Take a raw user question (possibly with typos, grammar errors, vague references, or conversation context) and produce a CLEAR, STRUCTURED understanding of what the user wants.
 
-KNOWN PROJECTS/COMMUNITIES/BUILDINGS at Nshama (live list from Salesforce — this is the authoritative source, not exhaustive naming conventions):
+KNOWN PROJECTS/COMMUNITIES/BUILDINGS at Nshama (live list from CRM — this is the authoritative source, not exhaustive naming conventions):
 ${knownProjects || '(list unavailable — infer from context)'}
 
 RULES:

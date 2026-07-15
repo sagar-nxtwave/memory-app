@@ -13,6 +13,8 @@ import { todayStr, currentYear } from './today'
 import { getBusinessGlossaryText } from './business-glossary'
 import { getSkillFilesPromptText, classifyQueryIntent } from './skill-files'
 import { buildMetadataGraph, findPaths, type RelationshipField } from './metadata-graph'
+import { validateSoql, parseSoqlError } from './soql-validator'
+import { buildFromJsonSpec } from './soql-query-builder'
 import type { SalesforceResult, ChatTurn } from './query'
 
 const MAX_STEPS = 12
@@ -86,6 +88,86 @@ function buildRelationshipPathsText(query: string): string {
 }
 
 /**
+ * Robust JSON extraction from LLM responses. Tries multiple strategies when the
+ * model returns invalid or malformed JSON:
+ * 1. Direct JSON.parse
+ * 2. Extract first {...} block via regex
+ * 3. Fix truncated JSON (close open braces/brackets)
+ * 4. Detect plain-text "finish" answers
+ * Returns null if all strategies fail.
+ */
+export function parseLlmJson(raw: string): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  // Strategy 1: Direct parse
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (typeof parsed === 'object' && parsed !== null) return parsed
+  } catch { /* continue */ }
+
+  // Strategy 2: Extract first {...} block
+  const braceStart = trimmed.indexOf('{')
+  if (braceStart >= 0) {
+    // Find matching closing brace
+    let depth = 0
+    let inString = false
+    let escape = false
+    for (let i = braceStart; i < trimmed.length; i++) {
+      const ch = trimmed[i]
+      if (escape) { escape = false; continue }
+      if (ch === '\\') { escape = true; continue }
+      if (ch === '"') { inString = !inString; continue }
+      if (inString) continue
+      if (ch === '{') depth++
+      if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          const candidate = trimmed.slice(braceStart, i + 1)
+          try {
+            return JSON.parse(candidate)
+          } catch { /* continue looking */ }
+        }
+      }
+    }
+
+    // Strategy 3: Fix truncated JSON — close open braces/brackets
+    if (depth > 0) {
+      let fixed = trimmed.slice(braceStart)
+      // Remove trailing incomplete string
+      if (inString) {
+        const lastQuote = fixed.lastIndexOf('"')
+        if (lastQuote > 0) fixed = fixed.slice(0, lastQuote + 1)
+      }
+      // Close open braces and brackets
+      for (let d = 0; d < depth; d++) fixed += '}'
+      try {
+        return JSON.parse(fixed)
+      } catch { /* continue */ }
+    }
+  }
+
+  // Strategy 4: Detect plain-text finish answer — if it contains "answer" and looks like
+  // the model tried to answer directly instead of returning structured JSON
+  const answerMatch = trimmed.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/)
+  if (answerMatch) {
+    const answer = answerMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n')
+    return { action: 'finish', answer, thought: '', foundInCrm: true }
+  }
+
+  // Strategy 5: If it looks like a plain text response that should have been a finish,
+  // treat the whole thing as the answer (only if it's reasonably long — short fragments
+  // are more likely broken JSON than intentional answers)
+  if (trimmed.length > 50 && !trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    console.warn(`[mcp-query] parseLlmJson: treating plain text as finish answer (${trimmed.length} chars)`)
+    return { action: 'finish', answer: trimmed, thought: '', foundInCrm: true }
+  }
+
+  return null
+}
+
+/**
  * Flatten nested objects in a JSON string so the LLM doesn't have to parse nested JSON.
  * e.g. {"Account":{"Name":"John"}} → {"Account.Name":"John"}
  * e.g. [{"Account":{"Name":"John"},"Name":"OPP-001"}] → [{"Account.Name":"John","Name":"OPP-001"}]
@@ -123,11 +205,100 @@ function flattenNestedJson(json: string): string {
 // traversal syntax) — distinct from the business glossary below, which covers WHAT the
 // fields/terms MEAN, not SOQL syntax quirks.
 const SOQL_MECHANICS = `
+SOQL SYNTAX RULES (CRITICAL — these are VERIFIED against live CRM data):
+
+1. NOT LIKE requires parentheses:
+   ✅ WHERE (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%')
+   ❌ WHERE NOT Name LIKE '%Miscellaneous%' AND NOT Name LIKE '%RTL%'
+   ❌ WHERE Name NOT LIKE '%Miscellaneous%'
+
+2. Aggregates (COUNT, SUM) must NOT have LIMIT unless GROUP BY is present:
+   ✅ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ...
+   ❌ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ... LIMIT 10
+
+3. No stray WHERE/AND:
+   ✅ WHERE field1 = 'value1' AND field2 = 'value2'
+   ❌ WHERE AND field1 = 'value1'
+   ❌ WHERE WHERE field1 = 'value1'
+
+4. Date literals are UNQUOTED:
+   ✅ WHERE Order_Date__c >= 2026-01-01
+   ❌ WHERE Order_Date__c >= '2026-01-01'
+
+5. Building_Community__c is NOT groupable on Opportunity (platform restriction):
+   ✅ SELECT Building_Name__c, COUNT(Id) cnt FROM Opportunity GROUP BY Building_Name__c
+   ❌ SELECT Building_Community__c, COUNT(Id) cnt FROM Opportunity GROUP BY Building_Community__c
+   (Use Property_Inventory__c for community-level GROUP BY instead)
+
+VERIFIED QUERY PATTERNS (copy these exactly for similar questions):
+
+-- "Total sales in 2026" / "How much did we sell this year?"
+SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND Order_Date__c >= 2026-01-01 AND Order_Date__c <= 2026-12-31 AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%Alqudra%') AND (NOT Building_Name__c LIKE '%ALQDR%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28
+
+-- "Sales by building" / "Which project sold the most?"
+SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28 AND Building_Name__c != null GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC
+
+-- "Sales by salesperson" / "Top agents"
+SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28 AND cm_Sales_Person__r.Name != null GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC
+
+-- "Who owns unit TH-V-6?" / "Customer lookup"
+SELECT Name, Account.Name, Account.Phone, Account.Email__c, Net_Amount__c, Order_Date__c, Milestone_Current_Status__c FROM Opportunity WHERE Building_Name__c LIKE '%Tower%' AND Name LIKE '%TH-V-6%' AND IsWon = true
+
+-- "Monthly sales trend in 2026"
+SELECT CALENDAR_MONTH(Order_Date__c) month, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND CALENDAR_YEAR(Order_Date__c) = 2026 AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28 GROUP BY CALENDAR_MONTH(Order_Date__c) ORDER BY CALENDAR_MONTH(Order_Date__c)
+
+-- "How many cancellations?" / "Transfer count"
+SELECT COUNT(Id) cnt FROM Opportunity WHERE Order_Stattus__c IN ('SMT_CANCELLED', 'PMT_CANCELLED', 'BOOKED_CANCELLED', 'RESERVED_CANCELLED', 'CANCELLED') AND Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%')
+
+-- "List all communities" (use Property_Inventory__c, NOT Opportunity)
+SELECT Building_Community__c, COUNT(Id) cnt FROM Property_Inventory__c WHERE Building_Community__c != null GROUP BY Building_Community__c ORDER BY COUNT(Id) DESC
+
+-- "How many cases?" / "Cases by type"
+SELECT Type, COUNT(Id) cnt FROM Case WHERE Type != null GROUP BY Type ORDER BY COUNT(Id) DESC
+
+-- "DLP cases with electrical issues"
+SELECT COUNT(Id) cnt FROM Case WHERE Subject LIKE '%DLP%' AND Electrical_Sub_Category__c != null
+
+-- "Sales by bedroom type"
+SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND Sales_Room__c != null AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND Amount != 1 AND CloseDate != 2032-12-28 GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC
+
+-- "Which buildings have sold more than 5 units?"
+SELECT Building_Name__c, COUNT(Id) cnt FROM Opportunity WHERE (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND Building_Name__c != null GROUP BY Building_Name__c HAVING COUNT(Id) > 5 ORDER BY COUNT(Id) DESC
+
+-- "Recent 10 call inquiries" / "recent phone calls" / "recent cases"
+SELECT CaseNumber, Subject, Status, Origin, RecordType.Name, Call_Purpose__c, Account.Name, CreatedDate FROM Case WHERE Origin = 'Phone' ORDER BY CreatedDate DESC LIMIT 10
+
+-- "Recent cases" (any type, most recent first)
+SELECT CaseNumber, Subject, Status, Origin, RecordType.Name, Account.Name, CreatedDate FROM Case ORDER BY CreatedDate DESC LIMIT 10
+
+-- "Cases by record type"
+SELECT RecordType.Name, COUNT(Id) cnt FROM Case WHERE RecordType.Name != null GROUP BY RecordType.Name ORDER BY COUNT(Id) DESC
+
+-- "2024 vs 2025 monthly sales comparison"
+SELECT CALENDAR_MONTH(Order_Date__c) month, CALENDAR_YEAR(Order_Date__c) year, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND CALENDAR_YEAR(Order_Date__c) IN (2024, 2025) AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND Amount != 1 AND CloseDate != 2032-12-28 GROUP BY CALENDAR_YEAR(Order_Date__c), CALENDAR_MONTH(Order_Date__c) ORDER BY CALENDAR_YEAR(Order_Date__c), CALENDAR_MONTH(Order_Date__c)
+
 Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit sale/transaction.
-  - Building_Name__c is groupable in GROUP BY; Building_Community__c on THIS object is NOT (Salesforce platform restriction) — use Building_Name__c for Opportunity-side grouping
-  - Traverse to customer via Account.Name, to salesperson via cm_Sales_Person__r.Name
+  SALES VALUE: Use Net_Amount__c (NOT Amount) as the default sales value for all totals/reports.
+  DEFAULT DATE: Use Order_Date__c (NOT CloseDate) for default sales summaries — it's the date Nshama originally sold the unit.
+  DEFAULT FILTER: Apply Sold_By_Nshama__c = 'NEW SALE' for general sales reports. Do NOT additionally filter by StageName or IsWon unless explicitly asked.
+  GROUP BY: Building_Name__c is groupable; Building_Community__c is NOT groupable on Opportunity (platform restriction) — use Building_Name__c for Opportunity-side grouping, or filter with WHERE Building_Community__c = 'X' instead of GROUP BY.
+  MANDATORY EXCLUSIONS (apply to EVERY query, even "all" or "everything"):
+    - Exclude Opportunity.Name containing "Miscellaneous", "RTL", "PK", or "Plot"
+    - Exclude Building_Name__c or Building_Community__c identifying "Al Qudra" (also "Alqudra", "ALQDR")
+    - Exclude Building_Name__c identifying a parking record
+  TRANSFER RULES:
+    - New/current customer: StageName = 'Closed Won' OR IsWon = true, Order_Stattus__c = 'TRANSFERED'
+    - Original customer (pre-handover): StageName = 'Closed Lost', Order_Stattus__c = 'PMT_CANCELLED', Sold_By_Nshama__c = 'NEW SALE'
+    - Original customer (post-handover): StageName = 'Closed Lost', Order_Stattus__c = 'SMT_CANCELLED', Sold_By_Nshama__c = 'NEW SALE'
+    - Original customer's Closed Lost + new customer's TRANSFERED = same physical unit. Do NOT count as two sales.
+  CANCELLATION STATUSES: SMT_CANCELLED, PMT_CANCELLED, BOOKED_CANCELLED, RESERVED_CANCELLED, CANCELLED. TRANSFERED is NOT a cancellation.
+  Traverse to customer via Account.Name, to salesperson via cm_Sales_Person__r.Name.
+  Sales_Room__c = bedroom count/configuration (Studio, 1 Bedroom, 2 Bedrooms, etc.).
+  Property_Booked_Date__c = actual booking date (more accurate than CloseDate for booking trends).
+
 Property_Inventory__c — the MASTER catalog of every physical unit/property (sold, available, rented).
   - Building_Community__c IS groupable here (100%-populated, 52 distinct real values) — use THIS object+field for "list all communities"
+  - Property_Status__c: Available, Reserved, Booked, Sold, Blocked, Leased, Online Blocked
 
 Case — service requests, complaints, violations. Links to units through:
   - Case_Units__c junction (RECOMMENDED): links Case to Property_Inventory__c via Property_Inventory__c field — ALWAYS try this first
@@ -141,12 +312,14 @@ Case — service requests, complaints, violations. Links to units through:
   - To find DLP cases: WHERE Subject LIKE '%DLP%' AND <SubCategoryField> != null
   - To find DLP cases with electrical issues: WHERE Subject LIKE '%DLP%' AND Electrical_Sub_Category__c != null
   - Other Case fields: Violation_Incident_Date__c, Violation_Category__c, Violation_Amount__c, Case_Code__c, Call_Purpose__c, Preferred_Visit_Date__c
+  - "Call inquiries" / "phone calls" = Case WHERE Origin = 'Phone'. "Recent call inquiries" = ORDER BY CreatedDate DESC LIMIT 10
+  - RecordType names: "Call Center", "Property Manager", "FM 0001 Move-in Approval" — do NOT assume which record type; query by Origin = 'Phone' first
 
 OWNER/CUSTOMER LOOKUP (CRITICAL — read this before answering any "who owns" / "who bought" / "customer" question):
   - Owner/Buyer data lives on Account, linked via Opportunity.Account
   - Property_Inventory__c is ONLY the property catalog — it has NO owner/customer fields
   - To find who owns/bought a specific unit, query Opportunity (NOT Property_Inventory__c):
-    SELECT Name, Account.Name, Account.Phone, Account.Email__c, Amount, CloseDate, Milestone_Current_Status__c
+    SELECT Name, Account.Name, Account.Phone, Account.Email__c, Net_Amount__c, Order_Date__c, Milestone_Current_Status__c
     FROM Opportunity
     WHERE Building_Name__c LIKE '%<project>%' AND Name LIKE '%<unit>%' AND IsWon = true
   - The Account.Name field = the owner/buyer name. Account.Phone/Email = their contact info.
@@ -180,7 +353,7 @@ async function buildSystemPrompt(query?: string): Promise<{ prompt: string; load
 
   const prompt = `You are a CRM reasoning agent for Nshama, a Dubai real estate developer. Today's date is ${TODAY}. The current year is ${CURRENT_YEAR}.
 
-You have DIRECT access to Salesforce's own live data tools (via Salesforce's official MCP server). Your job is to answer the user's question by calling these tools as needed, then composing a clear, natural-language answer.
+You have DIRECT access to the CRM's live data tools. Your job is to answer the user's question by calling these tools as needed, then composing a clear, natural-language answer.
 
 AVAILABLE TOOLS:
 ${toolCatalog}
@@ -194,12 +367,16 @@ ${relationshipPaths ? '\n' + relationshipPaths + '\n' : ''}
 
 DATA QUALITY — ALWAYS EXCLUDE TEST/PLACEHOLDER RECORDS:
 - Opportunity: Amount = 1, CloseDate = 2032-12-28, cm_Sales_Person__r.Name = 'Salesforce Admin' are test/dummy records — filter these out in your WHERE clause
-- Account: names like "TestAccount", "Test Account", anything starting with "Test ", "Do not update or close...", "Contractor / Miscellaneous...", "Miscellaneous..." are placeholder/junk accounts, NOT real customers — exclude these from customer/account-facing answers (filter in SOQL with "AND Account.Name NOT LIKE 'Test%' AND Account.Name NOT LIKE 'Do not update%' AND Account.Name NOT LIKE '%Miscellaneous%' AND Account.Name NOT LIKE '%Contractor%'" when querying by Account, or filter them out of results before presenting)
+- Account: names like "TestAccount", "Test Account", anything starting with "Test ", "Do not update or close...", "Contractor / Miscellaneous...", "Miscellaneous..." are placeholder/junk accounts, NOT real customers — exclude from customer/account-facing answers (use "AND (NOT Account.Name LIKE 'Test%') AND (NOT Account.Name LIKE 'Do not update%') AND (NOT Account.Name LIKE '%Miscellaneous%') AND (NOT Account.Name LIKE '%Contractor%')")
+
+VERIFIED ACCOUNT QUERY (tested against live CRM):
+SELECT COUNT(Id) cnt FROM Account WHERE (NOT Name LIKE 'Test%') AND (NOT Name LIKE 'Do not update%') AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%Contractor%')
 
 SOQL GUIDANCE:
 - Always include a WHERE clause and LIMIT to keep queries efficient
-- For "how much/total" style questions, use COUNT(Id) and SUM(Amount) in one query
+- For "how much/total" style questions, use COUNT(Id) and SUM(Net_Amount__c) in one query
 - For fuzzy name matching (project/community/unit codes the user typed casually), use LIKE '%name%' not exact =
+- Default sales value = Net_Amount__c (NOT Amount); default date = Order_Date__c (NOT CloseDate)
 
 RULES:
 1. Think step-by-step — break complex questions into sub-tasks
@@ -211,7 +388,9 @@ RULES:
    - For owner/customer questions: if Property_Inventory__c has no owner data (it never does), switch to Opportunity WHERE Name LIKE '%<core code>%' AND IsWon = true, then get Account.Name
    - NEVER say "no data" or "not found" until you've tried at least 2 different search approaches
 5. ALWAYS finish with a clear, natural-language answer — NEVER return raw JSON, raw SOQL result objects, or tool output verbatim as your final answer. If you're running low on steps, compose the best answer you can from what you have rather than dumping raw data.
-6. If the question asks about something genuinely NOT in Salesforce (e.g. a company's industry/website/background — see the glossary entry on this), say so plainly in your answer and set "foundInCrm": false so the system can offer other sources. Do NOT cite Salesforce as your source when you found nothing relevant.
+6. If the question asks about something genuinely NOT in the CRM (e.g. a company's industry/website/background — see the glossary entry on this), say so plainly in your answer and set "foundInCrm": false so the system can offer other sources. Do NOT cite the CRM as your source when you found nothing relevant.
+7. NEVER use technical jargon in your answer. Do NOT mention: SOQL, queries, CRM, database, API, MCP, or any implementation details. The user doesn't know about databases — speak in plain business language. Instead of "I queried the CRM", say "Based on the data" or "Looking at the records". Instead of "The SOQL query returned", say "The data shows".
+8. If your first query returns relevant results, present them immediately — don't waste steps searching for alternative record types or interpretations.
 
 CRITICAL — NEVER HALLUCINATE DATA:
 - Reproduce ONLY the exact values returned by tools — names, counts, amounts, dates
@@ -246,7 +425,25 @@ For "finish" action:
 - NEVER say "I couldn't find" or "No owner information" when the data IS in the observations
 - Format numbers with commas: AED 1,234,567
 - "foundInCrm" MUST be true if you found real data, false if CRM genuinely has nothing
-For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).`
+For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).
+
+ALTERNATIVE: STRUCTURED QUERY BUILDER (use for complex queries):
+Instead of raw SOQL, you can pass a structured spec that the system converts to correct SOQL:
+{
+  "action": "soqlQuery",
+  "params": {
+    "spec": {
+      "object": "Opportunity",
+      "fields": ["Name", "Account.Name"],
+      "aggregations": [{ "function": "COUNT", "field": "Id", "alias": "cnt" }, { "function": "SUM", "field": "Net_Amount__c", "alias": "total" }],
+      "filters": [{ "field": "Sold_By_Nshama__c", "op": "=", "value": "NEW SALE" }, { "field": "Name", "op": "NOT LIKE", "value": "%Miscellaneous%" }],
+      "groupBy": ["Building_Name__c"],
+      "orderBy": { "field": "cnt", "direction": "DESC" },
+      "limit": 50
+    }
+  }
+}
+The builder handles correct NOT LIKE syntax automatically. Use this for queries with many filters or aggregations.`
 
   return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories }
 }
@@ -304,11 +501,9 @@ export async function answerViaMcp(
 
     for (let stepNum = 0; stepNum < MAX_STEPS; stepNum++) {
       const raw = await chatJson(systemPrompt, input)
-      let decision: Record<string, unknown>
-      try {
-        decision = typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, unknown>)
-      } catch {
-        console.warn(`[mcp-query] step ${stepNum}: failed to parse LLM response`)
+      const decision = parseLlmJson(raw)
+      if (!decision) {
+        console.warn(`[mcp-query] step ${stepNum}: failed to parse LLM response (${raw.length} chars, starts with: ${raw.slice(0, 150)})`)
         break
       }
 
@@ -336,8 +531,45 @@ export async function answerViaMcp(
 
       let observation: string
       try {
+        // Layer 3: Handle structured spec → SOQL conversion
+        if (action === 'soqlQuery' && params.spec && typeof params.spec === 'object') {
+          const specResult = buildFromJsonSpec(params.spec as Record<string, unknown>)
+          if (specResult.error) {
+            observation = `Query spec error: ${specResult.error}\n\nPlease fix the spec and try again.`
+            onStep?.({ action, detail, result: observation })
+            steps.push({ thought, action, observation })
+            input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
+            continue // Skip tool call, go to next step
+          }
+          params.q = specResult.soql
+          delete params.spec // Remove spec from params before sending to MCP
+        }
+
+        // Layer 2: Validate and auto-fix SOQL before sending to Salesforce
+        if (action === 'soqlQuery' && typeof params.q === 'string') {
+          const validation = validateSoql(params.q)
+          if (validation.wasFixed) {
+            console.warn(`[mcp-query] step ${stepNum}: auto-fixed SOQL:`, validation.fixes)
+            params.q = validation.query
+          }
+          if (!validation.valid) {
+            observation = `SOQL validation error: ${validation.error}\n\nYour query was:\n${String(params.q).slice(0, 300)}\n\nFix the syntax error and try again. Common issues:\n- NOT LIKE requires parentheses: (NOT Name LIKE '%value%')\n- Remove LIMIT from aggregate queries without GROUP BY\n- Remove duplicate WHERE/AND clauses`
+            onStep?.({ action, detail, result: observation })
+            steps.push({ thought, action, observation })
+            input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
+            continue // Skip tool call, go to next step
+          }
+        }
+
         const result = await callMcpTool(action, params)
-        observation = result.isError ? `Tool error: ${result.content}` : result.content || 'No data returned'
+
+        // Layer 4: Enhanced error feedback for MALFORMED_QUERY
+        if (result.isError && result.content.includes('MALFORMED_QUERY')) {
+          const errorContext = parseSoqlError(result.content)
+          observation = `SOQL Syntax Error: ${errorContext.message}\n\n${errorContext.suggestions.join('\n')}\n\n${errorContext.problemArea ? `Problem area: "...${errorContext.problemArea}..."` : ''}\n\nFix the syntax and try again.`
+        } else {
+          observation = result.isError ? `Tool error: ${result.content}` : result.content || 'No data returned'
+        }
       } catch (err) {
         observation = `Tool call failed: ${err instanceof Error ? err.message : String(err)}`
         console.warn(`[mcp-query] tool call failed:`, err)
@@ -360,13 +592,20 @@ export async function answerViaMcp(
       // tool output/JSON (which happened before this safety net was added).
       console.log('[mcp-query] max steps reached without finish — forcing final answer composition')
           onStep?.({ action: 'composeAnswer', detail: 'Composing final answer from gathered data...' })
-      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
+      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. IMPORTANT: Do NOT use technical jargon — no SOQL, no "query", no "CRM", no "database". Speak in plain business language like "Based on the data..." or "The records show...". Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
       try {
         const raw = await chatJson(systemPrompt, composePrompt)
-        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-        finalAnswer = String((parsed as { answer?: string }).answer || '') || null
-        if (typeof (parsed as { foundInCrm?: boolean }).foundInCrm === 'boolean') {
-          foundInCrm = (parsed as { foundInCrm: boolean }).foundInCrm
+        const parsed = parseLlmJson(raw)
+        if (parsed) {
+          finalAnswer = String(parsed.answer || '') || null
+          if (typeof parsed.foundInCrm === 'boolean') {
+            foundInCrm = parsed.foundInCrm
+          }
+        } else {
+          // Raw response couldn't be parsed — use it as plain text answer if it's long enough
+          if (raw.length > 20) {
+            finalAnswer = raw
+          }
         }
       } catch (err) {
         console.warn('[mcp-query] final answer composition failed:', err)
@@ -379,9 +618,9 @@ export async function answerViaMcp(
 
     const rawObservations = steps.map(s => s.observation).join('\n\n')
     console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms), foundInCrm=${foundInCrm}`)
-    return { context: finalAnswer, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm, rawObservations }
+    return { context: finalAnswer, citation: { documentName: 'CRM (live data)' }, foundInCrm, rawObservations }
   } catch (err) {
     console.error('[mcp-query] failed:', err)
-    return { context: `I encountered an error querying Salesforce via MCP: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'Salesforce (live CRM via MCP)' }, foundInCrm: false, rawObservations: '' }
+    return { context: `I encountered an error querying the CRM: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'CRM (live data)' }, foundInCrm: false, rawObservations: '' }
   }
 }

@@ -25,6 +25,7 @@ export interface SkillFile {
 export const INTENT_CATEGORIES = [
   'ownership',  // who owns, buyer, customer name
   'sales',      // deals, revenue, closed won
+  'opportunity', // bookings, cancellations, transfers, pipeline, order status
   'property',   // units, inventory, available
   'pricing',    // amount, value, AED, cost
   'reporting',  // breakdown, comparison, chart, table
@@ -55,6 +56,13 @@ export function classifyQueryIntent(query: string): IntentCategory[] {
   if (/\b(sale|deal|revenue|closed|won|sold|amount|total)\b/.test(q)) scores.sales += 2
   if (/\b(deal\s+count|number\s+of\s+deals)\b/.test(q)) scores.sales += 2
   if (/\bby\s+year|by\s+month|by\s+quarter/.test(q)) scores.sales += 1
+
+  // Opportunity signals (bookings, cancellations, transfers, pipeline)
+  if (/\b(booking|booked|cancel|cancelled|transfer|transferred)\b/.test(q)) scores.opportunity += 3
+  if (/\b(opportunity|opportunities)\b/.test(q)) scores.opportunity += 2
+  if (/\b(order\s+status|order\s+date|sold\s+by)\b/.test(q)) scores.opportunity += 2
+  if (/\b(milestone|handover|mortgage)\b/.test(q)) scores.opportunity += 2
+  if (/\b(net\s+amount|selling\s+price|new\s+selling)\b/.test(q)) scores.opportunity += 1
 
   // Property signals
   if (/\b(property|unit|inventory|available|vacant|building)\b/.test(q)) scores.property += 2

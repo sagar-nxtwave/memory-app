@@ -73,12 +73,12 @@ const SEED_TERMS: Omit<GlossaryTerm, 'id'>[] = [
   {
     term: 'Community / Project',
     mapsTo: 'Property_Inventory__c.Building_Community__c (for listing/counting communities) or Opportunity.Building_Name__c (for sales grouped by project)',
-    explanation: 'Property_Inventory__c.Building_Community__c is the reliable, 100%-populated field for "list all communities" questions. For sales/revenue GROUP BY questions, use Opportunity.Building_Name__c instead (Building_Community__c cannot be grouped on Opportunity due to a Salesforce platform restriction on that object).',
+    explanation: 'Property_Inventory__c.Building_Community__c is the reliable, 100%-populated field for "list all communities" questions. For sales/revenue GROUP BY questions, use Opportunity.Building_Name__c instead (Building_Community__c cannot be grouped on Opportunity due to a platform restriction on that object).',
   },
   {
     term: 'Company background / "who are they" / external info',
-    mapsTo: 'NOT in Salesforce — this requires web search',
-    explanation: 'Questions asking what a company DOES, its industry, website, or general business background (as opposed to their deals/transactions IN our CRM) are NOT answerable from Salesforce data — Account records only store transactional/contact fields, not company profile information. Say so plainly and suggest the user ask with web search enabled, rather than implying the data might exist somewhere else in the CRM.',
+    mapsTo: 'NOT in CRM — this requires web search',
+    explanation: 'Questions asking what a company DOES, its industry, website, or general business background (as opposed to their deals/transactions IN our CRM) are NOT answerable from CRM data — Account records only store transactional/contact fields, not company profile information. Say so plainly and suggest the user ask with web search enabled, rather than implying the data might exist somewhere else.',
   },
 ]
 
@@ -160,7 +160,7 @@ export async function getBusinessGlossaryText(objectFilter?: string[]): Promise<
 
   const parts: string[] = []
   if (termSections.length > 0) {
-    parts.push(`BUSINESS TERMINOLOGY (how casual business terms map to Salesforce schema):\n${termSections.join('\n')}`)
+    parts.push(`BUSINESS TERMINOLOGY (how casual business terms map to data fields):\n${termSections.join('\n')}`)
   }
   if (objectSections.length > 0) {
     parts.push(`FIELD-LEVEL BUSINESS DEFINITIONS (from client's own data dictionary):\n${objectSections.join('\n\n')}`)

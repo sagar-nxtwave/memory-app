@@ -114,6 +114,22 @@ export interface McpToolCallResult {
 
 /** Calls a specific MCP tool by name with the given arguments. */
 export async function callMcpTool(toolName: string, args: Record<string, unknown>): Promise<McpToolCallResult> {
+  try {
+    return await callMcpToolInternal(toolName, args)
+  } catch (err) {
+    // If the error is a session expiry, re-initialize and retry once
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('Session Key missing') || msg.includes('session')) {
+      console.warn('[mcp] session expired, re-initializing and retrying...')
+      cachedSessionId = null
+      cachedTools = null
+      return await callMcpToolInternal(toolName, args)
+    }
+    throw err
+  }
+}
+
+async function callMcpToolInternal(toolName: string, args: Record<string, unknown>): Promise<McpToolCallResult> {
   await ensureSession()
   const { result } = await mcpRequest({
     jsonrpc: '2.0',

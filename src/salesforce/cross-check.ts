@@ -50,7 +50,7 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
     case 'Lead':
       return 'SELECT COUNT(Id) cnt FROM Lead'
     case 'Account':
-      return "SELECT COUNT(Id) cnt FROM Account WHERE Name NOT LIKE 'Test%' AND Name NOT LIKE 'Do not update%' AND Name NOT LIKE '%Miscellaneous%' AND Name NOT LIKE '%Contractor%'"
+      return "SELECT COUNT(Id) cnt FROM Account WHERE (NOT Name LIKE 'Test%') AND (NOT Name LIKE 'Do not update%') AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%Contractor%')"
     case 'Property_Inventory__c':
       return 'SELECT COUNT(Id) cnt FROM Property_Inventory__c'
     case 'Task':

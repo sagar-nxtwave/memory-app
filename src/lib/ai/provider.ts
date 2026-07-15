@@ -344,6 +344,10 @@ export const EXTRACT_MODEL = process.env.OPENROUTER_EXTRACT_MODEL ?? CHAT_MODEL
 /**
  * JSON-mode completion via OpenRouter (paid key) — used for structured extraction where
  * the response must be parseable JSON. Throws on failure or unparseable output.
+ *
+ * Validates the response is actually parseable JSON before returning. If the model
+ * returns invalid JSON (truncated, wrapped in extra text, etc.), retries the request.
+ * Also checks finish_reason for truncation ('length').
  */
 export async function chatJson(systemPrompt: string, userMessage: string): Promise<string> {
   const maxRetries = 2
@@ -357,7 +361,7 @@ export async function chatJson(systemPrompt: string, userMessage: string): Promi
         headers: openRouterHeaders(),
         body: JSON.stringify({
           model: EXTRACT_MODEL,
-          max_tokens: 2048,
+          max_tokens: 4096,
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: systemPrompt },
@@ -382,11 +386,39 @@ export async function chatJson(systemPrompt: string, userMessage: string): Promi
       
       const data = await res.json()
       const raw = data.choices?.[0]?.message?.content ?? ''
-      // response_format: json_object is a best-effort instruction, not an enforced guarantee
-      // on every model OpenRouter proxies — some wrap the JSON in a ```json ... ``` fence
-      // anyway (seen intermittently, not on every call for the same model/input). Strip it.
+      const finishReason = data.choices?.[0]?.finish_reason
+
+      // Check for truncation — model ran out of tokens mid-JSON
+      if (finishReason === 'length') {
+        console.warn(`[provider] chatJson: response truncated (finish_reason=length, ${raw.length} chars)`)
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000
+          await new Promise(r => setTimeout(r, delay))
+          continue
+        }
+      }
+
+      // Strip markdown fences — some models wrap JSON in ```json ... ``` despite response_format
       const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
-      return fenceMatch ? fenceMatch[1] : raw
+      const cleaned = fenceMatch ? fenceMatch[1].trim() : raw.trim()
+
+      // Validate the cleaned response is actually parseable JSON
+      if (cleaned) {
+        try {
+          JSON.parse(cleaned)
+          return cleaned
+        } catch {
+          console.warn(`[provider] chatJson: response is not valid JSON (${cleaned.length} chars, starts with: ${cleaned.slice(0, 100)})`)
+          if (attempt < maxRetries) {
+            const delay = Math.pow(2, attempt) * 1000
+            await new Promise(r => setTimeout(r, delay))
+            continue
+          }
+        }
+      }
+
+      // All retries exhausted — return whatever we have and let caller handle
+      return cleaned
     } catch (err) {
       if (attempt === maxRetries) throw err
       const delay = Math.pow(2, attempt) * 1000
@@ -443,7 +475,7 @@ export async function chat(
         headers: openRouterHeaders(),
         body: JSON.stringify({
           model: CHAT_MODEL,
-          max_tokens: 4096,
+          max_tokens: 32768,
           messages: [
             { role: 'system', content: systemPrompt },
             ...history,
@@ -488,7 +520,7 @@ export async function* chatStream(
     headers: openRouterHeaders(),
     body: JSON.stringify({
       model: CHAT_MODEL,
-      max_tokens: 4096,
+      max_tokens: 32768,
       stream: true,
       messages: [
         { role: 'system', content: systemPrompt },

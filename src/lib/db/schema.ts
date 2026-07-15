@@ -229,6 +229,8 @@ export const messages = pgTable('messages', {
   citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string }[]>(),
   thinkingSteps: jsonb('thinking_steps').$type<string[]>(),
+  thinkingStepActions: jsonb('thinking_step_actions').$type<string[]>(),
+  thinkingStepResults: jsonb('thinking_step_results').$type<string[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 
@@ -252,6 +254,8 @@ export const globalMessages = pgTable('global_messages', {
   citations: jsonb('citations').$type<{ documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }[]>(),
   documentImages: jsonb('document_images').$type<{ url: string; alt: string; documentName: string; spaceName?: string }[]>(),
   thinkingSteps: jsonb('thinking_steps').$type<string[]>(),
+  thinkingStepActions: jsonb('thinking_step_actions').$type<string[]>(),
+  thinkingStepResults: jsonb('thinking_step_results').$type<string[]>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 

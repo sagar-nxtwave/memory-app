@@ -6,7 +6,7 @@
 
 import { chatJson } from '@/lib/ai/provider'
 
-const EVAL_PROMPT = `You are an answer quality evaluator for a Salesforce CRM assistant.
+const EVAL_PROMPT = `You are an answer quality evaluator for a CRM assistant.
 
 Evaluate the answer across 4 dimensions (each 0-10):
 
