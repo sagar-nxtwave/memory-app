@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
+import { formatRelativeTime } from '@/lib/utils/date'
+import { LLM_MODELS } from '@/lib/ai/provider'
 
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
@@ -37,6 +39,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
   const selectionInitialized = useRef(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [responseStyle, setResponseStyle] = useState<'short' | 'detailed'>('short')
+  const [provider, setProvider] = useState<string>(LLM_MODELS[0].id)
 
   const [mentionChips, setMentionChips] = useState<MentionChip[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -144,8 +147,8 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
 
     setMessages((p) => [
       ...p,
-      { id: tempUserId, role: 'user', content },
-      { id: sid, role: 'assistant', content: '', thinkingSteps: [] },
+      { id: tempUserId, role: 'user', content, createdAt: new Date().toISOString() },
+      { id: sid, role: 'assistant', content: '', createdAt: new Date().toISOString(), thinkingSteps: [] },
     ])
     setStreamingId(sid)
 
@@ -158,6 +161,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
           spaceIds: chips.length > 0 ? [...new Set(chips.map((c) => c.spaceId))] : Array.from(selectedIds),
           mentionedDocIds: chips.filter((c) => c.docId).map((c) => c.docId!),
           responseStyle,
+          provider,
         }),
       })
 
@@ -606,6 +610,7 @@ export function GlobalChatPanel({ onClose, autoStartMic }: { onClose?: () => voi
                 className="flex-1 min-w-0 text-base sm:text-[17px] lg:text-lg text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
               />
               <div className="shrink-0 flex items-center gap-1.5">
+                <ModelSelector value={provider} onChange={setProvider} />
                 <StyleToggle value={responseStyle} onChange={setResponseStyle} />
                 <motion.button
                   whileTap={{ scale: 0.92 }}
@@ -673,6 +678,65 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
                 }`}
               >
                 {s}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function ModelSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
+
+  const selectedModel = LLM_MODELS.find(m => m.id === value)
+  const displayName = selectedModel?.name ?? value.split('/').pop() ?? value
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+      >
+        <span className="truncate max-w-[80px]">{displayName}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="absolute bottom-full right-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
+          >
+            {LLM_MODELS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => { onChange(m.id); setOpen(false) }}
+                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                  value === m.id
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                }`}
+              >
+                <span className="block">{m.name}</span>
+                <span className="block text-[10px] opacity-60">{m.provider}</span>
               </button>
             ))}
           </motion.div>
@@ -971,6 +1035,11 @@ function GlobalChatMessage({ message, isStreaming, onTypingDone, onSuggestionCli
           </div>
         )}
       </div>
+      {message.createdAt && (
+        <div className={`text-[10px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+          {formatRelativeTime(message.createdAt)}
+        </div>
+      )}
     </div>
   )
 }

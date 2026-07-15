@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { content, spaceIds: requestedIds, responseStyle, mentionedDocIds } = await req.json()
+  const { content, spaceIds: requestedIds, responseStyle, provider, mentionedDocIds } = await req.json()
   if (!content?.trim()) return NextResponse.json({ error: 'content required' }, { status: 400 })
 
   // Always fetch from DB — never trust client-supplied IDs without verification
@@ -455,7 +455,7 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
         }
 
         let fullContent = ''
-        for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), conversationHistory)) {
+        for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), conversationHistory, provider)) {
           fullContent += chunk
           send({ type: 'delta', content: chunk })
         }

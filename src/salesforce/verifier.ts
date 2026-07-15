@@ -17,15 +17,22 @@ const VERIFICATION_PROMPT = `You are a CRM answer quality verifier. A user asked
 
 You will receive:
 1. The original user question
-2. The SOQL query that was executed
+2. The SOQL query that was executed (may be null if a pre-built tool was used)
 3. The raw data returned
 4. Today's date and current year
 
-IMPORTANT: The current date is ${todayStr()} and the current year is ${currentYear()}. Dates in ${currentYear()} are CURRENT (not future). Do NOT flag ${currentYear()} dates as "future" or "data quality issues".
+IMPORTANT RULES:
+- The current date is ${todayStr()} and the current year is ${currentYear()}.
+- If a year is in the past (before ${currentYear()}) and the SOQL covers the full year (uses CALENDAR_YEAR or full date ranges like >= YYYY-01-01 AND <= YYYY-12-31), but returns fewer rows for that year, this means the data GENUINELY DOES NOT EXIST in the CRM — do NOT penalize COMPLETENESS for this. The query was correct; the data is just absent.
+- If the SOQL uses CALENDAR_YEAR(field) IN (year1, year2) or similar full-year ranges, and one year has fewer months of data, this is expected when records don't exist — note it as informational but do not reduce COMPLETENESS below 20 points.
+- DO NOT assume that a year comparison requires all 12 months for both years. If the SOQL is correct and the CRM has no records for certain months, that is the data — not an error.
+- If today's date is in ${currentYear()} and the query asks about ${currentYear()}, partial data is expected and normal.
+- The SOQL query (if provided) shows what was actually asked for. If it uses correct filters and date ranges, the data returned is what exists — even if one period has fewer records.
 
 Evaluate on these criteria:
 - RELEVANCE: Does the data relate to what was asked? (0-30 points)
 - COMPLETENESS: Does the data fully answer the question, or is it partial? (0-30 points)
+  * IMPORTANT: If the SOQL is correct but the CRM has no records for certain periods, this is NOT a completeness issue. Only penalize if the SOQL itself is wrong (e.g., missing a year the user asked about, wrong filters).
 - ACCURACY: Does the data make logical sense? Any obvious errors? (0-20 points)
 - CLARITY: Is the data formatted clearly enough to understand? (0-20 points)
 

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, responseStyle, spaceName } = await req.json()
+  const { spaceId, responseStyle, spaceName, provider } = await req.json()
   if (!spaceId) return NextResponse.json({ error: 'spaceId required' }, { status: 400 })
 
   const allowed = await checkSpaceAccess(spaceId, session.user.id)
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
             )
             .join('\n\n---\n\n')
 
-          for await (const chunk of chatStream(`${catchMeUpPrompt(space?.name ?? 'this project', sinceLabel)}\n${styleInstruction(responseStyle)}`, context)) {
+          for await (const chunk of chatStream(`${catchMeUpPrompt(space?.name ?? 'this project', sinceLabel)}\n${styleInstruction(responseStyle)}`, context, [], provider)) {
             fullContent += chunk
             send({ type: 'delta', content: chunk })
           }

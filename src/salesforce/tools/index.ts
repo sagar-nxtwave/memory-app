@@ -1776,12 +1776,15 @@ const compareYears: ToolDefinition = {
     const year2 = (params.year2 as string) || String(currentYear() - 1)
     const metric = (params.metric as string) || 'all'
 
+    // Mandatory filters matching the MCP agent
+    const nshamaFilter = `Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%Alqudra%') AND (NOT Building_Name__c LIKE '%ALQDR%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28`
+
     try {
       const results: string[] = []
 
-      // Won deals
-      const q1 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31`
-      const q2 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31`
+      // Won deals — use Order_Date__c per business glossary, use Net_Amount__c
+      const q1 = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ${nshamaFilter} AND IsWon = true AND Order_Date__c >= ${year1}-01-01 AND Order_Date__c <= ${year1}-12-31`
+      const q2 = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ${nshamaFilter} AND IsWon = true AND Order_Date__c >= ${year2}-01-01 AND Order_Date__c <= ${year2}-12-31`
       const [r1, r2] = await Promise.all([soql(q1), soql(q2)])
 
       const c1 = r1.records[0]
@@ -1804,9 +1807,9 @@ const compareYears: ToolDefinition = {
       results.push(`  ${year2}: ${cnt2} deals | AED ${(total2 / 1_000_000).toFixed(1)}M | Avg AED ${(avg2 / 1_000_000).toFixed(2)}M`)
       results.push(`  Change: ${pctChange(cnt1, cnt2)} deals | ${pctChange(total1, total2)} revenue | ${pctChange(avg1, avg2)} avg deal`)
 
-      // Lost deals
-      const q3 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE IsClosed = true AND IsWon = false AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31`
-      const q4 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE IsClosed = true AND IsWon = false AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31`
+      // Lost deals — use Order_Date__c per business glossary
+      const q3 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE ${nshamaFilter} AND IsClosed = true AND IsWon = false AND Order_Date__c >= ${year1}-01-01 AND Order_Date__c <= ${year1}-12-31`
+      const q4 = `SELECT COUNT(Id) cnt FROM Opportunity WHERE ${nshamaFilter} AND IsClosed = true AND IsWon = false AND Order_Date__c >= ${year2}-01-01 AND Order_Date__c <= ${year2}-12-31`
       const [r3, r4] = await Promise.all([soql(q3), soql(q4)])
       const lost1 = (r3.records[0]?.cnt as number) ?? 0
       const lost2 = (r4.records[0]?.cnt as number) ?? 0
@@ -1819,9 +1822,9 @@ const compareYears: ToolDefinition = {
       results.push(`  ${year1}: ${lost1} lost deals | Win rate: ${wr1}%`)
       results.push(`  ${year2}: ${lost2} lost deals | Win rate: ${wr2}%`)
 
-      // Top building comparison
-      const qb1 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CloseDate >= ${year1}-01-01 AND CloseDate <= ${year1}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
-      const qb2 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND CloseDate >= ${year2}-01-01 AND CloseDate <= ${year2}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
+      // Top building comparison — use Order_Date__c per business glossary
+      const qb1 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE ${nshamaFilter} AND IsWon = true AND Building_Name__c != null AND Order_Date__c >= ${year1}-01-01 AND Order_Date__c <= ${year1}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
+      const qb2 = `SELECT Building_Name__c bld, COUNT(Id) cnt FROM Opportunity WHERE ${nshamaFilter} AND IsWon = true AND Building_Name__c != null AND Order_Date__c >= ${year2}-01-01 AND Order_Date__c <= ${year2}-12-31 GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 3`
       const [rb1, rb2] = await Promise.all([soql(qb1), soql(qb2)])
 
       results.push(`  Top buildings ${year1}: ${rb1.records.map((r: Record<string, unknown>) => `${r.bld} (${r.cnt})`).join(', ')}`)

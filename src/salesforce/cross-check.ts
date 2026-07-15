@@ -37,13 +37,26 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
       const isCancelled = /\b(cancel|cancelled|canceled)\b/.test(q)
       const isPipeline = /\b(pipeline|open|in progress)\b/.test(q)
 
-      let where = "Amount != 1 AND CloseDate < 2032-01-01 AND cm_Sales_Person__r.Name != 'Salesforce Admin'"
+      // Use the same mandatory filters as the MCP agent
+      let where = `Sold_By_Nshama__c = 'NEW SALE'
+        AND (NOT Name LIKE '%Miscellaneous%')
+        AND (NOT Name LIKE '%RTL%')
+        AND (NOT Name LIKE '%PK%')
+        AND (NOT Name LIKE '%Plot%')
+        AND (NOT Building_Name__c LIKE '%Al Qudra%')
+        AND (NOT Building_Name__c LIKE '%Alqudra%')
+        AND (NOT Building_Name__c LIKE '%ALQDR%')
+        AND (NOT Building_Name__c LIKE '%parking%')
+        AND Amount != 1
+        AND CloseDate != 2032-12-28`
+
       if (isWon) where += " AND IsWon = true"
       else if (isLost) where += " AND IsClosed = true AND IsWon = false"
       else if (isCancelled) where += " AND Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')"
       else if (isPipeline) where = "IsClosed = false"
 
-      return `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE ${where}`
+      // Use Net_Amount__c (not Amount) per business glossary
+      return `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ${where}`
     }
     case 'Case':
       return 'SELECT COUNT(Id) cnt FROM Case'

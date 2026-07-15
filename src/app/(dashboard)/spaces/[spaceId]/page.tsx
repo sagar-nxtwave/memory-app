@@ -7,6 +7,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
+import { formatRelativeTime } from '@/lib/utils/date'
+import { LLM_MODELS } from '@/lib/ai/provider'
 
 type MessageRole = 'user' | 'assistant'
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
@@ -112,6 +114,7 @@ export default function SpacePage() {
   const [loading, setLoading] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const [responseStyle, setResponseStyle] = useState<'short' | 'detailed'>('short')
+  const [provider, setProvider] = useState<string>(LLM_MODELS[0].id)
   const [view, setView] = useState<View>('chat')
   const [docs, setDocs] = useState<Doc[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
@@ -379,9 +382,9 @@ export default function SpacePage() {
 
     const crossSpace = !!spaceSuggestionRef.current
     if (crossSpace) {
-      await handleStream('/api/global-chat', { content, responseStyle }, tempUserId, sid)
+      await handleStream('/api/global-chat', { content, responseStyle, provider }, tempUserId, sid)
     } else {
-      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, mentionedDocIds: docIds.length > 0 ? docIds : undefined, mentionedSpaceIds: otherSpaceIds.length > 0 ? otherSpaceIds : undefined }, tempUserId, sid)
+      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, provider, mentionedDocIds: docIds.length > 0 ? docIds : undefined, mentionedSpaceIds: otherSpaceIds.length > 0 ? otherSpaceIds : undefined }, tempUserId, sid)
     }
 
     setStreamingMessageId(null)
@@ -403,7 +406,7 @@ export default function SpacePage() {
     ])
     setStreamingMessageId(sid)
 
-    await handleStream(endpoint, { spaceId, responseStyle, spaceName: space?.name }, tempUserId, sid)
+    await handleStream(endpoint, { spaceId, responseStyle, provider, spaceName: space?.name }, tempUserId, sid)
 
     setStreamingMessageId(null)
     setLoading(false)
@@ -1405,6 +1408,7 @@ export default function SpacePage() {
                   className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
                 />
                 <div className="shrink-0 flex items-center gap-1.5">
+                  <ModelSelector value={provider} onChange={setProvider} />
                   <StyleToggle value={responseStyle} onChange={setResponseStyle} />
                   <motion.button
                     whileTap={{ scale: 0.92 }}
@@ -1505,22 +1509,115 @@ export default function SpacePage() {
 // ── Sub-components ──
 
 function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChange: (v: 'short' | 'detailed') => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
+
   return (
-    <div className="shrink-0 flex items-center h-12 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 gap-0.5">
-      {(['short', 'detailed'] as const).map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onChange(s)}
-          className={`relative px-2.5 py-1.5 text-[11px] font-medium rounded-xl transition-colors capitalize ${
-            value === s
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-900 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
-          }`}
-        >
-          {s}
-        </button>
-      ))}
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white capitalize transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+      >
+        {value}
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="absolute bottom-full right-0 mb-1.5 w-28 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
+          >
+            {(['short', 'detailed'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { onChange(s); setOpen(false) }}
+                className={`w-full text-left px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                  value === s
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function ModelSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
+
+  const selectedModel = LLM_MODELS.find(m => m.id === value)
+  const displayName = selectedModel?.name ?? value.split('/').pop() ?? value
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+      >
+        <span className="truncate max-w-[80px]">{displayName}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="absolute bottom-full right-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
+          >
+            {LLM_MODELS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => { onChange(m.id); setOpen(false) }}
+                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                  value === m.id
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                }`}
+              >
+                <span className="block">{m.name}</span>
+                <span className="block text-[10px] opacity-60">{m.provider}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1833,6 +1930,9 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
             </div>
           </div>
         )}
+      </div>
+      <div className={`text-[10px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+        {message.createdAt && formatRelativeTime(message.createdAt)}
       </div>
     </div>
   )

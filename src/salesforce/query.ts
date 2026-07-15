@@ -160,7 +160,7 @@ export async function answerSalesforceQuery(
           console.log('[salesforce] MCP quick check flagged issue:', quick.issue)
           onMcpStep?.({ action: 'quickCheck', detail: `Quick check flagged: ${quick.issue}` })
         }
-        const verification = await verifyAnswer(rawQuery, null, mcpRaw, 'mcp')
+        const verification = await verifyAnswer(rawQuery, mcpResult.soqlQuery || null, mcpRaw, 'mcp')
         console.log(`[salesforce] MCP verification score: ${verification.score}/100 (${verification.confidence})`)
         if (verification.issues.length > 0) {
           console.log('[salesforce] MCP verification issues:', verification.issues)
@@ -168,7 +168,8 @@ export async function answerSalesforceQuery(
         onMcpStep?.({ action: 'verifyAnswer', detail: `Verification: ${verification.score}/100 (${verification.confidence})`, result: verification.issues.length > 0 ? verification.issues.join(' | ') : 'Passed' })
 
         // Low-confidence MCP answer — fall through to tools/RAG which may do better
-        if (verification.score < 40 && verification.recommendation !== 'return') {
+        // Only fall through if score is very low AND verifier explicitly says retry
+        if (verification.score < 30 && verification.recommendation === 'retry') {
           console.log('[salesforce] MCP verification low (score=' + verification.score + '), falling through to tools/RAG')
           onMcpStep?.({ action: 'fallthrough', detail: `Low confidence (${verification.score}/100) — falling through to Level 2/3` })
           console.log('[salesforce] MCP found nothing relevant (or errored) — falling through to Level 2 (tools) / Level 3 (RAG)')

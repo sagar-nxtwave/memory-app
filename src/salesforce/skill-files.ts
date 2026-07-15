@@ -156,6 +156,45 @@ export async function deleteSkillFile(id: string): Promise<void> {
   await db.delete(skillFiles).where(eq(skillFiles.id, id))
 }
 
+/**
+ * Extract individual rules/patterns from a skill file's content.
+ * Handles mixed formats: markdown bullets, numbered lists, paragraphs, headers.
+ * Returns an array of individual rule strings for matching against queries.
+ */
+export function extractSkillRules(content: string): string[] {
+  const lines = content.split('\n')
+  const rules: string[] = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    // Skip empty lines, markdown headers, section separators, horizontal rules
+    if (!trimmed) continue
+    if (/^#{1,6}\s/.test(trimmed)) continue  // ### Header
+    if (/^[-=*]{3,}$/.test(trimmed)) continue  // --- or *** separators
+    if (/^>\s*$/.test(trimmed)) continue  // Empty blockquote
+
+    // Bullet points: - item or * item
+    const bulletMatch = trimmed.match(/^[-*]\s+(.+)/)
+    if (bulletMatch) {
+      rules.push(bulletMatch[1].trim())
+      continue
+    }
+
+    // Numbered lists: 1. item or 1) item
+    const numMatch = trimmed.match(/^\d+[.)]\s+(.+)/)
+    if (numMatch) {
+      rules.push(numMatch[1].trim())
+      continue
+    }
+
+    // Regular text line (paragraph content)
+    rules.push(trimmed)
+  }
+
+  return rules
+}
+
 // ─── SKILL FILES ──────────────────────────────────────────────────────────────
 // No built-in seed defaults. All skills are user-managed via the Settings UI.
 // The DB is the single source of truth — no auto-update, no overwriting.
@@ -181,10 +220,10 @@ async function ensureSeeded(): Promise<void> {
  * Uses conditional loading: only includes files matching the query intent.
  * Returns both the text and the list of loaded file names (for streaming to UI).
  */
-export async function getSkillFilesPromptText(query?: string): Promise<{ text: string; loadedFiles: string[] }> {
+export async function getSkillFilesPromptText(query?: string): Promise<{ text: string; loadedFiles: string[]; fileRules: Record<string, string[]> }> {
   await ensureSeeded()
   const files = query ? await getMatchingSkillFiles(query) : await getActiveSkillFiles()
-  if (files.length === 0) return { text: '', loadedFiles: [] }
+  if (files.length === 0) return { text: '', loadedFiles: [], fileRules: {} }
 
   const grouped: Record<string, typeof files> = {}
   for (const f of files) {
@@ -200,8 +239,14 @@ export async function getSkillFilesPromptText(query?: string): Promise<{ text: s
     }).join('\n\n')
   })
 
+  const fileRules: Record<string, string[]> = {}
+  for (const f of files) {
+    fileRules[f.name] = extractSkillRules(f.content)
+  }
+
   return {
     text: `\nUSER-DEFINED SKILL FILES (follow these instructions when answering questions):\n\n${sections.join('\n\n---\n\n')}`,
     loadedFiles: files.map(f => f.name),
+    fileRules,
   }
 }

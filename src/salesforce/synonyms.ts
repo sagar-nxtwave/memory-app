@@ -40,6 +40,8 @@ export const SYNONYMS: Record<string, SynonymEntry> = {
   'how did they find us': { field: 'cm_Lead_Channel__c', object: 'Opportunity', description: 'lead channel' },
   'source': { field: 'cm_Lead_Channel__c', object: 'Opportunity', description: 'lead channel' },
   'direct sale': { field: 'cm_Lead_Channel__c', value: 'Direct Sale', object: 'Opportunity', description: 'direct sale channel' },
+  'indirect sale': { field: 'cm_Lead_Channel__c', value: 'NOT Direct Sale', object: 'Opportunity', description: 'indirect sale channel (all except Direct Sale)' },
+  'indirect': { field: 'cm_Lead_Channel__c', value: 'NOT Direct Sale', object: 'Opportunity', description: 'indirect sale channel (all except Direct Sale)' },
   'agent sale': { field: 'cm_Lead_Channel__c', value: 'Agent Sale', object: 'Opportunity', description: 'agent sale channel' },
 
   // Bedroom

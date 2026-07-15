@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName, responseStyle, mentionedDocIds: bodyMentionedDocIds, mentionedSpaceIds } = await req.json()
+  const { spaceId, content, spaceName, responseStyle, provider, mentionedDocIds: bodyMentionedDocIds, mentionedSpaceIds } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -551,7 +551,7 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
       }
 
       let fullContent = ''
-      for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history)) {
+      for await (const chunk of chatStream(systemPrompt, sanitizeForPrompt(content), history, provider)) {
         fullContent += chunk
         sseSend({ type: 'delta', content: chunk })
       }

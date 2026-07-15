@@ -18,6 +18,8 @@ import { buildFromJsonSpec } from './soql-query-builder'
 import type { SalesforceResult, ChatTurn } from './query'
 
 const MAX_STEPS = 12
+
+const STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'have', 'been', 'were', 'they', 'their', 'what', 'when', 'which', 'will', 'about', 'would', 'could', 'should', 'there', 'these', 'those', 'into', 'than', 'them', 'then', 'also', 'your', 'some', 'each', 'most', 'does', 'only', 'just', 'like', 'over', 'such', 'after', 'before', 'between', 'through', 'during', 'where', 'show', 'list', 'give', 'find', 'get'])
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 
@@ -333,7 +335,7 @@ FUZZY SEARCH (CRITICAL — when user-provided unit code doesn't match exactly):
   - NEVER give up after one failed SOQL — try at least 2 search strategies before saying "not found"
 `.trim()
 
-async function buildSystemPrompt(query?: string): Promise<{ prompt: string; loadedSkills: string[]; intentCategories: string[] }> {
+async function buildSystemPrompt(query?: string): Promise<{ prompt: string; loadedSkills: string[]; intentCategories: string[]; fileRules: Record<string, string[]> }> {
   const toolCatalog = await getMcpToolCatalogText()
   const glossary = await getBusinessGlossaryText(['Account', 'Opportunity', 'Property_Inventory__c', 'Case'])
 
@@ -427,6 +429,12 @@ For "finish" action:
 - "foundInCrm" MUST be true if you found real data, false if CRM genuinely has nothing
 For tool actions, "params" must match the tool's inputSchema (e.g. soqlQuery needs {"q": "SELECT ..."}).
 
+CONVERSATIONAL CORRECTIONS (when the user corrects or refines a previous answer):
+- If the user says "but these are X", "that's wrong", "I meant Y", "no, not Z" — they are CORRECTING your previous interpretation
+- Use conversation history to understand what the user is correcting
+- Modify your SOQL filters to match the correction, not the original interpretation
+- Example: if you showed all sales but user says "but these are indirect sales", add a filter for indirect channel (NOT cm_Lead_Channel__c = 'Direct Sale')
+
 ALTERNATIVE: STRUCTURED QUERY BUILDER (use for complex queries):
 Instead of raw SOQL, you can pass a structured spec that the system converts to correct SOQL:
 {
@@ -445,7 +453,7 @@ Instead of raw SOQL, you can pass a structured spec that the system converts to 
 }
 The builder handles correct NOT LIKE syntax automatically. Use this for queries with many filters or aggregations.`
 
-  return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories }
+  return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories, fileRules: skillResult.fileRules }
 }
 
 export interface McpStepInfo {
@@ -459,6 +467,9 @@ export interface McpAnswerResult extends SalesforceResult {
   /** Raw SOQL/SOSL observations from MCP tool calls — used by verifier to check
    *  whether the composed prose actually matches the data retrieved. */
   rawObservations: string
+  /** The SOQL query that was executed — passed to verifier so it can reason
+   *  about whether the query was correct vs. data genuinely missing. */
+  soqlQuery?: string
 }
 
 export async function answerViaMcp(
@@ -470,20 +481,33 @@ export async function answerViaMcp(
 
   // Stream: classify intent
   const intents = classifyQueryIntent(query)
-  if (intents.length > 0) {
-    onStep?.({ action: 'classifyIntent', detail: `Detected intent: ${intents.join(', ')}` })
-  }
+  onStep?.({ action: 'classifyIntent', detail: intents.length > 0 ? `Detected intent: ${intents.join(', ')}` : 'No specific intent detected' })
 
   try {
     // Build system prompt with conditional skill loading
-    const { prompt: systemPrompt, loadedSkills, intentCategories } = await buildSystemPrompt(query)
+    const { prompt: systemPrompt, loadedSkills, intentCategories, fileRules } = await buildSystemPrompt(query)
 
-    // Stream: loaded skills
-    if (loadedSkills.length > 0) {
-      onStep?.({ action: 'loadSkills', detail: `Loaded ${loadedSkills.length} skill file(s): ${loadedSkills.join(', ')}` })
-    }
+    // Stream: loaded skills — always show, even when none matched
+    onStep?.({ action: 'loadSkills', detail: loadedSkills.length > 0 ? `Loaded ${loadedSkills.length} skill file(s): ${loadedSkills.join(', ')}` : 'No matching skill files loaded' })
     if (intentCategories.length > 0) {
       onStep?.({ action: 'classifyIntent', detail: `Matched categories: ${intentCategories.join(', ')}` })
+    }
+
+    // Skill rule matching — show which specific rules apply to the query
+    const qLower = query.toLowerCase()
+    for (const [fileName, rules] of Object.entries(fileRules)) {
+      for (const rule of rules) {
+        // Extract keywords from the rule (skip short/common words)
+        const ruleLower = rule.toLowerCase()
+        const ruleWords = ruleLower.split(/\s+/).filter(w => w.length > 3 && !STOP_WORDS.has(w))
+        const matchCount = ruleWords.filter(w => qLower.includes(w)).length
+        const matchRatio = ruleWords.length > 0 ? matchCount / ruleWords.length : 0
+
+        // Match if >30% of meaningful rule words appear in the query, or query contains a key term
+        if (matchRatio >= 0.3 || matchCount >= 2) {
+          onStep?.({ action: 'skillApplied', detail: `Skill applied: "${rule.slice(0, 80)}" (${fileName})` })
+        }
+      }
     }
 
     let context = ''
@@ -494,7 +518,7 @@ export async function answerViaMcp(
     }
     const fullQuestion = context ? `${context}User: ${query}` : query
 
-    const steps: { thought: string; action: string; observation: string }[] = []
+    const steps: { thought: string; action: string; observation: string; detail?: string }[] = []
     let input = `Question: ${fullQuestion}\n\nReason about the first step to answer this question.`
     let finalAnswer: string | null = null
     let foundInCrm = true // default optimistic — only set false when the LLM explicitly says so
@@ -582,7 +606,7 @@ export async function answerViaMcp(
       // Send the step with full result so the UI can show the data
       onStep?.({ action, detail, result: flatObservation })
 
-      steps.push({ thought, action, observation: flatObservation })
+      steps.push({ thought, action, observation: flatObservation, detail })
       input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
     }
 
@@ -617,8 +641,12 @@ export async function answerViaMcp(
     }
 
     const rawObservations = steps.map(s => s.observation).join('\n\n')
+    // Extract the SOQL query that was executed — the detail field contains the SOQL
+    // for soqlQuery actions, or the params JSON for other tool calls
+    const soqlStep = steps.find(s => s.action === 'soqlQuery' && s.detail)
+    const soqlQuery = soqlStep?.detail || undefined
     console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms), foundInCrm=${foundInCrm}`)
-    return { context: finalAnswer, citation: { documentName: 'CRM (live data)' }, foundInCrm, rawObservations }
+    return { context: finalAnswer, citation: { documentName: 'CRM (live data)' }, foundInCrm, rawObservations, soqlQuery }
   } catch (err) {
     console.error('[mcp-query] failed:', err)
     return { context: `I encountered an error querying the CRM: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'CRM (live data)' }, foundInCrm: false, rawObservations: '' }
