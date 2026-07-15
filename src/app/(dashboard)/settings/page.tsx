@@ -176,6 +176,15 @@ export default function SettingsPage() {
     } catch { setSkillError('Failed to toggle') }
   }
 
+  const handleSkillDeleteAll = async () => {
+    if (!confirm('Delete ALL skill files? This cannot be undone.')) return
+    try {
+      const res = await fetch('/api/settings/skill-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'deleteAll' }) })
+      const data = await res.json()
+      setSkillFiles(data.files || [])
+    } catch { setSkillError('Failed to delete all') }
+  }
+
   const startSkillEdit = (f: SkillFileItem) => {
     setSkillEditing(f)
     setSkillForm({ name: f.name, category: f.category, triggerWords: f.triggerWords || '', content: f.content, active: f.active })
@@ -372,6 +381,13 @@ export default function SettingsPage() {
               className="px-4 py-2 rounded-xl bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A] font-sf text-[13px] font-medium shrink-0">
               + Add
             </motion.button>
+            {skillFiles.length > 0 && (
+              <motion.button whileTap={{ scale: 0.95 }}
+                onClick={handleSkillDeleteAll}
+                className="px-4 py-2 rounded-xl bg-red-500 text-white font-sf text-[13px] font-medium shrink-0 ml-2">
+                Delete All
+              </motion.button>
+            )}
           </div>
 
           <AnimatePresence>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth/config'
-import { getSkillFiles, addSkillFile, updateSkillFile, deleteSkillFile } from '@/salesforce/skill-files'
+import { getSkillFiles, addSkillFile, updateSkillFile, deleteSkillFile, deleteAllSkillFiles } from '@/salesforce/skill-files'
 
 // Skill Files settings API — lets the client view/edit free-form instruction documents
 // that get injected into the MCP system prompt. These contain detailed business rules,
@@ -51,6 +51,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'id is required' }, { status: 400 })
       }
       await deleteSkillFile(file.id)
+      const files = await getSkillFiles()
+      return NextResponse.json({ success: true, files })
+    }
+
+    if (action === 'deleteAll') {
+      await deleteAllSkillFiles()
       const files = await getSkillFiles()
       return NextResponse.json({ success: true, files })
     }
