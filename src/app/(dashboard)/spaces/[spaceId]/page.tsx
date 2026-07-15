@@ -158,6 +158,7 @@ export default function SpacePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollingRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
 
   // Voice input (browser-native speech-to-text) — appends the transcript to the input box.
@@ -301,12 +302,13 @@ export default function SpacePage() {
   }
 
   // Shared SSE streaming handler — used by chat, Brief Me, and Catch Me Up
-  async function handleStream(endpoint: string, body: object, tempUserId: string, sid: string) {
+  async function handleStream(endpoint: string, body: object, tempUserId: string, sid: string, signal?: AbortSignal) {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
       })
 
       if (!res.ok || !res.body) throw new Error('Stream failed')
@@ -351,7 +353,8 @@ export default function SpacePage() {
           } catch {}
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       setMessages((p) =>
         p.map((m) => (m.id === sid ? { ...m, content: 'Something went wrong. Please try again.' } : m))
       )
@@ -372,6 +375,8 @@ export default function SpacePage() {
 
     const tempUserId = `u-${Date.now()}`
     const sid = `s-${Date.now()}`
+    const controller = new AbortController()
+    abortRef.current = controller
 
     setMessages((p) => [
       ...p,
@@ -382,11 +387,12 @@ export default function SpacePage() {
 
     const crossSpace = !!spaceSuggestionRef.current
     if (crossSpace) {
-      await handleStream('/api/global-chat', { content, responseStyle, provider }, tempUserId, sid)
+      await handleStream('/api/global-chat', { content, responseStyle, provider }, tempUserId, sid, controller.signal)
     } else {
-      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, provider, mentionedDocIds: docIds.length > 0 ? docIds : undefined, mentionedSpaceIds: otherSpaceIds.length > 0 ? otherSpaceIds : undefined }, tempUserId, sid)
+      await handleStream('/api/chat', { spaceId, content, spaceName: space?.name, responseStyle, provider, mentionedDocIds: docIds.length > 0 ? docIds : undefined, mentionedSpaceIds: otherSpaceIds.length > 0 ? otherSpaceIds : undefined }, tempUserId, sid, controller.signal)
     }
 
+    abortRef.current = null
     setStreamingMessageId(null)
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -1337,8 +1343,9 @@ export default function SpacePage() {
 
               <form
                 onSubmit={(e) => { e.preventDefault(); sendMessage(input) }}
-                className="flex items-center gap-2 w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
+                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
               >
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery('') }}
@@ -1404,22 +1411,34 @@ export default function SpacePage() {
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
                   }}
                   placeholder={(readyDocs.length > 0 || otherSpaces.length > 0) ? 'Ask anything… or @ a doc' : 'Ask anything…'}
-                  disabled={loading}
-                  className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 disabled:opacity-50 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
+                  className="flex-1 min-w-0 text-[15px] sm:text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
                 />
                 <div className="shrink-0 flex items-center gap-1.5">
                   <ModelSelector value={provider} onChange={setProvider} />
                   <StyleToggle value={responseStyle} onChange={setResponseStyle} />
-                  <motion.button
-                    whileTap={{ scale: 0.92 }}
-                    type="submit" disabled={loading || !input.trim()}
-                    className="h-8 w-8 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                    </svg>
-                    <span className="hidden sm:inline text-xs font-medium">Send</span>
-                  </motion.button>
+                  {streamingMessageId ? (
+                    <motion.button
+                      whileTap={{ scale: 0.92 }}
+                      type="button"
+                      onClick={() => { abortRef.current?.abort(); setStreamingMessageId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
+                      className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
+                      title="Stop generating"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileTap={{ scale: 0.92 }}
+                      type="submit" disabled={loading || !input.trim()}
+                      className="h-8 w-8 sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                      </svg>
+                      <span className="hidden sm:inline text-xs font-medium">Send</span>
+                    </motion.button>
+                  )}
+                </div>
                 </div>
               </form>
             </div>
@@ -1720,7 +1739,7 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
   }, [message.id, message.isTyping]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
         isUser
           ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
@@ -1763,9 +1782,9 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                       let iconColor = 'text-gray-300 dark:text-gray-600'
                       let bgColor = ''
                       let badge = null
-                      if (['classifyIntent', 'loadSkills', 'understandQuery', 'resolveSynonyms'].includes(action)) {
+                      if (['classifyIntent', 'loadSkills', 'understandQuery', 'resolveSynonyms', 'skillApplied'].includes(action)) {
                         iconColor = 'text-blue-400 dark:text-blue-500'
-                      } else if (['soqlQuery', 'find', 'executeTool', 'toolResult', 'mcpStart'].includes(action)) {
+                      } else if (['soqlQuery', 'find', 'executeTool', 'toolResult', 'mcpStart', 'resolveFollowUp'].includes(action)) {
                         iconColor = 'text-gray-400 dark:text-gray-500'
                       } else if (action === 'verifyAnswer' || action === 'quickCheck') {
                         iconColor = 'text-emerald-400 dark:text-emerald-500'
