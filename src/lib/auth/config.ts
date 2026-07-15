@@ -39,6 +39,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    redirect({ url, baseUrl }) {
+      if (url.startsWith('/')) return `${baseUrl}${url}`
+      try {
+        const parsed = new URL(url)
+        if (parsed.origin === baseUrl) return url
+      } catch {}
+      return baseUrl
+    },
     jwt({ token, user }) {
       if (user) token.id = user.id
       return token
