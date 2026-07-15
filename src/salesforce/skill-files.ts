@@ -165,14 +165,7 @@ export async function deleteAllSkillFiles(): Promise<void> {
 }
 
 async function ensureSeeded(): Promise<void> {
-  if (seeded) return
   seeded = true
-  // Delete all existing skills on startup to ensure clean slate
-  const existing = await db.select().from(skillFiles)
-  if (existing.length > 0) {
-    await db.delete(skillFiles)
-    console.log(`[skill-files] Cleared ${existing.length} stale skills from DB on startup`)
-  }
 }
 
 /**
