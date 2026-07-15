@@ -11,6 +11,12 @@ import { soql } from './client'
 const COUNT_PATTERN = /\b(\d[\d,]*)\s*(?:deals?|opportunit\w*|cases?|accounts?|leads?|records?|units?|properties?|communities?|buildings?|customers?|bookings?|cancellations?|transfers?)\b/gi
 const AMOUNT_PATTERN = /(?:AED|USD|\$)\s*([\d,]+(?:\.\d+)?)\s*(?:million|billion|M|B)?/gi
 
+/** Extract a 4-digit year from the question (e.g. "sales of 2025" → 2025). */
+function extractYear(question: string): number | null {
+  const m = question.match(/\b(20\d{2})\b/)
+  return m ? parseInt(m[1], 10) : null
+}
+
 interface CrossCheckResult {
   verified: boolean
   discrepancies: string[]
@@ -54,6 +60,13 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
       else if (isLost) where += " AND IsClosed = true AND IsWon = false"
       else if (isCancelled) where += " AND Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED')"
       else if (isPipeline) where = "IsClosed = false"
+
+      // Add year filter if the question specifies a year — prevents cross-check from
+      // returning all-time totals and flagging false discrepancies
+      const year = extractYear(question)
+      if (year) {
+        where += ` AND Order_Date__c >= ${year}-01-01 AND Order_Date__c <= ${year}-12-31`
+      }
 
       // Use Net_Amount__c (not Amount) per business glossary
       return `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ${where}`
