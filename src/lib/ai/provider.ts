@@ -178,16 +178,8 @@ export async function rerankWithScores<T extends { content: string }>(
 export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-sonnet-4-6'
 
 // ── Available models for user selection ─────────────────────────────────────
-export const LLM_MODELS = [
-  { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4', provider: 'Anthropic' },
-  { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4', provider: 'Anthropic' },
-  { id: 'mistralai/mistral-large', name: 'Mistral Large', provider: 'Mistral' },
-  { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', provider: 'Google' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI' },
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
-] as const
-
-export type LlmModelId = (typeof LLM_MODELS)[number]['id']
+// Re-exported from models.ts to avoid pulling server-side deps into client bundles
+export { LLM_MODELS, type LlmModelId } from './models'
 
 // ── PDF/OCR parsing via OpenRouter's file-parser plugin ─────────────────────
 // No direct Mistral API key used anywhere in this file — OpenRouter's "mistral-ocr" engine

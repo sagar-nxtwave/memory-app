@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 import { formatRelativeTime } from '@/lib/utils/date'
-import { LLM_MODELS } from '@/lib/ai/provider'
+import { LLM_MODELS } from '@/lib/ai/models'
 
 interface Citation { documentId?: string; documentName: string; spaceName?: string; url?: string; sourceType?: 'internal' | 'web'; citationId?: string }
 interface DocumentImage { url: string; alt: string; documentName: string; spaceName?: string }
