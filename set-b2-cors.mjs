@@ -20,7 +20,7 @@ await client.send(new PutBucketCorsCommand({
     CORSRules: [
       {
         AllowedOrigins: [
-          'https://sagar-memory-app.vercel.app',
+          'https://nshama-memory-app.vercel.app',
           'http://localhost:3000',
         ],
         AllowedMethods: ['PUT', 'GET', 'HEAD', 'DELETE'],
