@@ -43,6 +43,97 @@ export function hasNumericColumns(rows: Record<string, unknown>[]): boolean {
   return false
 }
 
+// ── Aggregate result detection & pre-computed totals ──────────────────────
+// GROUP BY queries return multiple rows with count/sum columns. LLMs are unreliable
+// at summing these, so we compute totals server-side and inject them into the
+// observation before the LLM ever sees the data.
+
+/**
+ * Detect if rows are from a GROUP BY aggregate query — multiple rows with numeric
+ * count/sum columns (e.g. cnt, total, Amount, SUM). Returns true when there are
+ * 2+ rows AND at least one numeric column that looks like an aggregation.
+ */
+export function isAggregateResult(rows: Record<string, unknown>[]): boolean {
+  if (rows.length < 2) return false
+  const sample = rows[0]
+  for (const key of Object.keys(sample)) {
+    const val = sample[key]
+    if (typeof val !== 'number') continue
+    const k = key.toLowerCase()
+    if (k === 'cnt' || k.includes('cnt') || k.includes('count') || k === 'total' || k.includes('sum') || k.includes('amount') || k.includes('revenue')) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Compute grand totals for all numeric columns in aggregate rows.
+ * Returns a string like "Grand Total: 1,790 units | AED 2,063,921,520"
+ * that can be appended to the observation.
+ */
+export function computeAggregateTotals(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return ''
+
+  const flat = rows.map(r => flattenRow(r))
+  const columns = Object.keys(flat[0]).filter(c => c !== 'Id' && c !== 'id')
+
+  const totals: string[] = []
+  for (const col of columns) {
+    const allNumbers = flat.every(r => typeof r[col] === 'number')
+    if (!allNumbers) continue
+    const sum = flat.reduce((acc, r) => acc + ((r[col] as number) || 0), 0)
+    const formatted = formatValue(sum, col)
+    totals.push(`${displayName(col)}: ${formatted}`)
+  }
+
+  return totals.length > 0 ? `[PRE-COMPUTED TOTALS]\nGrand Total: ${totals.join(' | ')}` : ''
+}
+
+/**
+ * Compute subtotals grouped by a key column (e.g. "year" for year-wise breakdowns).
+ * Returns lines like "2023 Total: 1,790 units | AED 2,063,921,520"
+ * and a grand total line.
+ */
+export function computeGroupedTotals(rows: Record<string, unknown>[], groupByKey: string): string {
+  if (rows.length === 0) return ''
+
+  const flat = rows.map(r => flattenRow(r))
+  if (!flat[0][groupByKey]) return computeAggregateTotals(rows)
+
+  // Group rows by the key
+  const groups = new Map<string, Record<string, unknown>[]>()
+  for (const row of flat) {
+    const key = String(row[groupByKey])
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(row)
+  }
+
+  const lines: string[] = []
+  const numericCols = Object.keys(flat[0]).filter(c =>
+    c !== 'Id' && c !== 'id' && c !== groupByKey &&
+    flat.every(r => typeof r[c] === 'number')
+  )
+
+  // Per-group subtotals
+  for (const [groupKey, groupRows] of groups) {
+    const parts = numericCols.map(col => {
+      const sum = groupRows.reduce((acc, r) => acc + ((r[col] as number) || 0), 0)
+      return `${displayName(col)}: ${formatValue(sum, col)}`
+    })
+    lines.push(`${groupKey}: ${parts.join(' | ')}`)
+  }
+
+  // Grand total
+  const grandParts = numericCols.map(col => {
+    const sum = flat.reduce((acc, r) => acc + ((r[col] as number) || 0), 0)
+    return `${displayName(col)}: ${formatValue(sum, col)}`
+  })
+  lines.push(`Grand Total: ${grandParts.join(' | ')}`)
+
+  return `[PRE-COMPUTED TOTALS]\n${lines.join('\n')}`
+}
+
 /**
  * Flatten a row for display — extract values from nested objects.
  * e.g. { Account: { Name: "Sagar" }, Name: "OPP-001" } → { "Account.Name": "Sagar", "Name": "OPP-001" }
@@ -134,6 +225,21 @@ export function buildMarkdownTable(rows: Record<string, unknown>[]): string {
   const dataRows = flat.map(row =>
     `| ${displayCols.map(c => formatValue(row[c], c)).join(' | ')} |`
   )
+
+  // Append a totals row for aggregate results (GROUP BY queries)
+  if (isAggregateResult(rows)) {
+    const totalCells = displayCols.map(c => {
+      const allNumeric = flat.every(r => typeof r[c] === 'number')
+      if (allNumeric) {
+        const sum = flat.reduce((acc, r) => acc + ((r[c] as number) || 0), 0)
+        return formatValue(sum, c)
+      }
+      return 'Total'
+    })
+    const totalsRow = `| ${totalCells.join(' | ')} |`
+    const totalsSeparator = `| ${displayCols.map(() => '---').join(' | ')} |`
+    return [header, separator, ...dataRows, totalsSeparator, totalsRow].join('\n')
+  }
 
   return [header, separator, ...dataRows].join('\n')
 }

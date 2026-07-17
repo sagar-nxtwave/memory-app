@@ -16,6 +16,7 @@ import { buildMetadataGraph, findPaths, type RelationshipField } from './metadat
 import { validateSoql, parseSoqlError } from './soql-validator'
 import { buildFromJsonSpec } from './soql-query-builder'
 import type { SalesforceResult, ChatTurn } from './query'
+import { tryParseJson, isAggregateResult, computeGroupedTotals, computeAggregateTotals } from './format-results'
 
 const MAX_STEPS = 12
 
@@ -400,6 +401,11 @@ CRITICAL — NEVER HALLUCINATE DATA:
 - If a tool returns 10 items, report exactly those 10 — never pad the list
 - If a tool returns 0 items, say "No results found" — do not fabricate entries
 
+ARITHMETIC RULE (CRITICAL — prevents wrong totals):
+- If an observation contains a [PRE-COMPUTED TOTALS] section, use those exact numbers for totals/subtotals. Do NOT re-add rows yourself — you will make arithmetic errors.
+- For per-row breakdowns (monthly, yearly, by community), copy individual row values verbatim.
+- Only use pre-computed totals for summary statements like "2023 total was AED X" or "across all years, Y units were sold".
+
 READING TOOL RESULTS (CRITICAL):
 - SOQL queries return JSON arrays. Observations have been FLATTENED — nested objects use dot notation.
 - Example: if you queried "Account.Name", the result looks like:
@@ -601,7 +607,19 @@ export async function answerViaMcp(
 
       // Flatten nested JSON so the LLM sees dot-notation keys (Account.Name)
       // instead of nested objects it may fail to parse
-      const flatObservation = flattenNestedJson(observation)
+      let flatObservation = flattenNestedJson(observation)
+
+      // ── PRE-COMPUTE TOTALS for GROUP BY aggregate results ──────────────
+      // LLMs are unreliable at summing many rows. Detect aggregate results
+      // (multiple rows with count/sum columns) and inject server-computed
+      // totals so the LLM copies correct numbers instead of adding wrong.
+      try {
+        const rows = tryParseJson(flatObservation)
+        if (rows && isAggregateResult(rows)) {
+          const totals = computeGroupedTotals(rows, 'year') || computeAggregateTotals(rows)
+          if (totals) flatObservation += '\n\n' + totals
+        }
+      } catch { /* non-JSON observation or parse error — skip */ }
 
       // Send the step with full result so the UI can show the data
       onStep?.({ action, detail, result: flatObservation })
@@ -616,7 +634,7 @@ export async function answerViaMcp(
       // tool output/JSON (which happened before this safety net was added).
       console.log('[mcp-query] max steps reached without finish — forcing final answer composition')
           onStep?.({ action: 'composeAnswer', detail: 'Composing final answer from gathered data...' })
-      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. IMPORTANT: Do NOT use technical jargon — no SOQL, no "query", no "CRM", no "database". Speak in plain business language like "Based on the data..." or "The records show...". Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}`
+      const composePrompt = `Question: ${fullQuestion}\n\nSteps taken so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nYou've used all available tool calls. Compose the best possible natural-language answer using ONLY the data already gathered above. Do not call any more tools. IMPORTANT: Do NOT use technical jargon — no SOQL, no "query", no "CRM", no "database". Speak in plain business language like "Based on the data..." or "The records show...". Respond with ONLY JSON: {"answer": "<your natural language answer>", "foundInCrm": true|false}\n\nARITHMETIC RULE (CRITICAL):\n- If observations contain a [PRE-COMPUTED TOTALS] section, use those exact numbers for totals and subtotals. Do NOT re-compute totals from individual rows — you will get the math wrong.\n- For per-row breakdowns (monthly, yearly, by community), copy the individual row values verbatim — do not add them up yourself.\n- Only use the pre-computed totals for summary/aggregate statements like "2023 total was AED X" or "across all years, Y units".`
       try {
         const raw = await chatJson(systemPrompt, composePrompt)
         const parsed = parseLlmJson(raw)

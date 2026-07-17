@@ -33,6 +33,9 @@ const STOPWORDS = new Set([
   'properties', 'sales', 'sale', 'deal', 'deals', 'customer', 'customers',
   'note', 'important', 'question', 'answer', 'data', 'record', 'records',
   'q1', 'q2', 'q3', 'q4', 'ytd',
+  'roughly', 'from', 'direct', 'lead', 'source', 'available', 'only',
+  'across', 'based', 'each', 'every', 'both', 'either', 'neither',
+  'overall', 'combined', 'total', 'net', 'gross', 'average', 'median',
 ])
 
 // Extract candidate proper-noun phrases (capitalized words/phrases) from text.

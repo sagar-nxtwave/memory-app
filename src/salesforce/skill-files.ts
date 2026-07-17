@@ -114,10 +114,6 @@ export async function getMatchingSkillFiles(query: string): Promise<SkillFile[]>
   const allActive = await getActiveSkillFiles()
   const intents = classifyQueryIntent(query)
 
-  if (intents.length === 0) {
-    return allActive.filter(f => f.category === 'general')
-  }
-
   const matched = new Map<string, SkillFile>()
 
   for (const file of allActive) {

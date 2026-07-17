@@ -10,6 +10,7 @@ import { soql } from './client'
 
 const COUNT_PATTERN = /\b(\d[\d,]*)\s*(?:deals?|opportunit\w*|cases?|accounts?|leads?|records?|units?|properties?|communities?|buildings?|customers?|bookings?|cancellations?|transfers?)\b/gi
 const AMOUNT_PATTERN = /(?:AED|USD|\$)\s*([\d,]+(?:\.\d+)?)\s*(?:million|billion|M|B)?/gi
+const YEAR_PATTERN = /^20\d{2}$/
 
 /** Extract a 4-digit year from the question (e.g. "sales of 2025" → 2025). */
 function extractYear(question: string): number | null {
@@ -20,6 +21,9 @@ function extractYear(question: string): number | null {
 interface CrossCheckResult {
   verified: boolean
   discrepancies: string[]
+  /** Correct grand total values from independent query — used to override wrong LLM sums */
+  correctCount?: number
+  correctTotal?: number
 }
 
 function guessObject(question: string): string {
@@ -111,41 +115,50 @@ export async function crossCheckMcpAnswer(
 
     COUNT_PATTERN.lastIndex = 0
     while ((match = COUNT_PATTERN.exec(mcpAnswer)) !== null) {
-      const num = parseInt(match[1].replace(/,/g, ''), 10)
+      const raw = match[1].replace(/,/g, '')
+      if (YEAR_PATTERN.test(raw)) continue // skip year numbers like 2021, 2022
+      const num = parseInt(raw, 10)
       if (!isNaN(num) && num > 1) claimedCounts.push(num)
     }
 
-    if (!isNaN(actualCount) && actualCount > 0) {
-      for (const claimed of claimedCounts) {
-        const ratio = Math.abs(claimed - actualCount) / actualCount
-        if (ratio > 0.10 && Math.abs(claimed - actualCount) > 5) {
-          discrepancies.push(
-            `Answer claims ~${claimed.toLocaleString()} ${objectName} records but independent query found ${actualCount.toLocaleString()}`
-          )
-        }
+    if (!isNaN(actualCount) && actualCount > 0 && claimedCounts.length > 0) {
+      // Only compare the largest claimed number — smaller numbers are likely
+      // per-category breakdowns (GROUP BY results) which are expected to differ
+      // from the grand total
+      const maxClaimed = Math.max(...claimedCounts)
+      const ratio = Math.abs(maxClaimed - actualCount) / actualCount
+      if (ratio > 0.10 && Math.abs(maxClaimed - actualCount) > 5) {
+        discrepancies.push(
+          `Answer claims ~${maxClaimed.toLocaleString()} ${objectName} records but independent query found ${actualCount.toLocaleString()}`
+        )
       }
     }
 
     if (actualTotal != null && !isNaN(actualTotal)) {
+      const claimedAmounts: number[] = []
       AMOUNT_PATTERN.lastIndex = 0
       while ((match = AMOUNT_PATTERN.exec(mcpAnswer)) !== null) {
         let claimedAmount = parseFloat(match[1].replace(/,/g, ''))
         const suffix = mcpAnswer.slice(match.index, match.index + match[0].length).toLowerCase()
         if (suffix.includes('million') || suffix.includes(' m')) claimedAmount *= 1_000_000
         if (suffix.includes('billion') || suffix.includes(' b')) claimedAmount *= 1_000_000_000
+        if (!isNaN(claimedAmount) && claimedAmount > 0) claimedAmounts.push(claimedAmount)
+      }
 
-        if (!isNaN(claimedAmount) && claimedAmount > 0) {
-          const ratio = Math.abs(claimedAmount - actualTotal) / Math.max(actualTotal, 1)
-          if (ratio > 0.15 && Math.abs(claimedAmount - actualTotal) > 1000) {
-            discrepancies.push(
-              `Answer claims AED ${claimedAmount.toLocaleString()} but independent query found AED ${actualTotal.toLocaleString()}`
-            )
-          }
+      if (claimedAmounts.length > 0) {
+        // Only compare the largest claimed amount — smaller amounts are likely
+        // per-category breakdowns (GROUP BY results)
+        const maxClaimed = Math.max(...claimedAmounts)
+        const ratio = Math.abs(maxClaimed - actualTotal) / Math.max(actualTotal, 1)
+        if (ratio > 0.15 && Math.abs(maxClaimed - actualTotal) > 1000) {
+          discrepancies.push(
+            `Answer claims AED ${maxClaimed.toLocaleString()} but independent query found AED ${actualTotal.toLocaleString()}`
+          )
         }
       }
     }
 
-    return { verified: discrepancies.length === 0, discrepancies }
+    return { verified: discrepancies.length === 0, discrepancies, correctCount: actualCount, correctTotal: actualTotal ?? undefined }
   } catch (err) {
     console.warn('[cross-check] Independent verification query failed:', err)
     return { verified: true, discrepancies: [] }

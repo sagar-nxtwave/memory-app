@@ -90,10 +90,10 @@ const FIX_PATTERNS: FixPattern[] = [
     replacement: "LIKE '$1'",
   },
 
-  // 8. LIMIT on aggregate without GROUP BY — strip LIMIT
+  // 8. LIMIT on aggregate without GROUP BY — strip LIMIT (keep LIMIT when GROUP BY is present)
   {
     description: 'Removed LIMIT from aggregate query without GROUP BY',
-    pattern: /^(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
+    pattern: /^(?!.*\bGROUP\s+BY\b)(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
     replacement: '$1',
   },
 ]
@@ -245,7 +245,7 @@ export function validateSoql(query: string): SoqlValidationResult {
   currentQuery = currentQuery
     .replace(/\s{2,}/g, ' ')           // collapse multiple spaces
     .replace(/\s*,\s*/g, ', ')         // normalize comma spacing
-    .replace(/\s*=\s*/g, ' = ')        // normalize equals spacing
+    .replace(/(?<![!=<>])\s*=\s*/g, ' = ') // normalize equals spacing (skip !=, >=, <=)
     .trim()
 
   // ── Step 3: Run validation checks ──

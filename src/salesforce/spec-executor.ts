@@ -223,8 +223,8 @@ export async function executeAdHocSpec(query: string): Promise<ToolResult | null
       soqlQuery += ` ORDER BY ${aggFunc} DESC`
     }
 
-    // Add LIMIT
-    if (spec.limit && !spec.aggregate) {
+    // Add LIMIT (allowed with GROUP BY, blocked for aggregate-only queries)
+    if (spec.limit && (!spec.aggregate || spec.groupBy)) {
       soqlQuery += ` LIMIT ${spec.limit}`
     } else if (!spec.aggregate && !soqlQuery.match(/LIMIT/i)) {
       soqlQuery += ' LIMIT 200'

@@ -182,7 +182,13 @@ export async function answerSalesforceQuery(
               if (!crossCheck.verified) {
                 console.warn('[salesforce] MCP cross-check discrepancies:', crossCheck.discrepancies)
                 onMcpStep?.({ action: 'crossCheck', detail: 'Cross-check found discrepancies', result: crossCheck.discrepancies.join(' | ') })
-                const note = `\n\n⚠ **Cross-check note:** ${crossCheck.discrepancies.join(' | ')}`
+                // Append the correct numbers so the chat LLM can use them instead of the wrong ones
+                const corrections: string[] = []
+                if (crossCheck.correctCount) corrections.push(`correct count: ${crossCheck.correctCount.toLocaleString()}`)
+                if (crossCheck.correctTotal) corrections.push(`correct total: AED ${crossCheck.correctTotal.toLocaleString()}`)
+                const note = corrections.length > 0
+                  ? `\n\n⚠ **Cross-check correction — use these numbers instead:** ${corrections.join(' | ')}`
+                  : `\n\n⚠ **Cross-check note:** ${crossCheck.discrepancies.join(' | ')}`
                 mcpResult.context += note
               }
             } catch (err) {

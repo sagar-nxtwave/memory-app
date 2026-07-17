@@ -3,6 +3,8 @@
 // (sharp, child_process) into client bundles.
 
 export const LLM_MODELS = [
+  { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', provider: 'Anthropic' },
+  { id: 'anthropic/claude-opus-4-8', name: 'Claude Opus 4.8', provider: 'Anthropic' },
   { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4', provider: 'Anthropic' },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4', provider: 'Anthropic' },
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
