@@ -33,7 +33,7 @@ export interface ReActResult {
 }
 
 const MAX_STEPS = 5
-const STEP_TIMEOUT_MS = 30000
+const STEP_TIMEOUT_MS = 60000
 const TODAY = todayStr()
 const CURRENT_YEAR = currentYear()
 

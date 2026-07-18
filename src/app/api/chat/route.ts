@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq, desc } from 'drizzle-orm'
 
-export const maxDuration = 60
+export const maxDuration = 300
 import { sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     if (memberOfExplicit.length > 0) {
       crossSpaceIds = [spaceId, ...memberOfExplicit.map((s) => s.id)]
-      crossSpaceNote = `\nThe user explicitly referenced content from ${memberOfExplicit.length > 1 ? 'other projects' : 'another project'} (${memberOfExplicit.map((s) => `"${s.name}"`).join(', ')}) alongside "${spaceName ?? 'this project'}". The context below includes documents from all referenced projects, each labeled with its project name — clearly attribute which facts come from which project.`
+      crossSpaceNote = `\nThe user explicitly referenced content from ${memberOfExplicit.length > 1 ? 'other projects' : 'another project'} (${memberOfExplicit.map((s) => `"${s.name}"`).join(', ')}) alongside "${spaceName ?? 'this project'}". The context below includes documents from all referenced projects, each labeled with its project name, clearly attribute which facts come from which project.`
     }
   } else if (hasCrossSpaceIntent(content)) {
     const userSpaces = await db
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
       crossSpaceIds = [spaceId, distinctOtherSpaceIds[0]]
       const matchedName = candidates.find((c) => (c.type === 'space' ? c.id : c.spaceId) === distinctOtherSpaceIds[0])
       const otherName = matchedName?.type === 'space' ? matchedName.name : matchedName?.spaceName
-      crossSpaceNote = `\nThe user is asking to compare "${spaceName ?? 'this project'}" with another project ("${otherName}"). The context below includes documents from BOTH projects, each labeled with its project name — clearly attribute which facts come from which project.`
+      crossSpaceNote = `\nThe user is asking to compare "${spaceName ?? 'this project'}" with another project ("${otherName}"). The context below includes documents from BOTH projects, each labeled with its project name, clearly attribute which facts come from which project.`
     }
   }
 
@@ -511,20 +511,20 @@ export async function POST(req: NextRequest) {
     : ''
 
   const imageNote = documentImages.length > 0
-    ? `\nIMPORTANT: The following ${documentImages.length} image(s) are already displayed to the user below your response, in this exact order:\n${documentImages.map((img, i) => `${i + 1}. ${img.alt}`).join('\n')}\nWhen answering, identify which numbered image(s) answer the question and describe them directly by their content (e.g. "Image 2 below shows..."). Never tell the user to scroll, search, or look through the images themselves — you already know which one(s) are relevant. Never say images are missing, corrupted, or inaccessible.`
+    ? `\nIMPORTANT: The following ${documentImages.length} image(s) are already displayed to the user below your response, in this exact order:\n${documentImages.map((img, i) => `${i + 1}. ${img.alt}`).join('\n')}\nWhen answering, identify which numbered image(s) answer the question and describe them directly by their content (e.g. "Image 2 below shows..."). Never tell the user to scroll, search, or look through the images themselves, you already know which one(s) are relevant. Never say images are missing, corrupted, or inaccessible.`
     : ''
 
   const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
 ${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}${webUsed ? webContextNote() : ''}
 
-IMPORTANT: ${dateContext()} When users ask about "this year", "this month", "this quarter" etc., use the ACTUAL current date above — never assume a different year.
+IMPORTANT: ${dateContext()} When users ask about "this year", "this month", "this quarter" etc., use the ACTUAL current date above, never assume a different year.
 
 CRITICAL INSTRUCTIONS FOR SALESFORCE CRM DATA:
-- The formatted data below is already clean — present it to the user as-is
+- The formatted data below is already clean, present it to the user as-is
 - For tables: render the markdown table directly, then add a 1-2 sentence summary
 - For text lists: present the key facts clearly with labels
-- NEVER rephrase data into vague language — use the exact values provided
-- If data is empty, say "No records found" — don't say "0 records"
+- NEVER rephrase data into vague language, use the exact values provided
+- If data is empty, say "No records found", do not say "0 records"
 
 ${docManifest}
 ${salesforceResult ? (() => {

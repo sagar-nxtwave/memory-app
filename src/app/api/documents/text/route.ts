@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { documents, spaceMembers } from '@/lib/db/schema'
 import { processDocumentFromText } from '@/lib/ai/processing'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   const session = await auth()

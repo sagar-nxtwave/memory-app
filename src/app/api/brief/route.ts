@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq, desc } from 'drizzle-orm'
 
-export const maxDuration = 60
+export const maxDuration = 300
 import { auth } from '@/lib/auth/config'
 import { db } from '@/lib/db'
 import { documents, messages } from '@/lib/db/schema'
