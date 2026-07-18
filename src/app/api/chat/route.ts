@@ -355,166 +355,151 @@ export async function POST(req: NextRequest) {
     try { ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch {}
   }
 
-  // Collect thinking steps, actions, and results for persistence
-  const steps: string[] = []
-  const stepActions: string[] = []
-  const stepResults: string[] = []
-  const collectStep = (step: string, action?: string, result?: string) => {
-    steps.push(step)
-    stepActions.push(action ?? '')
-    stepResults.push(result ?? '')
-  }
+  // Return the HTTP response immediately so the client starts receiving SSE events while
+  // heavy processing (MCP queries, reranking, web search, LLM streaming) runs in the background.
+  const response = new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 
-  // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
-  // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
-  // over RAG/web for CRM facts; fails soft to those when it can't answer.
-  // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
-  // Emit generic thinking steps BEFORE the call so they appear in order.
-  if (intent.salesforce) {
-    try { sseSend({ type: 'thinking', action: 'info', step: 'Querying live Salesforce CRM data...' }) } catch {}
-    collectStep('Querying live Salesforce CRM data...', 'info')
-  }
-  if (!skipRetrieval && !intent.salesforce) {
-    try { sseSend({ type: 'thinking', action: 'info', step: 'Understanding your question...' }) } catch {}
-    collectStep('Understanding your question...', 'info')
-    if (intent.documents) {
-      try { sseSend({ type: 'thinking', action: 'info', step: 'Searching documents for relevant content...' }) } catch {}
-      collectStep('Searching documents for relevant content...', 'info')
-    }
-    if (intent.web) {
-      try { sseSend({ type: 'thinking', action: 'info', step: 'Searching the web for supplementary information...' }) } catch {}
-      collectStep('Searching the web for supplementary information...', 'info')
-    }
-  }
-  let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
-    try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
-    collectStep(step.detail, step.action, step.result)
-  }) : null
+  // All heavy processing + LLM streaming runs in the background. The client is already
+  // connected via the SSE stream returned above, so sseSend() delivers events in real-time.
+  ;(async () => {
+    try {
+      // Collect thinking steps, actions, and results for persistence
+      const steps: string[] = []
+      const stepActions: string[] = []
+      const stepResults: string[] = []
+      const collectStep = (step: string, action?: string, result?: string) => {
+        steps.push(step)
+        stepActions.push(action ?? '')
+        stepResults.push(result ?? '')
+      }
 
-  // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
-  // user's current message is a vague follow-up ("can you do it?", "do it", "run it", "yes"),
-  // treat it as a Salesforce query even if the intent classifier didn't flag it.
-  if (!salesforceResult && conversationHistory.length > 0) {
-    const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant')
-    const isFollowUp = /^(can you |could you |please |yes|sure|go ahead|do it|run it|execute it|go for it)/i.test(content.trim())
-    if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
-      console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
-      salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
+      // Live Salesforce CRM path — CRM questions ("how many closed-won deals", "pipeline by
+      // stage", "open tasks") are answered against live Salesforce via guarded SOQL. Authoritative
+      // over RAG/web for CRM facts; fails soft to those when it can't answer.
+      // Each MCP tool call / SOQL query is surfaced in real-time via sseSend().
+      // Emit generic thinking steps BEFORE the call so they appear in order.
+      if (intent.salesforce) {
+        try { sseSend({ type: 'thinking', action: 'info', step: 'Querying live Salesforce CRM data...' }) } catch {}
+        collectStep('Querying live Salesforce CRM data...', 'info')
+      }
+      if (!skipRetrieval && !intent.salesforce) {
+        try { sseSend({ type: 'thinking', action: 'info', step: 'Understanding your question...' }) } catch {}
+        collectStep('Understanding your question...', 'info')
+        if (intent.documents) {
+          try { sseSend({ type: 'thinking', action: 'info', step: 'Searching documents for relevant content...' }) } catch {}
+          collectStep('Searching documents for relevant content...', 'info')
+        }
+        if (intent.web) {
+          try { sseSend({ type: 'thinking', action: 'info', step: 'Searching the web for supplementary information...' }) } catch {}
+          collectStep('Searching the web for supplementary information...', 'info')
+        }
+      }
+      // ALWAYS try Salesforce — the intent classifier is an LLM call that can be wrong,
+      // especially when documents are present (biases toward documents:true, salesforce:false).
+      // Running Salesforce in parallel ensures CRM questions get answered regardless of
+      // space content. The thinking step is only shown when intent.salesforce was true.
+      let salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
         try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
         collectStep(step.detail, step.action, step.result)
       })
-    }
-  }
 
-  // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
-  // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
-  // answer came entirely from Salesforce/tabular data (e.g. "how many unconverted leads"
-  // wrongly citing unrelated uploaded docs). Explicit @-mentions always pass through.
-  const INTERNAL_RELEVANCE_MIN = 0.2
-  const rerankedScored = await rerankWithScores(content, rawChunks, crossSpace ? 8 : 5)
-  const reranked = hasMentions
-    ? rerankedScored.map((r) => r.item)
-    : rerankedScored.filter((r) => r.score >= INTERNAL_RELEVANCE_MIN).map((r) => r.item)
-  let citations: import('@/web-search').Citation[] = [...new Map(reranked.map((c) => [
-    `${c.space_name}|${c.document_name}`,
-    crossSpace
-      ? { documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }
-      : { documentId: c.document_id, documentName: c.document_name },
-  ])).values()]
+      // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
+      // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
+      // answer came entirely from Salesforce/tabular data (e.g. "how many unconverted leads"
+      // wrongly citing unrelated uploaded docs). Explicit @-mentions always pass through.
+      const INTERNAL_RELEVANCE_MIN = 0.2
+      const rerankedScored = await rerankWithScores(content, rawChunks, crossSpace ? 8 : 5)
+      const reranked = hasMentions
+        ? rerankedScored.map((r) => r.item)
+        : rerankedScored.filter((r) => r.score >= INTERNAL_RELEVANCE_MIN).map((r) => r.item)
+      let citations: import('@/web-search').Citation[] = [...new Map(reranked.map((c) => [
+        `${c.space_name}|${c.document_name}`,
+        crossSpace
+          ? { documentId: c.document_id, documentName: c.document_name, spaceName: c.space_name }
+          : { documentId: c.document_id, documentName: c.document_name },
+      ])).values()]
 
-  // Surface the structured-query source document(s) as citations too (if not already cited).
-  if (tabularResult) {
-    for (const tc of tabularResult.citations) {
-      if (!citations.some((c) => c.documentId === tc.documentId)) {
-        citations.unshift({ documentId: tc.documentId, documentName: tc.documentName })
+      // Surface the structured-query source document(s) as citations too (if not already cited).
+      if (tabularResult) {
+        for (const tc of tabularResult.citations) {
+          if (!citations.some((c) => c.documentId === tc.documentId)) {
+            citations.unshift({ documentId: tc.documentId, documentName: tc.documentName })
+          }
+        }
       }
-    }
-  }
 
-  // Cite the live CRM as a source when it answered.
-  if (salesforceResult) {
-    const sfCitation = salesforceResult.citation
-    if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
-  }
-
-  let context = reranked
-    .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
-    .join('\n\n---\n\n')
-
-  // Web search augmentation — only when the classifier detects a current/external question
-  // and web search is enabled. Merges internet results with internal RAG into one labeled,
-  // cited context. Fails soft: if web isn't needed or returns nothing, the internal-only
-  // path above is left completely untouched.
-  // Web search runs ONLY when the semantic router says the question needs current/external
-  // info — never as a default fallback (that was the bug: CRM questions hitting the web).
-  let webUsed = false
-  if (!skipRetrieval && intent.web) {
-    const internalItems: RetrievalItem[] = reranked.map((c) => ({
-      id: '', sourceType: 'internal', content: c.content,
-      title: c.document_name, documentId: c.document_id, documentName: c.document_name,
-      spaceName: crossSpace ? c.space_name : undefined,
-    }))
-    const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
-    if (merged.webUsed) {
-      const hasInternalItems = merged.context.includes('[INT-')
-      if (hasInternalItems) {
-        context = merged.context
-        citations = merged.citations
-        webUsed = true
+      // Cite the live CRM as a source when it answered.
+      if (salesforceResult) {
+        const sfCitation = salesforceResult.citation
+        if (!citations.some((c) => c.documentName === sfCitation.documentName)) citations.unshift(sfCitation)
       }
-    }
-  }
 
-  // Safety net: the semantic router is a single LLM call and can miss oddly-phrased CRM
-  // questions (e.g. "how many deals closed this year", or a bare project/community name with
-  // no verb like "Address Grand Downtown"). If EVERY source came back empty, don't just answer
-  // "not in documents" — try Salesforce once as a last resort before giving up. High-level
-  // executive questions must not silently fail just because one classification call guessed
-  // wrong; this is the client's top complaint. Deliberately NOT gated behind a keyword regex
-  // anymore — a regex can never recognize an arbitrary project/customer name, so "try Salesforce
-  // whenever everything else came up empty" is the safer default for a CRM-first tool.
-  if (!intent.salesforce && !tabularResult && !webUsed && context.trim().length === 0) {
-    const fallback = await answerSalesforceQuery(content, conversationHistory, (step) => {
-      try { sseSend({ type: 'thinking', action: step.action, step: step.detail }) } catch {}
-    })
-    if (fallback) {
-      salesforceResult = fallback
-      if (!citations.some((c) => c.documentName === fallback.citation.documentName)) {
-        citations.unshift(fallback.citation)
+      let context = reranked
+        .map((c) => `[${crossSpace ? `${c.space_name} › ` : 'From: '}${c.document_name}]\n${c.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '')}`)
+        .join('\n\n---\n\n')
+
+      // Web search augmentation — only when the classifier detects a current/external question
+      // and web search is enabled. Merges internet results with internal RAG into one labeled,
+      // cited context. Fails soft: if web isn't needed or returns nothing, the internal-only
+      // path above is left completely untouched.
+      // Web search runs ONLY when the semantic router says the question needs current/external
+      // info — never as a default fallback (that was the bug: CRM questions hitting the web).
+      let webUsed = false
+      if (!skipRetrieval && intent.web) {
+        const internalItems: RetrievalItem[] = reranked.map((c) => ({
+          id: '', sourceType: 'internal', content: c.content,
+          title: c.document_name, documentId: c.document_id, documentName: c.document_name,
+          spaceName: crossSpace ? c.space_name : undefined,
+        }))
+        const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
+        if (merged.webUsed) {
+          const hasInternalItems = merged.context.includes('[INT-')
+          if (hasInternalItems) {
+            context = merged.context
+            citations = merged.citations
+            webUsed = true
+          }
+        }
       }
-    }
-  }
 
-  const spaceDocs = spaceDocsRows.filter((d) => d.spaceId === spaceId)
+      // (Salesforce is always attempted above — no separate safety net needed)
 
-  const docManifest = !crossSpace
-    ? (spaceDocs.length > 0
-        ? `Documents in this space (${spaceDocs.length} total):\n${spaceDocs.map((d, i) => `${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`
-        : 'No documents have been uploaded to this space yet.')
-    : Object.entries(
-        spaceDocsRows.reduce<Record<string, typeof spaceDocsRows>>((acc, d) => {
-          acc[d.spaceName] = acc[d.spaceName] ?? []
-          acc[d.spaceName].push(d)
-          return acc
-        }, {})
-      ).map(([sName, docs]) => `${sName} (${docs.length} document${docs.length !== 1 ? 's' : ''}):\n${docs.map((d, i) => `  ${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`).join('\n\n')
+      const spaceDocs = spaceDocsRows.filter((d) => d.spaceId === spaceId)
 
-  const recentHistory = await db
-    .select({ role: messages.role, content: messages.content })
-    .from(messages)
-    .where(and(eq(messages.spaceId, spaceId)))
-    .orderBy(desc(messages.createdAt))
-    .limit(10)
+      const docManifest = !crossSpace
+        ? (spaceDocs.length > 0
+            ? `Documents in this space (${spaceDocs.length} total):\n${spaceDocs.map((d, i) => `${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`
+            : 'No documents have been uploaded to this space yet.')
+        : Object.entries(
+            spaceDocsRows.reduce<Record<string, typeof spaceDocsRows>>((acc, d) => {
+              acc[d.spaceName] = acc[d.spaceName] ?? []
+              acc[d.spaceName].push(d)
+              return acc
+            }, {})
+          ).map(([sName, docs]) => `${sName} (${docs.length} document${docs.length !== 1 ? 's' : ''}):\n${docs.map((d, i) => `  ${i + 1}. ${d.name} (${d.fileType ?? 'unknown'}, uploaded ${formatDateTime(d.createdAt)})`).join('\n')}`).join('\n\n')
 
-  const focusNote = hasMentions
-    ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocsRows.find((x) => x.id === id); return d ? (crossSpace ? `${d.name} (${d.spaceName})` : d.name) : id }).join(', ')}. Answer exclusively from those documents.`
-    : ''
+      const recentHistory = await db
+        .select({ role: messages.role, content: messages.content })
+        .from(messages)
+        .where(and(eq(messages.spaceId, spaceId)))
+        .orderBy(desc(messages.createdAt))
+        .limit(10)
 
-  const imageNote = documentImages.length > 0
-    ? `\nIMPORTANT: The following ${documentImages.length} image(s) are already displayed to the user below your response, in this exact order:\n${documentImages.map((img, i) => `${i + 1}. ${img.alt}`).join('\n')}\nWhen answering, identify which numbered image(s) answer the question and describe them directly by their content (e.g. "Image 2 below shows..."). Never tell the user to scroll, search, or look through the images themselves, you already know which one(s) are relevant. Never say images are missing, corrupted, or inaccessible.`
-    : ''
+      const focusNote = hasMentions
+        ? `\nThe user has focused this question on specific document(s): ${mentionedDocIds.map((id: string) => { const d = spaceDocsRows.find((x) => x.id === id); return d ? (crossSpace ? `${d.name} (${d.spaceName})` : d.name) : id }).join(', ')}. Answer exclusively from those documents.`
+        : ''
 
-  const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
+      const imageNote = documentImages.length > 0
+        ? `\nIMPORTANT: The following ${documentImages.length} image(s) are already displayed to the user below your response, in this exact order:\n${documentImages.map((img, i) => `${i + 1}. ${img.alt}`).join('\n')}\nWhen answering, identify which numbered image(s) answer the question and describe them directly by their content (e.g. "Image 2 below shows..."). Never tell the user to scroll, search, or look through the images themselves, you already know which one(s) are relevant. Never say images are missing, corrupted, or inaccessible.`
+        : ''
+
+      const systemPrompt = `${chatPrompt(spaceName ?? 'this project')}
 ${styleInstruction(responseStyle)}${focusNote}${imageNote}${crossSpaceNote}${webUsed ? webContextNote() : ''}
 
 IMPORTANT: ${dateContext()} When users ask about "this year", "this month", "this quarter" etc., use the ACTUAL current date above, never assume a different year.
@@ -534,15 +519,11 @@ ${salesforceResult ? (() => {
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
 ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(context)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 
-  const history = recentHistory
-    .reverse()
-    .slice(0, -1)
-    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      const history = recentHistory
+        .reverse()
+        .slice(0, -1)
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-  // The stream and sseSend() were created earlier (before MCP processing) so MCP steps
-  // are already emitted in real-time. Now populate the stream with the LLM response.
-  ;(async () => {
-    try {
       sseSend({ type: 'start', userMessageId: userMsg.id })
 
       if (skipRetrieval) {
@@ -556,75 +537,69 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
         sseSend({ type: 'delta', content: chunk })
       }
 
-        // Post-generation hallucination check — compares the composed prose against the
-        // raw Salesforce data it was supposed to summarize. Can't un-stream what the user
-        // already saw, but this sends a follow-up disclaimer and logs for tracking.
-        if (salesforceResult) {
-          const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
-          const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
-          if (!validation.valid || !listCheck.valid) {
-            const allIssues = [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])]
-            console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
-              question: content.slice(0, 200),
-              issues: allIssues,
-              hallucinatedTerms: validation.hallucinatedTerms,
-              hallucinatedNumbers: validation.hallucinatedNumbers,
-            })
-            sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.join(' | ') })
-          } else {
-            sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
-          }
+      // Post-generation hallucination check — compares the composed prose against the
+      // raw Salesforce data it was supposed to summarize. Can't un-stream what the user
+      // already saw, but this sends a follow-up disclaimer and logs for tracking.
+      if (salesforceResult) {
+        const validation = validateAnswerAgainstData(fullContent, salesforceResult.context)
+        const listCheck = validateListCompleteness(fullContent, salesforceResult.context)
+        if (!validation.valid || !listCheck.valid) {
+          const allIssues = [...validation.issues, ...(listCheck.issue ? [listCheck.issue] : [])]
+          console.warn('[answer-validator] POTENTIAL HALLUCINATION DETECTED', {
+            question: content.slice(0, 200),
+            issues: allIssues,
+            hallucinatedTerms: validation.hallucinatedTerms,
+            hallucinatedNumbers: validation.hallucinatedNumbers,
+          })
+          sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.join(' | ') })
+        } else {
+          sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
         }
+      }
 
+      const [assistantMsg] = await db
+        .insert(messages)
+        .values({
+          spaceId,
+          userId,
+          role: 'assistant',
+          content: fullContent || 'No response generated.',
+          citations: citations.length > 0 ? citations : null,
+          documentImages: documentImages.length > 0 ? documentImages : null,
+          thinkingSteps: steps.length > 0 ? steps : null,
+          thinkingStepActions: stepActions.length > 0 ? stepActions : null,
+          thinkingStepResults: stepResults.length > 0 ? stepResults : null,
+        })
+        .returning()
+
+      // Follow-up suggestions — generate 2-3 clickable follow-up questions
+      // Wrapped in try-catch so a failure here NEVER blocks the done event
+      let suggestions: string[] = []
+      if (features.followUpSuggestions && salesforceResult && fullContent.length > 50) {
+        try {
+          suggestions = await generateFollowUpSuggestions(content, fullContent)
+        } catch (sErr) {
+          console.warn('[chat] Follow-up suggestions failed (non-blocking):', sErr)
+        }
+      }
+
+      sseSend({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages, suggestions })
+    } catch (err) {
+      console.error('[chat] Stream error:', err)
+      try {
         const [assistantMsg] = await db
           .insert(messages)
-          .values({
-            spaceId,
-            userId,
-            role: 'assistant',
-            content: fullContent || 'No response generated.',
-            citations: citations.length > 0 ? citations : null,
-            documentImages: documentImages.length > 0 ? documentImages : null,
-            thinkingSteps: steps.length > 0 ? steps : null,
-            thinkingStepActions: stepActions.length > 0 ? stepActions : null,
-            thinkingStepResults: stepResults.length > 0 ? stepResults : null,
-          })
+          .values({ spaceId, userId, role: 'assistant', content: 'I encountered an error. Please try again.' })
           .returning()
-
-        // Follow-up suggestions — generate 2-3 clickable follow-up questions
-        // Wrapped in try-catch so a failure here NEVER blocks the done event
-        let suggestions: string[] = []
-        if (features.followUpSuggestions && salesforceResult && fullContent.length > 50) {
-          try {
-            suggestions = await generateFollowUpSuggestions(content, fullContent)
-          } catch (sErr) {
-            console.warn('[chat] Follow-up suggestions failed (non-blocking):', sErr)
-          }
-        }
-
-        sseSend({ type: 'done', assistantMessageId: assistantMsg.id, userMessageId: userMsg.id, citations, documentImages, suggestions })
-      } catch (err) {
-        console.error('[chat] Stream error:', err)
-        try {
-          const [assistantMsg] = await db
-            .insert(messages)
-            .values({ spaceId, userId, role: 'assistant', content: 'I encountered an error. Please try again.' })
-            .returning()
-          sseSend({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
-        } catch (dbErr) {
-          console.error('[chat] Failed to save error message to DB:', dbErr)
-          sseSend({ type: 'error', message: 'Something went wrong. Please try again.' })
-        }
-      } finally {
-        ctrl.close()
+        sseSend({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
+      } catch (dbErr) {
+        console.error('[chat] Failed to save error message to DB:', dbErr)
+        sseSend({ type: 'error', message: 'Something went wrong. Please try again.' })
       }
+    } finally {
+      ctrl.close()
+    }
   })()
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  })
+  return response
 }
