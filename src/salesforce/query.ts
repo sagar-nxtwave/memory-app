@@ -568,13 +568,13 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // List/show by community — use Building_Name__c (groupable)
   if ((q.includes('list') || q.includes('show')) && (q.includes('by community') || q.includes('by location') || q.includes('by project'))) {
-    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // List/show by salesperson
   if ((q.includes('list') || q.includes('show')) && (q.includes('by person') || q.includes('by salesperson') || q.includes('by agent') || q.includes('top performer'))) {
-    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -584,25 +584,25 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   // name (e.g. "how much is Address Grand Downtown sale") — in that case, fall through to the
   // tool-matcher/synonym layer instead of running an unfiltered aggregate that discards the name.
   if (!hasEntity && (q.includes('total') || q.includes('how much') || q.includes('revenue') || q.includes('sum')) && (q.includes('sale') || q.includes('revenue') || q.includes('amount'))) {
-    const result = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE StageName = 'Closed Won'`)
+    const result = await soql(`SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE StageName = 'Closed Won'`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // Sales by community (aggregate) — use Building_Name__c (groupable) instead of Building_Community__c
   if (q.includes('by community') || q.includes('by location') || q.includes('by project') || q.includes('which community') || q.includes('most sales') || q.includes('top community') || q.includes('community has the most') || q.includes('which building') || q.includes('most revenue')) {
-    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Building_Name__c != null AND StageName = 'Closed Won' GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // Sales by salesperson (aggregate)
   if (q.includes('by person') || q.includes('by salesperson') || q.includes('by agent') || q.includes('top performer') || q.includes('top salesperson') || q.includes('top person') || q.includes('who is the top') || q.includes('best salesperson') || q.includes('best performer')) {
-    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won' GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
   // Pipeline / open deals
   if (q.includes('pipeline') || q.includes('open deal') || q.includes('in progress')) {
-    const result = await soql(`SELECT StageName, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsClosed = false GROUP BY StageName ORDER BY COUNT(Id) DESC`)
+    const result = await soql(`SELECT StageName, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsClosed = false GROUP BY StageName ORDER BY COUNT(Id) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -683,7 +683,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
       }
     }
     if (q.includes('top') || q.includes('most') || q.includes('revenue') || q.includes('by')) {
-      const result = await soql(`SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`)
+      const result = await soql(`SELECT Account.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Account.Name != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Account.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`)
       return formatDirectResult(result, 'Opportunity')
     }
     const result = await soql(`SELECT COUNT(Id) cnt FROM Account`)
@@ -707,14 +707,14 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   // Average deal value — BUT skip "average cycle time" or "time to close" (goes to tool matcher)
   if ((q.includes('average') || q.includes('avg') || q.includes('mean')) && !q.includes('cycle') && !q.includes('time to close') && !q.includes('booking to close')) {
     if (q.includes('deal') || q.includes('sale') || q.includes('price') || q.includes('amount') || q.includes('value')) {
-      const result = await soql(`SELECT AVG(Amount) avgVal, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true`)
+      const result = await soql(`SELECT AVG(Net_Amount__c) avgVal, COUNT(Id) cnt FROM Opportunity WHERE IsWon = true`)
       return formatDirectResult(result, 'Opportunity')
     }
   }
 
   // Bedroom/unit type queries — BUT skip multi-filter queries ("deals in X with 3 bedrooms")
   if ((q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) && !q.includes(' in ') && !q.includes('deals in')) {
-    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`)
+    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 
@@ -738,7 +738,7 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // Win rate
   if (q.includes('win rate') || q.includes('won vs lost') || q.includes('conversion rate') || (q.includes('won') && q.includes('lost'))) {
-    const result = await soql(`SELECT IsWon, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsClosed = true GROUP BY IsWon`)
+    const result = await soql(`SELECT IsWon, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsClosed = true GROUP BY IsWon`)
     return formatDirectResult(result, 'Opportunity')
   }
 

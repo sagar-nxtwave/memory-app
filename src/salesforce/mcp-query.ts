@@ -269,6 +269,10 @@ SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunit
 -- "Sales by salesperson" / "Top agents"
 SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28 AND cm_Sales_Person__r.Name != null GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC
 
+-- "Sales by broker" / "Which broker generated most sales?" / "broker ranking"
+-- NOTE: cm_Agent_Name__r.Name = external broker/agent (NOT internal salesperson)
+SELECT cm_Agent_Name__r.Name brokerName, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28 AND cm_Agent_Name__r.Name != null GROUP BY cm_Agent_Name__r.Name ORDER BY SUM(Net_Amount__c) DESC
+
 -- "Who owns unit TH-V-6?" / "Customer lookup"
 SELECT Name, Account.Name, Account.Phone, Account.Email__c, Net_Amount__c, Order_Date__c, Milestone_Current_Status__c FROM Opportunity WHERE Building_Name__c LIKE '%Tower%' AND Name LIKE '%TH-V-6%' AND IsWon = true
 
@@ -321,6 +325,11 @@ Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit 
     - Original customer's Closed Lost + new customer's TRANSFERED = same physical unit. Do NOT count as two sales.
   CANCELLATION STATUSES: SMT_CANCELLED, PMT_CANCELLED, BOOKED_CANCELLED, RESERVED_CANCELLED, CANCELLED. TRANSFERED is NOT a cancellation.
   Traverse to customer via Account.Name, to salesperson via cm_Sales_Person__r.Name.
+  External broker/agent → cm_Agent_Name__r.Name (NOT cm_Sales_Person__r which is internal).
+  Agency → cm_Agency_Name__r.Name.
+  When querying multiple __r.Name fields in aggregate, ALWAYS add explicit aliases to avoid duplicate alias errors:
+    ✅ SELECT cm_Agent_Name__r.Name brokerName, cm_Agency_Name__r.Name agencyName, COUNT(Id) cnt ...
+    ❌ SELECT cm_Agent_Name__r.Name, cm_Agency_Name__r.Name, COUNT(Id) cnt ...
   Sales_Room__c = bedroom count/configuration (Studio, 1 Bedroom, 2 Bedrooms, etc.).
   Property_Booked_Date__c = actual booking date (more accurate than CloseDate for booking trends).
 

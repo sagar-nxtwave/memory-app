@@ -60,7 +60,7 @@ async function main() {
   console.log('TEST 3: Top 10 customers by revenue (previously hit SOQL bug)')
   console.log('═'.repeat(70))
   const topCustomers = await callTool(accessToken, sessionId, 4, 'soqlQuery', {
-    q: "SELECT Account.Name name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true AND Amount != null GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT 10",
+    q: "SELECT Account.Name name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Account.Name != null AND IsWon = true AND Amount != null GROUP BY Account.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT 10",
   })
   console.log(JSON.stringify(topCustomers, null, 2).slice(0, 3000))
 
@@ -68,7 +68,7 @@ async function main() {
   console.log('TEST 4: Address Grand Downtown sales (our recently fixed bug)')
   console.log('═'.repeat(70))
   const addressGrand = await callTool(accessToken, sessionId, 5, 'soqlQuery', {
-    q: "SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE (Building_Name__c LIKE '%Address Grand%' OR Building_Community__c LIKE '%Address Grand%') AND IsWon = true",
+    q: "SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE (Building_Name__c LIKE '%Address Grand%' OR Building_Community__c LIKE '%Address Grand%') AND IsWon = true",
   })
   console.log(JSON.stringify(addressGrand, null, 2).slice(0, 2000))
 }

@@ -241,14 +241,52 @@ export function validateSoql(query: string): SoqlValidationResult {
     }
   }
 
-  // ── Step 2: Clean up whitespace ──
+  // ── Step 2: Fix duplicate aliases in aggregate queries ──
+  // When multiple __r.Name fields appear in SELECT, SOQL auto-aliases both to "Name"
+  // causing MALFORMED_QUERY. Fix by adding explicit aliases.
+  const rNameFields = currentQuery.match(/\b\w+__r\.Name\b/gi) || []
+  if (rNameFields.length > 1) {
+    const aliases: Record<string, string> = {}
+    let aliasIdx = 0
+    for (const field of rNameFields) {
+      const lower = field.toLowerCase()
+      if (!aliases[lower]) {
+        // Derive alias from the lookup field name: cm_Agent_Name__r.Name → agentName
+        const lookupMatch = field.match(/^(\w+?)__r\.Name$/i)
+        if (lookupMatch) {
+          // cm_Agent_Name → agentName, cm_Agency_Name → agencyName
+          const lookup = lookupMatch[1]
+            .replace(/^cm_/i, '')
+            .replace(/_name$/i, '')
+            .replace(/_/g, ' ')
+            .split(' ')
+            .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join('')
+          aliases[lower] = lookup || `field${aliasIdx}`
+        } else {
+          aliases[lower] = `field${aliasIdx}`
+        }
+        aliasIdx++
+      }
+    }
+    // Apply explicit aliases to SELECT fields (not in GROUP BY)
+    for (const [field, alias] of Object.entries(aliases)) {
+      const regex = new RegExp(`\\b${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b(?!\\s+\\w+(?:\\s*,|\\s+FROM))`, 'gi')
+      currentQuery = currentQuery.replace(regex, `${field} ${alias}`)
+    }
+    if (Object.keys(aliases).length > 1) {
+      fixes.push(`Added explicit aliases for duplicate __r.Name fields: ${Object.entries(aliases).map(([f, a]) => `${f}→${a}`).join(', ')}`)
+    }
+  }
+
+  // ── Step 3: Clean up whitespace ──
   currentQuery = currentQuery
     .replace(/\s{2,}/g, ' ')           // collapse multiple spaces
     .replace(/\s*,\s*/g, ', ')         // normalize comma spacing
     .replace(/(?<![!=<>])\s*=\s*/g, ' = ') // normalize equals spacing (skip !=, >=, <=)
     .trim()
 
-  // ── Step 3: Run validation checks ──
+  // ── Step 4: Run validation checks ──
   for (const { description, check } of VALIDATION_CHECKS) {
     const error = check(currentQuery)
     if (error) {
@@ -347,6 +385,24 @@ export function parseSoqlError(errorContent: string): SoqlErrorContext {
     return {
       message: 'Invalid WHERE placement — stray WHERE after AND',
       suggestions,
+    }
+  }
+
+  // Parse "duplicate alias" error
+  if (errorContent.includes('duplicate alias') || errorContent.includes('MALFORMED_QUERY')) {
+    const aliasMatch = errorContent.match(/duplicate alias:\s*(\w+)/i)
+    const dupAlias = aliasMatch ? aliasMatch[1] : 'Name'
+    suggestions.push(
+      `Duplicate alias "${dupAlias}" — multiple __r.Name fields auto-alias to the same name.`,
+      'Fix by adding explicit aliases to each field:',
+      `  ✅ SELECT cm_Agent_Name__r.Name agentName, cm_Agency_Name__r.Name agencyName, COUNT(Id) cnt FROM Opportunity GROUP BY cm_Agent_Name__r.Name, cm_Agency_Name__r.Name`,
+      `  ❌ SELECT cm_Agent_Name__r.Name, cm_Agency_Name__r.Name, COUNT(Id) cnt FROM Opportunity GROUP BY cm_Agent_Name__r.Name, cm_Agency_Name__r.Name`,
+      'Each __r.Name field in SELECT needs a unique alias when multiple appear.',
+    )
+    return {
+      message: `Duplicate alias: "${dupAlias}" — multiple relationship fields resolve to the same name`,
+      suggestions,
+      problemArea: extractProblemArea(errorContent, 'duplicate'),
     }
   }
 

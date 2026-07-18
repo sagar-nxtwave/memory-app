@@ -170,7 +170,7 @@ const getSalesSummary: ToolDefinition = {
     else if (stage === 'lost') where += ' AND IsWon = false'
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     where += dateFilter('CloseDate', period)
-    const query = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where}`
+    const query = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -193,7 +193,7 @@ const getSalesByBuilding: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = "WHERE Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND StageName = 'Closed Won'"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -219,7 +219,7 @@ const getSalesByCommunity: ToolDefinition = {
     let where = "WHERE Building_Name__c != null AND StageName = 'Closed Won'"
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -242,7 +242,7 @@ const getSalesByPerson: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = "WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won'"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -263,7 +263,7 @@ const getSalesByChannel: ToolDefinition = {
     const period = params.period as string | undefined
     let where = "WHERE cm_Lead_Channel__c != null AND StageName = 'Closed Won'"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT cm_Lead_Channel__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY cm_Lead_Channel__c ORDER BY SUM(Amount) DESC`
+    const query = `SELECT cm_Lead_Channel__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Lead_Channel__c ORDER BY SUM(Net_Amount__c) DESC`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -284,7 +284,7 @@ const getPipeline: ToolDefinition = {
     const community = params.community as string | undefined
     let where = "WHERE IsClosed = false"
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
-    const query = `SELECT StageName, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY StageName ORDER BY COUNT(Id) DESC`
+    const query = `SELECT StageName, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY StageName ORDER BY COUNT(Id) DESC`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -428,7 +428,7 @@ const getSalesByBedroom: ToolDefinition = {
     const period = params.period as string | undefined
     let where = "WHERE Sales_Room__c != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Sales_Room__c ORDER BY SUM(Amount) DESC`
+    const query = `SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -451,7 +451,7 @@ const getSalesByAccount: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = "WHERE Account.Name != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT Account.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -476,7 +476,7 @@ const getAvgDealValue: ToolDefinition = {
     if (stage === 'won') where += ' AND IsWon = true'
     else if (stage === 'lost') where += ' AND IsWon = false'
     where += dateFilter('CloseDate', period)
-    const query = `SELECT AVG(Amount) avgVal, COUNT(Id) cnt FROM Opportunity ${where}`
+    const query = `SELECT AVG(Net_Amount__c) avgVal, COUNT(Id) cnt FROM Opportunity ${where}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -766,7 +766,7 @@ const getSalesByMonth: ToolDefinition = {
     if (stage === 'won') where += ' AND IsWon = true'
     else if (stage === 'lost') where += ' AND IsWon = false'
     if (year) where += dateFilter('CloseDate', year)
-    const query = `SELECT CALENDAR_MONTH(CloseDate) month, CALENDAR_YEAR(CloseDate) year, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY CALENDAR_YEAR(CloseDate), CALENDAR_MONTH(CloseDate) ORDER BY CALENDAR_YEAR(CloseDate), CALENDAR_MONTH(CloseDate)`
+    const query = `SELECT CALENDAR_MONTH(CloseDate) month, CALENDAR_YEAR(CloseDate) year, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY CALENDAR_YEAR(CloseDate), CALENDAR_MONTH(CloseDate) ORDER BY CALENDAR_YEAR(CloseDate), CALENDAR_MONTH(CloseDate)`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -787,7 +787,7 @@ const getWinRate: ToolDefinition = {
     const period = params.period as string | undefined
     let where = 'WHERE IsClosed = true'
     where += dateFilter('CloseDate', period)
-    const query = `SELECT IsWon, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY IsWon`
+    const query = `SELECT IsWon, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY IsWon`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -810,7 +810,7 @@ const getSalesBySource: ToolDefinition = {
     const limit = (params.limit as number) || 15
     let where = "WHERE LeadSource != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT LeadSource, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY LeadSource ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT LeadSource, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY LeadSource ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1032,7 +1032,7 @@ const getSalesByAgency: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = "WHERE cm_Agency_Name__r.Name != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT cm_Agency_Name__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY cm_Agency_Name__r.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT cm_Agency_Name__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Agency_Name__r.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1053,9 +1053,9 @@ const getSalesByAgent: ToolDefinition = {
   execute: async (params) => {
     const period = params.period as string | undefined
     const limit = (params.limit as number) || 10
-    let where = "WHERE cm_Agent_Name__r.Name != null AND IsWon = true"
+    let where = "WHERE cm_Agent_Name__r.Name != null AND IsWon = true AND Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT cm_Agent_Name__r.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY cm_Agent_Name__r.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT cm_Agent_Name__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Agent_Name__r.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1076,7 +1076,7 @@ const getBookingTrend: ToolDefinition = {
     const year = params.year as string | undefined
     let where = "WHERE Property_Booked_Date__c != null"
     if (year) where += dateFilter('Property_Booked_Date__c', year)
-    const query = `SELECT CALENDAR_MONTH(Property_Booked_Date__c) month, CALENDAR_YEAR(Property_Booked_Date__c) year, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY CALENDAR_YEAR(Property_Booked_Date__c), CALENDAR_MONTH(Property_Booked_Date__c) ORDER BY CALENDAR_YEAR(Property_Booked_Date__c), CALENDAR_MONTH(Property_Booked_Date__c)`
+    const query = `SELECT CALENDAR_MONTH(Property_Booked_Date__c) month, CALENDAR_YEAR(Property_Booked_Date__c) year, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY CALENDAR_YEAR(Property_Booked_Date__c), CALENDAR_MONTH(Property_Booked_Date__c) ORDER BY CALENDAR_YEAR(Property_Booked_Date__c), CALENDAR_MONTH(Property_Booked_Date__c)`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1097,7 +1097,7 @@ const getTopCustomersByTransaction: ToolDefinition = {
   execute: async (params) => {
     const minTransactions = (params.minTransactions as number) || 1
     const limit = (params.limit as number) || 10
-    const query = `SELECT Account.Name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE Account.Name != null AND IsWon = true GROUP BY Account.Name HAVING COUNT(Id) >= ${minTransactions} ORDER BY COUNT(Id) DESC LIMIT ${limit}`
+    const query = `SELECT Account.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Account.Name != null AND IsWon = true GROUP BY Account.Name HAVING COUNT(Id) >= ${minTransactions} ORDER BY COUNT(Id) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -1588,7 +1588,7 @@ const getAdvisorPerformance: ToolDefinition = {
     const limit = (params.limit as number) || 10
     let where = "WHERE cm_Sales_Person__r.Name != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT cm_Sales_Person__r.Name advisor, COUNT(Id) deals, SUM(Amount) revenue, AVG(Amount) avgDeal FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT cm_Sales_Person__r.Name advisor, COUNT(Id) deals, SUM(Net_Amount__c) revenue, AVG(Net_Amount__c) avgDeal FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       const body = formatResult(result)
@@ -2086,7 +2086,7 @@ const getTopCustomersByRevenue: ToolDefinition = {
   execute: async (params) => {
     const limit = (params.limit as number) || 10
     try {
-      const r = await soql(`SELECT Account.Name name, SUM(Amount) total, COUNT(Id) cnt FROM Opportunity WHERE Account.Name != null AND IsWon = true AND Amount != null GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`)
+      const r = await soql(`SELECT Account.Name name, SUM(Net_Amount__c) total, COUNT(Id) cnt FROM Opportunity WHERE Account.Name != null AND IsWon = true AND Amount != null GROUP BY Account.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`)
       if (!r.records.length) return null
 
       return {
@@ -2122,8 +2122,8 @@ const getWinLossComparison: ToolDefinition = {
         dateFilter = ` AND CloseDate >= ${qStart} AND CloseDate <= ${qEnd}`
       }
 
-      const q1 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true${dateFilter}`
-      const q2 = `SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsClosed = true AND IsWon = false${dateFilter}`
+      const q1 = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true${dateFilter}`
+      const q2 = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsClosed = true AND IsWon = false${dateFilter}`
       const [won, lost] = await Promise.all([soql(q1), soql(q2)])
 
       const w = won.records[0] ?? {}
@@ -2240,7 +2240,7 @@ const getSalesByQuarter: ToolDefinition = {
       const safeName = community.replace(/'/g, "")
       where += ` AND (Building_Name__c LIKE '%${safeName}%' OR Building_Community__c LIKE '%${safeName}%')`
     }
-    const query = `SELECT QUARTER(CloseDate) quarter, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY QUARTER(CloseDate) ORDER BY QUARTER(CloseDate)`
+    const query = `SELECT QUARTER(CloseDate) quarter, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY QUARTER(CloseDate) ORDER BY QUARTER(CloseDate)`
     try {
       const result = await soql(query)
       if (result.records.length === 0) {
@@ -2277,8 +2277,8 @@ const compareYearsByProject: ToolDefinition = {
       if (safeName) {
         // Project-specific comparison — try both Building_Name__c and Building_Community__c
         const communityFilter = `(Building_Name__c LIKE '%${safeName}%' OR Building_Community__c LIKE '%${safeName}%')`
-        const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year1}`)
-        const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year2}`)
+        const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year1}`)
+        const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true AND ${communityFilter} AND CALENDAR_YEAR(CloseDate) = ${year2}`)
         const d1 = q1.records[0] || { cnt: 0, total: 0 }
         const d2 = q2.records[0] || { cnt: 0, total: 0 }
         const amt1 = (d1.total as number) ? formatAED(d1.total as number) : 'AED 0'
@@ -2289,8 +2289,8 @@ const compareYearsByProject: ToolDefinition = {
         return { context, citation: { documentName: 'Salesforce (live CRM)' } }
       }
       // No community specified — compare by all projects (exclude placeholders)
-      const q1 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
-      const q2 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Building_Name__c ORDER BY SUM(Amount) DESC`)
+      const q1 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year1} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC`)
+      const q2 = await soql(`SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND CALENDAR_YEAR(CloseDate) = ${year2} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC`)
       const map1 = new Map<string, { cnt: number; total: number }>()
       const map2 = new Map<string, { cnt: number; total: number }>()
       for (const r of q1.records) map1.set(r.Building_Name__c as string, { cnt: r.cnt as number, total: r.total as number })
@@ -2323,7 +2323,7 @@ const getCustomerBreakdown: ToolDefinition = {
     const limit = (params.limit as number) || 20
     let where = "WHERE Account.Name != null AND IsWon = true AND Amount != null"
     where += dateFilter('CloseDate', period)
-    const query = `SELECT Account.Name name, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Amount) DESC LIMIT ${limit}`
+    const query = `SELECT Account.Name name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Account.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
       if (result.records.length === 0) return { context: 'No customer data found.', citation: { documentName: 'Salesforce (live CRM)' } }
@@ -2465,7 +2465,7 @@ const getSalesByCommunityAndBedroom: ToolDefinition = {
     }
     if (year) where += ` AND CALENDAR_YEAR(CloseDate) = ${year}`
     else if (period) where += dateFilter('CloseDate', period)
-    const query = `SELECT Building_Name__c, Sales_Room__c, COUNT(Id) cnt, SUM(Amount) total FROM Opportunity ${where} GROUP BY Building_Name__c, Sales_Room__c ORDER BY Building_Name__c, SUM(Amount) DESC`
+    const query = `SELECT Building_Name__c, Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Building_Name__c, Sales_Room__c ORDER BY Building_Name__c, SUM(Net_Amount__c) DESC`
     try {
       const result = await soql(query)
       if (result.records.length === 0) return { context: 'No matching records found.', citation: { documentName: 'Salesforce (live CRM)' } }
@@ -2508,8 +2508,8 @@ const compareMonths: ToolDefinition = {
       return { context: `Could not parse month names. Use format like "June 2026" or "Jul".`, citation: { documentName: 'Salesforce (live CRM)' } }
     }
     try {
-      const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true${m1Filter}`)
-      const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Amount) total FROM Opportunity WHERE IsWon = true${m2Filter}`)
+      const q1 = await soql(`SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true${m1Filter}`)
+      const q2 = await soql(`SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE IsWon = true${m2Filter}`)
       const d1 = q1.records[0] || { cnt: 0, total: 0 }
       const d2 = q2.records[0] || { cnt: 0, total: 0 }
       const amt1 = (d1.total as number) ? formatAED(d1.total as number) : 'AED 0'
