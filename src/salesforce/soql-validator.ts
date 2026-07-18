@@ -90,10 +90,10 @@ const FIX_PATTERNS: FixPattern[] = [
     replacement: "LIKE '$1'",
   },
 
-  // 8. LIMIT on aggregate without GROUP BY — strip LIMIT (keep LIMIT when GROUP BY is present)
+  // 8. LIMIT on aggregate queries — strip LIMIT (fetch all groups for accurate totals)
   {
-    description: 'Removed LIMIT from aggregate query without GROUP BY',
-    pattern: /^(?!.*\bGROUP\s+BY\b)(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
+    description: 'Removed LIMIT from aggregate query',
+    pattern: /^(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
     replacement: '$1',
   },
 ]
@@ -353,13 +353,13 @@ export function parseSoqlError(errorContent: string): SoqlErrorContext {
   // Parse "non-grouped query that uses overall aggregate functions cannot also use LIMIT"
   if (errorContent.includes('LIMIT') && (errorContent.includes('aggregate') || errorContent.includes('non-grouped'))) {
     suggestions.push(
-      'LIMIT cannot be used with aggregate functions (COUNT, SUM, AVG) without GROUP BY — VERIFIED:',
+      'LIMIT cannot be used with aggregate functions (COUNT, SUM, AVG) — VERIFIED:',
       '  ✅ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sold_By_Nshama__c = \'NEW SALE\'',
       '  ❌ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ... LIMIT 10',
-      'Either remove LIMIT or add GROUP BY to make it a grouped query.'
+      'Fetch ALL groups for accurate totals. Only use LIMIT for non-aggregate display queries.'
     )
     return {
-      message: 'LIMIT not allowed with aggregate functions without GROUP BY',
+      message: 'LIMIT not allowed with aggregate functions',
       suggestions,
     }
   }
@@ -398,7 +398,7 @@ export function parseSoqlError(errorContent: string): SoqlErrorContext {
       'Date literals must be UNQUOTED: WHERE Date >= 2026-01-01 (not \'2026-01-01\')',
       'Building_Community__c is NOT groupable on Opportunity — use Building_Name__c or Property_Inventory__c instead.',
       'Ensure no duplicate WHERE/AND clauses.',
-      'Remove LIMIT from aggregate queries without GROUP BY.',
+      'Remove LIMIT from aggregate queries — fetch all groups for accurate totals.',
     ],
   }
 }

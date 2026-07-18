@@ -8,6 +8,16 @@
 import { ALLOWED_OBJECTS } from './schema'
 import { validateSoql } from './soql-validator'
 
+// ─── Non-Groupable Fields ────────────────────────────────────────────────────
+// Fields that CANNOT be used in GROUP BY on Opportunity/SObject.
+// If LLM tries to GROUP BY these, the builder should strip GROUP BY and log a warning.
+export const NON_GROUPABLE_FIELDS: Record<string, Set<string>> = {
+  Opportunity: new Set([
+    'Building_Community__c',                        // platform restriction
+    'Account.Country_of_Residence_Billing_country__c', // cross-object, not groupable
+  ]),
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type SoqlOperator =
@@ -21,8 +31,8 @@ export interface SoqlFilter {
   field: string
   /** Comparison operator */
   op: SoqlOperator
-  /** Value for single-value operators (=, !=, >, <, >=, <=, LIKE, NOT LIKE) */
-  value?: string | number | boolean
+  /** Value for single-value operators (=, !=, >, <, >=, <=, LIKE, NOT LIKE). null for IS NULL / IS NOT NULL style checks. */
+  value?: string | number | boolean | null
   /** Values for multi-value operators (IN, NOT IN, INCLUDES, EXCLUDES) */
   values?: (string | number)[]
 }
@@ -129,7 +139,13 @@ export function buildSoql(spec: SoqlQuerySpec): string {
 
   // ── GROUP BY ──
   if (spec.groupBy && spec.groupBy.length > 0) {
-    parts.push(`GROUP BY ${spec.groupBy.join(', ')}`)
+    const nonGroupable = NON_GROUPABLE_FIELDS[objectApi]
+    const validGroupBy = nonGroupable
+      ? spec.groupBy.filter(f => !nonGroupable.has(f))
+      : spec.groupBy
+    if (validGroupBy.length > 0) {
+      parts.push(`GROUP BY ${validGroupBy.join(', ')}`)
+    }
   }
 
   // ── HAVING ──
@@ -147,14 +163,13 @@ export function buildSoql(spec: SoqlQuerySpec): string {
 
   // ── LIMIT ──
   const hasAggregate = spec.aggregations && spec.aggregations.length > 0
-  const hasGroupBy = spec.groupBy && spec.groupBy.length > 0
 
-  if (hasAggregate && !hasGroupBy) {
-    // Aggregate without GROUP BY → no LIMIT (Salesforce restriction)
-    // Don't add LIMIT
+  if (hasAggregate) {
+    // Aggregate queries NEVER get LIMIT — fetch all groups for accurate totals
+    // (only the LLM decides display limits in the final answer)
   } else if (spec.limit !== undefined && spec.limit > 0) {
     parts.push(`LIMIT ${Math.min(spec.limit, 500)}`)
-  } else if (!hasAggregate) {
+  } else {
     // Non-aggregate → default LIMIT 200
     parts.push('LIMIT 200')
   }
@@ -215,9 +230,12 @@ function buildFilterCondition(filter: SoqlFilter): string {
   }
 }
 
-function formatValue(value: string | number | boolean): string {
+function formatValue(value: string | number | boolean | null): string {
+  if (value === null || value === undefined) return 'null'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return value ? 'true' : 'false'
+  // SOQL date literals must be UNQUOTED: 2026-01-01 not '2026-01-01'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value)
   // String — escape single quotes
   const escaped = String(value).replace(/'/g, "\\'")
   return `'${escaped}'`

@@ -1,6 +1,7 @@
 import { chatJson } from '@/lib/ai/provider'
 import { soql, describeObject, type FieldInfo } from './client'
 import { ALLOWED_OBJECTS, FIELD_HINTS } from './schema'
+import { NON_GROUPABLE_FIELDS } from './soql-query-builder'
 import { SALESFORCE_GLOSSARY, SALESFORCE_ANSWER_NOTE } from './glossary'
 import type { ToolResult } from './tools'
 import { validateAdHocSpec, type ValidatedAdHocSpec } from './schemas'
@@ -28,11 +29,11 @@ function sanitizeSoql(raw: string): string | null {
   if (!ALLOWED_OBJECTS.some((o) => o.toLowerCase() === fromMatch[1].toLowerCase())) return null
 
   const hasAggregate = /\b(count|sum|avg|min|max)\s*\(/i.test(q)
-  const hasGroupBy = /\bgroup\s+by\b/i.test(q)
 
-  if (hasAggregate && !hasGroupBy) {
+  if (hasAggregate) {
+    // Aggregate queries NEVER get LIMIT — fetch all groups for accurate totals
     q = q.replace(/\s+limit\s+\d+\s*$/i, '')
-  } else if (!hasAggregate && !/\blimit\s+\d+/i.test(q)) {
+  } else if (!/\blimit\s+\d+/i.test(q)) {
     q += ' LIMIT 200'
   }
   return q
@@ -223,8 +224,8 @@ export async function executeAdHocSpec(query: string): Promise<ToolResult | null
       soqlQuery += ` ORDER BY ${aggFunc} DESC`
     }
 
-    // Add LIMIT (allowed with GROUP BY, blocked for aggregate-only queries)
-    if (spec.limit && (!spec.aggregate || spec.groupBy)) {
+    // Add LIMIT — NEVER for aggregate queries (fetch all groups for accurate totals)
+    if (!spec.aggregate && spec.limit) {
       soqlQuery += ` LIMIT ${spec.limit}`
     } else if (!spec.aggregate && !soqlQuery.match(/LIMIT/i)) {
       soqlQuery += ' LIMIT 200'

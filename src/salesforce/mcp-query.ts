@@ -215,9 +215,12 @@ SOQL SYNTAX RULES (CRITICAL — these are VERIFIED against live CRM data):
    ❌ WHERE NOT Name LIKE '%Miscellaneous%' AND NOT Name LIKE '%RTL%'
    ❌ WHERE Name NOT LIKE '%Miscellaneous%'
 
-2. Aggregates (COUNT, SUM) must NOT have LIMIT unless GROUP BY is present:
-   ✅ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ...
-   ❌ SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ... LIMIT 10
+2. LIMIT RULE (aggregate queries):
+   - LIMIT is FORBIDDEN on any query with aggregate functions (COUNT, SUM, AVG, MIN, MAX), EVEN WITH GROUP BY. Fetch ALL groups so totals are complete.
+   - Only use LIMIT when the user explicitly asks for a subset: "top 5", "top 10", "first 3".
+   - ✅ SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ... GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC
+   - ❌ SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE ... GROUP BY Building_Name__c LIMIT 10
+   - ✅ SELECT Building_Name__c, COUNT(Id) cnt FROM Opportunity WHERE ... GROUP BY Building_Name__c ORDER BY COUNT(Id) DESC LIMIT 5  (user asked "top 5 buildings")
 
 3. No stray WHERE/AND:
    ✅ WHERE field1 = 'value1' AND field2 = 'value2'
@@ -232,6 +235,28 @@ SOQL SYNTAX RULES (CRITICAL — these are VERIFIED against live CRM data):
    ✅ SELECT Building_Name__c, COUNT(Id) cnt FROM Opportunity GROUP BY Building_Name__c
    ❌ SELECT Building_Community__c, COUNT(Id) cnt FROM Opportunity GROUP BY Building_Community__c
    (Use Property_Inventory__c for community-level GROUP BY instead)
+
+6. NON-GROUPABLE FIELDS — some fields cannot be used in GROUP BY on Opportunity:
+   ❌ Country_of_Residence_Billing_country__c (NOT groupable in SOQL)
+   ❌ Building_Community__c (NOT groupable in SOQL)
+   For these: fetch ALL rows with SELECT field, WHERE field != null, then count/sum in your reasoning.
+   Example: SELECT Account.Country_of_Residence_Billing_country__c FROM Opportunity WHERE Account.Country_of_Residence_Billing_country__c != null AND ... LIMIT 200
+   Then tally the results yourself: count how many rows mention each country.
+
+7. COUNTRY FIELD MAPPING (CRITICAL — use the correct field for each question type):
+   - Individual buyer nationality → Account.cm_Nationality__pc (groupable in SOQL)
+     Use when question asks about: buyer nationality, customer nationality, where buyers are from
+   - Corporate buyer country → Account.cm_Country_Of_Incorporation__c (groupable in SOQL)
+     Use when question asks about: company country, corporate buyer origin
+   - Explicit residence/country of residence → Account.Country_of_Residence_Billing_country__c (NOT groupable — fetch all rows and group in-app)
+     Use when question explicitly says: "country of residence", "residence country", "where do they reside"
+   - Billing country (Account standard field) → Account.BillingCountry (groupable)
+     Use for general Account-level country queries
+
+8. UI DISPLAY LIMITS — when presenting results to the user:
+   - If user asks "top N" or "show N", LIMIT the ORDER BY query to N rows
+   - ALWAYS compute totals, percentages, and rankings from the FULL query result (before any display limit), NOT from the displayed subset
+   - Example: if query returned 50 rows and you show top 10, the total should be sum of all 50 rows, not just the 10 shown
 
 VERIFIED QUERY PATTERNS (copy these exactly for similar questions):
 
@@ -376,7 +401,9 @@ VERIFIED ACCOUNT QUERY (tested against live CRM):
 SELECT COUNT(Id) cnt FROM Account WHERE (NOT Name LIKE 'Test%') AND (NOT Name LIKE 'Do not update%') AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%Contractor%')
 
 SOQL GUIDANCE:
-- Always include a WHERE clause and LIMIT to keep queries efficient
+- Always include a WHERE clause to keep queries efficient
+- For aggregate queries (COUNT, SUM, AVG), NEVER add LIMIT — fetch all groups for accurate totals
+- Only add LIMIT when the user explicitly asks for a subset ("top N", "show N")
 - For "how much/total" style questions, use COUNT(Id) and SUM(Net_Amount__c) in one query
 - For fuzzy name matching (project/community/unit codes the user typed casually), use LIKE '%name%' not exact =
 - Default sales value = Net_Amount__c (NOT Amount); default date = Order_Date__c (NOT CloseDate)
