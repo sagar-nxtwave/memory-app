@@ -2,6 +2,9 @@ import { soql, type SoqlResult } from '../client'
 import { currentYear } from '../today'
 import { formatAED } from '../answer-formatter'
 
+// ── Mandatory sales exclusions — applied to all Opportunity queries for accurate counts ──
+const SALES_EXCLUSIONS = `Sold_By_Nshama__c = 'NEW SALE' AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') AND (NOT Name LIKE '%PK%') AND (NOT Name LIKE '%Plot%') AND (NOT Building_Name__c LIKE '%Al Qudra%') AND (NOT Building_Name__c LIKE '%parking%') AND Amount != 1 AND CloseDate != 2032-12-28`
+
 export interface ToolResult {
   context: string
   citation: { documentName: string }
@@ -165,11 +168,11 @@ const getSalesSummary: ToolDefinition = {
     const period = params.period as string | undefined
     const stage = (params.stage as string) || 'won'
     const community = params.community as string | undefined
-    let where = 'WHERE IsClosed = true'
+    let where = `WHERE ${SALES_EXCLUSIONS}`
     if (stage === 'won') where += ' AND IsWon = true'
     else if (stage === 'lost') where += ' AND IsWon = false'
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
-    where += dateFilter('CloseDate', period)
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where}`
     try {
       const result = await soql(query)
@@ -191,8 +194,8 @@ const getSalesByBuilding: ToolDefinition = {
   execute: async (params) => {
     const period = params.period as string | undefined
     const limit = (params.limit as number) || 10
-    let where = "WHERE Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings') AND StageName = 'Closed Won'"
-    where += dateFilter('CloseDate', period)
+    let where = `WHERE ${SALES_EXCLUSIONS} AND Building_Name__c != null AND Building_Name__c NOT IN ('Master Community', 'All Buildings')`
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
@@ -216,9 +219,9 @@ const getSalesByCommunity: ToolDefinition = {
     const period = params.period as string | undefined
     const community = params.community as string | undefined
     const limit = (params.limit as number) || 10
-    let where = "WHERE Building_Name__c != null AND StageName = 'Closed Won'"
+    let where = `WHERE ${SALES_EXCLUSIONS} AND Building_Name__c != null`
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
-    where += dateFilter('CloseDate', period)
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT Building_Name__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Building_Name__c ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
@@ -240,8 +243,8 @@ const getSalesByPerson: ToolDefinition = {
   execute: async (params) => {
     const period = params.period as string | undefined
     const limit = (params.limit as number) || 10
-    let where = "WHERE cm_Sales_Person__r.Name != null AND StageName = 'Closed Won'"
-    where += dateFilter('CloseDate', period)
+    let where = `WHERE ${SALES_EXCLUSIONS} AND cm_Sales_Person__r.Name != null`
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT cm_Sales_Person__r.Name, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Sales_Person__r.Name ORDER BY SUM(Net_Amount__c) DESC LIMIT ${limit}`
     try {
       const result = await soql(query)
@@ -261,8 +264,8 @@ const getSalesByChannel: ToolDefinition = {
   keywords: ['sales by channel', 'channel sales', 'lead channel', 'direct vs agent', 'which channel', 'how did they find'],
   execute: async (params) => {
     const period = params.period as string | undefined
-    let where = "WHERE cm_Lead_Channel__c != null AND StageName = 'Closed Won'"
-    where += dateFilter('CloseDate', period)
+    let where = `WHERE ${SALES_EXCLUSIONS} AND cm_Lead_Channel__c != null`
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT cm_Lead_Channel__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY cm_Lead_Channel__c ORDER BY SUM(Net_Amount__c) DESC`
     try {
       const result = await soql(query)
@@ -282,7 +285,7 @@ const getPipeline: ToolDefinition = {
   keywords: ['pipeline', 'open deals', 'deals in progress', 'what stages', 'active deals', 'pending'],
   execute: async (params) => {
     const community = params.community as string | undefined
-    let where = "WHERE IsClosed = false"
+    let where = `WHERE ${SALES_EXCLUSIONS} AND IsClosed = false`
     if (community) where += ` AND (Building_Name__c LIKE '%${community}%' OR Building_Community__c LIKE '%${community}%')`
     const query = `SELECT StageName, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY StageName ORDER BY COUNT(Id) DESC`
     try {
@@ -307,11 +310,10 @@ const getRecentDeals: ToolDefinition = {
     const limit = (params.limit as number) || 10
     const stage = (params.stage as string) || 'all'
     const period = params.period as string | undefined
-    let where = ''
-    if (stage === 'won') where = "WHERE IsWon = true"
-    else if (stage === 'lost') where = "WHERE IsWon = false"
-    else where = "WHERE 1=1"
-    where += dateFilter('CloseDate', period)
+    let where = `WHERE ${SALES_EXCLUSIONS}`
+    if (stage === 'won') where += ' AND IsWon = true'
+    else if (stage === 'lost') where += ' AND IsWon = false'
+    where += dateFilter('Order_Date__c', period)
     const query = `SELECT Name, StageName, Amount, CloseDate, Building_Name__c, Building_Community__c, cm_Sales_Person__r.Name FROM Opportunity ${where} ORDER BY CreatedDate DESC LIMIT ${limit}`
     console.log(`[salesforce:tool] get-recent-deals executing: ${query}`)
     try {

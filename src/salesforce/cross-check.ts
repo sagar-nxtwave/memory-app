@@ -203,7 +203,23 @@ function buildPropertyStatusFilter(question: string): string | null {
   if (/\breserved\b/.test(q)) return "Property_Status__c = 'Reserved'"
   if (/\bbooked\b/.test(q)) return "Property_Status__c = 'Booked'"
   if (/\bleased?\b/.test(q)) return "Property_Status__c = 'Leased'"
+  if (/\bonline\s+blocked\b/.test(q)) return "Property_Status__c = 'Online Blocked'"
   if (/\bblocked\b/.test(q)) return "Property_Status__c = 'Blocked'"
+  return null
+}
+
+function buildPropertyTypeFilter(question: string): string | null {
+  const q = question.toLowerCase()
+  if (/\bvilla(s)?\b/.test(q)) return "Type__c = 'Villa'"
+  if (/\bapartment(s)?\b/.test(q)) return "Type__c = 'Apartment'"
+  if (/\btownhouse(s)?\b/.test(q)) return "Type__c = 'Townhouse'"
+  return null
+}
+
+function buildPropertyUsageFilter(question: string): string | null {
+  const q = question.toLowerCase()
+  if (/\b(sale\s+unit|for\s+sale)\b/.test(q)) return "Property_Usage__c = 'Sale'"
+  if (/\b(rental?\s+unit|for\s+rent)\b/.test(q)) return "Property_Usage__c = 'Rent'"
   return null
 }
 
@@ -240,6 +256,36 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
       else if (isLost) where += " AND IsClosed = true AND IsWon = false"
       else if (isCancelled) where += " AND Order_Stattus__c IN ('BOOKED_CANCELLED', 'SMT_CANCELLED', 'PMT_CANCELLED', 'RESERVED_CANCELLED', 'CANCELLED')"
       else if (isTransfer) where += " AND Order_Stattus__c = 'TRANSFERED'"
+
+      // Milestone / Handover filters
+      const isHandover = /\b(handover|handed?\s*over|handover\s*completed)\b/.test(q)
+      const isBlockedByLegal = /\bblocked\s+by\s+legal\b/.test(q)
+      const isPendingProjects = /\bpending\s+(with\s+)?projects?\b/.test(q)
+      const isReadyForInspection = /\bready\s+for\s+inspection\b/.test(q)
+      const isQualityApproved = /\bquality\s+inspection\s+approved\b/.test(q)
+      const isCustomerInformed = /\bcustomer\s+informed\b/.test(q)
+      const isDeepCleaning = /\bdeep\s+cleaning\b/.test(q)
+      const isKeyRelease = /\bkey\s+release\b/.test(q)
+
+      if (isHandover) where += " AND (Milestone_Current_Status__c = 'Handover Completed' OR Milestone_Current_Status__c = 'Handover completed PHP')"
+      else if (isBlockedByLegal) where += " AND Milestone_Current_Status__c = 'Blocked by Legal'"
+      else if (isPendingProjects) where += " AND Milestone_Current_Status__c = 'Pending with Projects'"
+      else if (isReadyForInspection) where += " AND Milestone_Current_Status__c = 'Ready for inspection'"
+      else if (isQualityApproved) where += " AND Milestone_Current_Status__c = 'Quality inspection approved'"
+      else if (isCustomerInformed) where += " AND Milestone_Current_Status__c = 'Customer informed'"
+      else if (isDeepCleaning) where += " AND Milestone_Current_Status__c LIKE '%Deep Cleaning%'"
+      else if (isKeyRelease) where += " AND Milestone_Current_Status__c LIKE '%Key Release%'"
+
+      // Mortgage filters
+      const isNotMortgaged = /\bnot\s+mortgaged\b/.test(q)
+      const isMortgageValid = /\bvalid\s+mortgage\b/.test(q)
+      const isMortgageTerminated = /\bterminated\s+mortgage\b/.test(q)
+      const isMortgaged = /\b(mortgage|mortgaged)\b/.test(q) && !isNotMortgaged && !isMortgageValid && !isMortgageTerminated
+
+      if (isNotMortgaged) where += " AND Current_Mortgage_Status__c = 'Not Mortgaged'"
+      else if (isMortgageValid) where += " AND Current_Mortgage_Status__c = 'Valid'"
+      else if (isMortgageTerminated) where += " AND Current_Mortgage_Status__c = 'Terminated'"
+      else if (isMortgaged) where += " AND Current_Mortgage_Status__c != null"
 
       // Date filters: relative dates first, then quarter, then month+year, then year
       const relative = extractRelativeDate(question)
@@ -303,6 +349,10 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
     case 'Case': {
       const caseFilter = buildCaseSubFilter(question)
       let where = caseFilter
+      // Filter to parent cases only (CRITICAL: child cases inflate counts)
+      if (/\b(parent\s+case|total\s+cases?|cases?|open\s+cases?|escalat)/i.test(q)) {
+        where += " AND Case_Type__c = 'Parent'"
+      }
       const buildingFilter = extractBuildingFilter(question)
       if (buildingFilter) {
         const pattern = buildingFilter.match(/LIKE '(.+?)'/)?.[1] || ''
@@ -332,6 +382,10 @@ function buildVerifyQuery(objectName: string, question: string): string | null {
       }
       const statusFilter = buildPropertyStatusFilter(question)
       if (statusFilter) where += ` AND ${statusFilter}`
+      const typeFilter = buildPropertyTypeFilter(question)
+      if (typeFilter) where += ` AND ${typeFilter}`
+      const usageFilter = buildPropertyUsageFilter(question)
+      if (usageFilter) where += ` AND ${usageFilter}`
       return `SELECT COUNT(Id) cnt FROM Property_Inventory__c WHERE ${where}`
     }
 

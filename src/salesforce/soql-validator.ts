@@ -90,10 +90,11 @@ const FIX_PATTERNS: FixPattern[] = [
     replacement: "LIKE '$1'",
   },
 
-  // 8. LIMIT on aggregate queries — strip LIMIT (fetch all groups for accurate totals)
+  // 8. LIMIT on aggregate queries WITHOUT GROUP BY — strip LIMIT (fetch all groups for accurate totals)
+  // Skip queries with GROUP BY — those need LIMIT to cap result count (e.g., "top 5 brokers")
   {
     description: 'Removed LIMIT from aggregate query',
-    pattern: /^(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
+    pattern: /^(?!.*\bGROUP\s+BY\b)(.*\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(.*?\).*?)\s+LIMIT\s+\d+\s*$/i,
     replacement: '$1',
   },
 ]
