@@ -79,8 +79,8 @@ export function validateAnswerAgainstData(answer: string, rawData: string): Answ
   const hallucinatedNumbers: string[] = []
 
   if (!rawData || rawData.trim().length === 0) {
-    // Nothing to validate against — can't flag hallucination without a baseline.
-    return { valid: true, issues: [], hallucinatedTerms: [], hallucinatedNumbers: [] }
+    // No source data to validate against — any answer with numbers is likely fabricated.
+    return { valid: false, issues: ['No source data to validate against — answer may be fabricated'], hallucinatedTerms: [], hallucinatedNumbers: [] }
   }
 
   const rawNormalized = normalize(rawData)
@@ -117,9 +117,8 @@ export function validateAnswerAgainstData(answer: string, rawData: string): Answ
     issues.push(`Answer contains ${hallucinatedNumbers.length} number(s) not found in the source data: ${hallucinatedNumbers.slice(0, 8).join(', ')}`)
   }
 
-  // Valid unless we found a meaningful amount of unexplained proper nouns (the strongest
-  // hallucination signal — e.g. fabricated community/customer names).
-  const valid = hallucinatedTerms.length === 0
+  // Valid only if no unexplained proper nouns AND a reasonable number of unexplained numbers.
+  const valid = hallucinatedTerms.length === 0 && hallucinatedNumbers.length <= 3
 
   return { valid, issues, hallucinatedTerms, hallucinatedNumbers }
 }

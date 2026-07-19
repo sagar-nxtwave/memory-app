@@ -1,5 +1,5 @@
 import { getSalesforceConfig, type SalesforceConfig } from './config'
-import { validateSOQL, fixDuplicateAliases } from './guardrails'
+import { validateSOQL, fixDuplicateAliases, enforcePropertyInventoryExclusions } from './guardrails'
 
 // Thin Salesforce REST client: OAuth client_credentials token (cached in-memory) + read-only
 // SOQL queries + object describe (for dynamic field discovery). Auto-refreshes the token once
@@ -103,6 +103,9 @@ export interface SoqlResult {
 
 /** Execute a read-only SOQL query. Throws on query errors so the caller can self-repair. */
 export async function soql(query: string): Promise<SoqlResult> {
+  // Enforce mandatory Property_Inventory__c exclusions before validation
+  query = enforcePropertyInventoryExclusions(query)
+
   // Fix duplicate .Name aliases before validation
   query = fixDuplicateAliases(query)
 

@@ -1015,7 +1015,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                   <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
                 </button>
                 {thinkingOpen && (
-                  <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1">
+                  <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1 max-h-48 overflow-y-auto">
                     {message.thinkingSteps.map((step, i) => {
                       const action = (message.thinkingStepActions ?? [])[i] ?? ''
                       const result = (message.thinkingStepResults ?? [])[i] ?? ''

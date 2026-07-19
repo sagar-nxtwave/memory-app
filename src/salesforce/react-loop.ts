@@ -197,7 +197,15 @@ export async function executeReActLoop(
 
   // Extract final answer from last step
   const lastStep = steps[steps.length - 1]
-  const finalAnswer = lastStep?.observation || 'Unable to compose answer'
+  let finalAnswer = lastStep?.observation || 'Unable to compose answer'
+
+  // Guardrail: if confidence is low and no step returned real data, don't use LLM's composed answer
+  const hasRealData = steps.some(s =>
+    s.action !== 'error' && s.observation !== 'No data returned' && s.observation !== 'Unable to compose answer'
+  )
+  if (confidence === 'low' && !hasRealData) {
+    finalAnswer = 'Unable to retrieve the requested data. Please try rephrasing your question.'
+  }
 
   // Determine confidence based on steps
   if (steps.length === 1 && steps[0].action === 'finish') {

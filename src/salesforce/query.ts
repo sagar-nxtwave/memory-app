@@ -75,7 +75,7 @@ function isVagueFollowUp(query: string): boolean {
 }
 
 // Queries that need the tool matcher (not direct fallback)
-const TOOL_MATCHER_EXCLUSIONS_RE = /\b(cancellation rate|cancel percentage|cancel rate|recent cancelled|cancelled deals|individual vs corporate|customer type|account type|top.*customer.*revenue|highest spending|won vs lost|win.?loss|cases by channel|phone vs email|escalated cases?|case escalat|mortgage status|mortgage type|mortgaged vs|active mortgage|cancellation rate by|sales room|bedroom wise|bedroom data|room wise|call inquiries|call channel|phone inquiries|most selling|what selling|best selling|which project|most popular|bedroom.*breakdown|unit type|breakdown by customer|customer names|quarterly|quarter|project.*compare|compare.*project|bedroom.*year|year.*bedroom|communit)\b/i
+const TOOL_MATCHER_EXCLUSIONS_RE = /\b(cancellation rate|cancel percentage|cancel rate|recent cancelled|cancelled deals|individual vs corporate|customer type|account type|top.*customer.*revenue|highest spending|won vs lost|win.?loss|cases by channel|phone vs email|escalated cases?|case escalat|mortgage status|mortgage type|mortgaged vs|active mortgage|cancellation rate by|sales room|bedroom wise|bedroom data|room wise|call inquiries|call channel|phone inquiries|most selling|what selling|best selling|which project|most popular|bedroom.*breakdown|breakdown.*bedroom|unit type|breakdown by customer|customer names|quarterly|quarter|project.*compare|compare.*project|bedroom.*year|year.*bedroom|communit)\b/i
 
 function needsToolMatcher(query: string): boolean {
   return TOOL_MATCHER_EXCLUSIONS_RE.test(query)
@@ -518,6 +518,10 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
   const q = query.toLowerCase()
   const hasEntity = hasLikelyEntityName(query)
 
+  // Extract community name from query for entity-aware filtering
+  const communityMatch = query.match(/\b(Odessa|Town Square|Camden|Alton|Address Grand Downtown|Flores|Woven|Bayshore|Villa Nova|Serenia|Falcon|Pristine|Anwan|JW Marriott|Damac Hills|DAMAC Hills 2|Damac Lagoons|Business Bay|Dubai Harbour|MBR City|Motor City|Sports City|Dubai Silicon Oasis|Dubai Marina|JBR|Downtown|Palm Jumeirah|Arabian Ranches|The Springs|The Meadows|Emirates Living|Jumeirah Village|Al Barsha|Al Quoz|Business Bay)\b/i)
+  const communityFilter = communityMatch ? communityMatch[1] : null
+
   // Extract "top N" limit from query
   const topMatch = q.match(/\btop\s+(\d+)/)
   const limit = topMatch ? parseInt(topMatch[1], 10) : 20
@@ -714,7 +718,9 @@ async function directFallback(query: string): Promise<SalesforceResult | null> {
 
   // Bedroom/unit type queries — BUT skip multi-filter queries ("deals in X with 3 bedrooms")
   if ((q.includes('bedroom') || q.includes('bhk') || q.includes('unit type') || q.includes('room type')) && !q.includes(' in ') && !q.includes('deals in')) {
-    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity WHERE Sales_Room__c != null AND IsWon = true${TEST_RECORD_AND} GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC`)
+    let where = "WHERE Sales_Room__c != null AND IsWon = true"
+    if (communityFilter) where += ` AND Building_Community__c = '${communityFilter}'`
+    const result = await soql(`SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where}${TEST_RECORD_AND} GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC`)
     return formatDirectResult(result, 'Opportunity')
   }
 

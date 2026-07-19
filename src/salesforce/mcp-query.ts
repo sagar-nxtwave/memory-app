@@ -570,7 +570,7 @@ export async function answerViaMcp(
     const steps: { thought: string; action: string; observation: string; detail?: string }[] = []
     let input = `Question: ${fullQuestion}\n\nReason about the first step to answer this question.`
     let finalAnswer: string | null = null
-    let foundInCrm = true // default optimistic — only set false when the LLM explicitly says so
+    let foundInCrm = false // conservative default — only set true when a tool returns actual data
     let lastAggregateRows: Record<string, unknown>[] | null = null
 
     for (let stepNum = 0; stepNum < MAX_STEPS; stepNum++) {
@@ -589,6 +589,22 @@ export async function answerViaMcp(
       console.log(`[mcp-query] step ${stepNum}: action=${action} thought="${thought.slice(0, 100)}"`)
 
       if (action === 'finish' || answer) {
+        // Guardrail: block finish when no step returned real data — prevent LLM hallucination
+        const hasRealData = steps.some(s =>
+          s.action !== 'error' &&
+          !s.observation.startsWith('The CRM tool') &&
+          !s.observation.startsWith('Something went wrong') &&
+          !s.observation.startsWith('Query syntax') &&
+          !s.observation.startsWith('I had trouble') &&
+          s.observation !== 'No data returned' &&
+          s.observation !== 'No answer composed'
+        )
+        if (!hasRealData && steps.length > 0) {
+          finalAnswer = "I wasn't able to retrieve the requested data from the CRM. Please try rephrasing your question."
+          foundInCrm = false
+          steps.push({ thought, action: 'blocked', observation: finalAnswer })
+          break
+        }
         finalAnswer = answer || "I wasn't able to find a clear answer for that. Please try rephrasing your question."
         if (typeof decision.foundInCrm === 'boolean') foundInCrm = decision.foundInCrm
         steps.push({ thought, action, observation: finalAnswer })

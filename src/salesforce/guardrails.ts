@@ -8,6 +8,32 @@ const COMMENT_PATTERNS = /(--|\/\*|\*\/)/
 const MAX_QUERY_LENGTH = 2000
 const MAX_LIMIT = 500
 
+// Mandatory exclusions for Property_Inventory__c queries — applied programmatically
+// to ensure LLM never misses these filters regardless of skill file compliance.
+const PROPERTY_EXCLUSION_TERMS = ['Miscellaneous', 'Al Qudra', 'Alqudra', 'ALQDR', 'RTL', 'PK', 'Parking', 'Plot', 'Storage', 'Town Square Drive Through', 'Waterfront']
+
+export function enforcePropertyInventoryExclusions(query: string): string {
+  // Only apply to queries on Property_Inventory__c
+  if (!/FROM\s+Property_Inventory__c\b/i.test(query)) return query
+  // Don't double-apply if exclusions already present
+  if (query.includes('NOT Building_Name__c') || query.includes('NOT Location_Code__c')) return query
+
+  const exclusionClauses = PROPERTY_EXCLUSION_TERMS.map(term =>
+    `(NOT Building_Name__c LIKE '%${term}%') AND (NOT Location_Code__c LIKE '%${term}%')`
+  ).join(' AND ')
+
+  // Insert exclusion clauses after the last WHERE condition or after WHERE keyword
+  const whereMatch = query.match(/(WHERE\s+)(.*?)(?:\s+GROUP\s+BY|\s+ORDER\s+BY|\s+LIMIT|$)/i)
+  if (whereMatch) {
+    const existingWhere = whereMatch[2].trim()
+    return query.replace(
+      whereMatch[0],
+      `${whereMatch[1]}${existingWhere} AND ${exclusionClauses}${query.slice(whereMatch[0].length + whereMatch[1].length + whereMatch[2].length)}`
+    )
+  }
+  return query
+}
+
 export interface GuardrailResult {
   safe: boolean
   reason?: string

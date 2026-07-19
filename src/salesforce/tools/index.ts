@@ -424,12 +424,15 @@ const getSalesByBedroom: ToolDefinition = {
   description: 'Get sales broken down by bedroom count/unit type. Use for "sales by bedroom", "3-bedroom sales", "which unit type sells most", "bedroom breakdown".',
   params: [
     { name: 'period', type: 'string', description: 'Time period', required: false },
+    { name: 'community', type: 'string', description: 'Community/project name to filter by', required: false },
   ],
   keywords: ['sales by bedroom', 'bedroom sales', 'unit type', '3 bedroom', '2 bedroom', 'bedroom breakdown', 'bhk'],
   execute: async (params) => {
     const period = params.period as string | undefined
+    const community = params.community as string | undefined
     let where = "WHERE Sales_Room__c != null AND IsWon = true"
     where += dateFilter('CloseDate', period)
+    if (community) where += ` AND Building_Community__c = '${community}'`
     const query = `SELECT Sales_Room__c, COUNT(Id) cnt, SUM(Net_Amount__c) total FROM Opportunity ${where} GROUP BY Sales_Room__c ORDER BY SUM(Net_Amount__c) DESC`
     try {
       const result = await soql(query)
