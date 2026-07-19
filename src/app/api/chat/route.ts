@@ -400,14 +400,40 @@ export async function POST(req: NextRequest) {
           collectStep('Searching the web for supplementary information...', 'info')
         }
       }
-      // ALWAYS try Salesforce — the intent classifier is an LLM call that can be wrong,
-      // especially when documents are present (biases toward documents:true, salesforce:false).
-      // Running Salesforce in parallel ensures CRM questions get answered regardless of
-      // space content. The thinking step is only shown when intent.salesforce was true.
-      let salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
+      let salesforceResult = intent.salesforce ? await answerSalesforceQuery(content, conversationHistory, (step) => {
         try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
         collectStep(step.detail, step.action, step.result)
-      })
+      }) : null
+
+      // Follow-up detection: if the previous assistant message mentioned Salesforce data and the
+      // user's current message is a vague follow-up ("can you do it?", "do it", "run it", "yes"),
+      // treat it as a Salesforce query even if the intent classifier didn't flag it.
+      if (!salesforceResult && conversationHistory.length > 0) {
+        const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant')
+        const isFollowUp = /^(can you |could you |please |yes|sure|go ahead|do it|run it|execute it|go for it)/i.test(content.trim())
+        if (lastAssistant && isFollowUp && (lastAssistant.content.includes('SALESFORCE') || lastAssistant.content.includes('Salesforce'))) {
+          console.log('[chat] detected Salesforce follow-up despite intent=false, re-routing')
+          salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
+            try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
+            collectStep(step.detail, step.action, step.result)
+          })
+        }
+      }
+
+      // Safety net: the intent classifier can miss CRM questions when documents are present
+      // (biases toward documents:true). If Salesforce wasn't tried AND the question matches
+      // common CRM patterns, try it as a last resort. This catches questions like "how many
+      // handedover" or "total sales" that the classifier misrouted to documents.
+      if (!salesforceResult && !intent.salesforce) {
+        const looksLikeCrm = /\b(sales|revenue|deals?|opportunit|pipeline|handover|handed|booked|won|lost|cancel|transfer|mortgage|unit|community|building|broker|agent|customer|account|lead|case|ticket|milestone)\b/i.test(content)
+        if (looksLikeCrm) {
+          console.log('[chat] intent classifier missed CRM question, retrying Salesforce:', content.slice(0, 100))
+          salesforceResult = await answerSalesforceQuery(content, conversationHistory, (step) => {
+            try { sseSend({ type: 'thinking', action: step.action, step: step.detail, result: step.result || undefined }) } catch {}
+            collectStep(step.detail, step.action, step.result)
+          })
+        }
+      }
 
       // Threshold internal citations by rerank relevance (same 0.3 cutoff used for web results) —
       // otherwise a loosely keyword-matched chunk gets cited as a "source" even when the real
