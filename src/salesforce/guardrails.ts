@@ -120,3 +120,55 @@ export function sanitizeSOQLInput(input: string): string {
     .replace(/--/g, '') // Remove SQL comments
     .trim()
 }
+
+/**
+ * Fix duplicate aliases for .Name fields in SELECT clauses.
+ * SOQL auto-aliases multiple .Name fields to "Name", causing MALFORMED_QUERY.
+ * This adds explicit aliases like "agentName", "agencyName" etc.
+ * Handles both __r.Name (cm_Agent_Name__r.Name) and dot-notation (RecordType.Name, Account.Name).
+ */
+export function fixDuplicateAliases(query: string): string {
+  const selectMatch = query.match(/^SELECT\s+(.+?)\s+FROM\b/i)
+  if (!selectMatch) return query
+
+  const selectClause = selectMatch[1]
+  // Match all .Name fields: both __r.Name and dot-notation like Account.Name, RecordType.Name
+  const allNameFields = selectClause.match(/\b\w+(?:__r|\.\w+)\.Name\b/gi)
+  if (!allNameFields || allNameFields.length <= 1) return query
+
+  const uniqueFields = [...new Set(allNameFields.map(f => f.toLowerCase()))]
+  if (uniqueFields.length <= 1) return query
+
+  const aliases: Record<string, string> = {}
+  let aliasIdx = 0
+  for (const field of uniqueFields) {
+    if (aliases[field]) continue
+    // cm_Agent_Name__r.Name → agentName
+    const lookupMatch = field.match(/^(\w+?)__r\.Name$/i)
+    if (lookupMatch) {
+      const lookup = lookupMatch[1]
+        .replace(/^cm_/i, '')
+        .replace(/_name$/i, '')
+        .replace(/_/g, ' ')
+        .split(' ')
+        .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join('')
+      aliases[field] = lookup || `field${aliasIdx}`
+    } else {
+      // RecordType.Name → recordTypeName, Account.Name → accountName
+      const parts = field.replace(/\.Name$/i, '').split('.')
+      const base = parts[parts.length - 1]
+      aliases[field] = base.charAt(0).toLowerCase() + base.slice(1) + 'Name'
+    }
+    aliasIdx++
+  }
+
+  let result = query
+  for (const [field, alias] of Object.entries(aliases)) {
+    const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // Only replace in SELECT (not in GROUP BY / ORDER BY / WHERE)
+    const regex = new RegExp(`\\b${escaped}\\b(?!\\s+\\w+(?:\\s*,|\\s+FROM))`, 'gi')
+    result = result.replace(regex, `${field} ${alias}`)
+  }
+  return result
+}

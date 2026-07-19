@@ -2649,7 +2649,7 @@ const lookupCaseDetail: ToolDefinition = {
   keywords: ['case details', 'case status', 'case type', 'service request', 'case info', 'what is this case'],
   execute: async (params) => {
     const cn = params.caseNumber as string
-    const query = `SELECT CaseNumber, Subject, Status, Type, Priority, Origin, eService_Admin_Name__c, RecordType.Name, Account.Name, Contact.Name, Opportunity_Name__r.Name, CreatedDate, ClosedDate, Description FROM Case WHERE CaseNumber LIKE '%${cn}%' OR Subject LIKE '%${cn}%' LIMIT 5`
+    const query = `SELECT CaseNumber, Subject, Status, Type, Priority, Origin, eService_Admin_Name__c, RecordType.Name recordTypeName, Account.Name accountName, Contact.Name contactName, Opportunity_Name__r.Name opportunityName, CreatedDate, ClosedDate, Description FROM Case WHERE CaseNumber LIKE '%${cn}%' OR Subject LIKE '%${cn}%' LIMIT 5`
     try {
       const result = await soql(query)
       if (result.records.length === 0) return { context: `No case found matching "${cn}".`, citation: { documentName: 'Salesforce (live CRM)' } }

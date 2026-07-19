@@ -330,6 +330,7 @@ Opportunity — sales deals / property-unit sales. Each Opportunity IS one unit 
   When querying multiple __r.Name fields in aggregate, ALWAYS add explicit aliases to avoid duplicate alias errors:
     ✅ SELECT cm_Agent_Name__r.Name brokerName, cm_Agency_Name__r.Name agencyName, COUNT(Id) cnt ...
     ❌ SELECT cm_Agent_Name__r.Name, cm_Agency_Name__r.Name, COUNT(Id) cnt ...
+  CRITICAL: Only SELECT the fields needed to answer the question. Do NOT add extra .Name relationship fields (cm_Agent_Name__r.Name, cm_Agency_Name__r.Name, RecordType.Name, Account.Name, Contact.Name) unless the user explicitly asks for them. Over-selecting causes duplicate alias errors.
   Sales_Room__c = bedroom count/configuration (Studio, 1 Bedroom, 2 Bedrooms, etc.).
   Property_Booked_Date__c = actual booking date (more accurate than CloseDate for booking trends).
 
