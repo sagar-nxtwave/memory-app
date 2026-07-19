@@ -258,6 +258,12 @@ SOQL SYNTAX RULES (CRITICAL — these are VERIFIED against live CRM data):
    - ALWAYS compute totals, percentages, and rankings from the FULL query result (before any display limit), NOT from the displayed subset
    - Example: if query returned 50 rows and you show top 10, the total should be sum of all 50 rows, not just the 10 shown
 
+9. YEAR SELECTION — when doing year-over-year analysis and the user doesn't specify years:
+   - Include all years with meaningful data (e.g., 2023, 2024, 2025, 2026)
+   - If the current year is partial (e.g., only 7 months of data), include it but note the partial period in your response
+   - If the user explicitly says "2023 and 2024", keep only those years — don't add others
+   - Don't assume a year is "too early" or "too late" — let the data speak
+
 VERIFIED QUERY PATTERNS (copy these exactly for similar questions):
 
 -- "Total sales in 2026" / "How much did we sell this year?"
@@ -494,7 +500,7 @@ Instead of raw SOQL, you can pass a structured spec that the system converts to 
     }
   }
 }
-The builder handles correct NOT LIKE syntax automatically. Use this for queries with many filters or aggregations.`
+The builder handles correct NOT LIKE syntax automatically. Use this for queries with many filters or aggregations.${skillResult.criticalSummary ? '\n\n' + skillResult.criticalSummary : ''}`
 
   return { prompt, loadedSkills: skillResult.loadedFiles, intentCategories, fileRules: skillResult.fileRules }
 }
@@ -583,7 +589,7 @@ export async function answerViaMcp(
       console.log(`[mcp-query] step ${stepNum}: action=${action} thought="${thought.slice(0, 100)}"`)
 
       if (action === 'finish' || answer) {
-        finalAnswer = answer || 'No answer composed'
+        finalAnswer = answer || "I wasn't able to find a clear answer for that. Please try rephrasing your question."
         if (typeof decision.foundInCrm === 'boolean') foundInCrm = decision.foundInCrm
         steps.push({ thought, action, observation: finalAnswer })
 
@@ -603,7 +609,7 @@ export async function answerViaMcp(
         if (action === 'soqlQuery' && params.spec && typeof params.spec === 'object') {
           const specResult = buildFromJsonSpec(params.spec as Record<string, unknown>)
           if (specResult.error) {
-            observation = `Query spec error: ${specResult.error}\n\nPlease fix the spec and try again.`
+            observation = 'I had trouble building that query. Please try rephrasing.'
             onStep?.({ action, detail, result: observation })
             steps.push({ thought, action, observation })
             input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
@@ -621,7 +627,7 @@ export async function answerViaMcp(
             params.q = validation.query
           }
           if (!validation.valid) {
-            observation = `SOQL validation error: ${validation.error}\n\nYour query was:\n${String(params.q).slice(0, 300)}\n\nFix the syntax error and try again. Common issues:\n- NOT LIKE requires parentheses: (NOT Name LIKE '%value%')\n- Remove LIMIT from aggregate queries without GROUP BY\n- Remove duplicate WHERE/AND clauses`
+            observation = 'The query had a syntax issue. Retrying with a different approach.'
             onStep?.({ action, detail, result: observation })
             steps.push({ thought, action, observation })
             input = `Question: ${fullQuestion}\n\nSteps so far:\n${steps.map((s, i) => `${i + 1}. Thought: ${s.thought}\n   Action: ${s.action}\n   Observation: ${s.observation}`).join('\n\n')}\n\nWhat should be the next step? If you have enough data, compose the final answer.`
@@ -634,12 +640,12 @@ export async function answerViaMcp(
         // Layer 4: Enhanced error feedback for MALFORMED_QUERY
         if (result.isError && result.content.includes('MALFORMED_QUERY')) {
           const errorContext = parseSoqlError(result.content)
-          observation = `SOQL Syntax Error: ${errorContext.message}\n\n${errorContext.suggestions.join('\n')}\n\n${errorContext.problemArea ? `Problem area: "...${errorContext.problemArea}..."` : ''}\n\nFix the syntax and try again.`
+          observation = 'Query syntax error. Retrying with a different approach.'
         } else {
-          observation = result.isError ? `Tool error: ${result.content}` : result.content || 'No data returned'
+          observation = result.isError ? 'The CRM tool returned an error. Please try rephrasing.' : result.content || 'No data returned'
         }
       } catch (err) {
-        observation = `Tool call failed: ${err instanceof Error ? err.message : String(err)}`
+        observation = 'Something went wrong while querying. Please try rephrasing.'
         console.warn(`[mcp-query] tool call failed:`, err)
       }
 
@@ -652,10 +658,14 @@ export async function answerViaMcp(
       // (multiple rows with count/sum columns) and inject server-computed
       // totals so the LLM copies correct numbers instead of adding wrong.
       try {
-        const rows = tryParseJson(flatObservation)
-        if (rows && isAggregateResult(rows)) {
-          lastAggregateRows = rows
-          const totals = computeGroupedTotals(rows, 'year') || computeAggregateTotals(rows)
+        const parsed = JSON.parse(flatObservation)
+        // Salesforce responses wrap records in { totalSize, done, records: [...] }
+        const records = Array.isArray(parsed) ? parsed
+          : (parsed && typeof parsed === 'object' && Array.isArray(parsed.records)) ? parsed.records
+          : null
+        if (records && records.length >= 2 && isAggregateResult(records)) {
+          lastAggregateRows = records
+          const totals = computeGroupedTotals(records, 'year') || computeAggregateTotals(records)
           if (totals) flatObservation += '\n\n' + totals
         }
       } catch { /* non-JSON observation or parse error — skip */ }
@@ -692,7 +702,7 @@ export async function answerViaMcp(
         console.warn('[mcp-query] final answer composition failed:', err)
       }
       if (!finalAnswer) {
-        finalAnswer = `I gathered some data but couldn't fully compose an answer to "${query}". Please try rephrasing or asking a more specific question.`
+        finalAnswer = 'I gathered some data but couldn\'t fully answer that. Please try rephrasing or asking a more specific question.'
         foundInCrm = false
       }
     }
@@ -714,6 +724,6 @@ export async function answerViaMcp(
     return { context: finalAnswer, citation: { documentName: 'CRM (live data)' }, foundInCrm, rawObservations, soqlQuery }
   } catch (err) {
     console.error('[mcp-query] failed:', err)
-    return { context: `I encountered an error querying the CRM: ${err instanceof Error ? err.message : String(err)}`, citation: { documentName: 'CRM (live data)' }, foundInCrm: false, rawObservations: '' }
+    return { context: 'I had trouble retrieving that data. Please try rephrasing your question.', citation: { documentName: 'CRM (live data)' }, foundInCrm: false, rawObservations: '' }
   }
 }

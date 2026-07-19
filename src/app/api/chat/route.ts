@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { spaceId, content, spaceName, responseStyle, provider, mentionedDocIds: bodyMentionedDocIds, mentionedSpaceIds } = await req.json()
+  const { spaceId, content, spaceName, responseStyle, provider, mentionedDocIds: bodyMentionedDocIds, mentionedSpaceIds, webSearch: webSearchOverride } = await req.json()
 
   if (!spaceId || !content?.trim()) {
     return NextResponse.json({ error: 'spaceId and content are required' }, { status: 400 })
@@ -70,6 +70,12 @@ export async function POST(req: NextRequest) {
   const [userMsg] = await db
     .insert(messages)
     .values({ spaceId, userId: session.user.id, role: 'user', content: content.trim() })
+    .returning()
+
+  // Insert assistant message placeholder BEFORE streaming starts so it's visible on page refresh
+  const [assistantMsg] = await db
+    .insert(messages)
+    .values({ spaceId, userId: session.user.id, role: 'assistant', content: '' })
     .returning()
 
   const encoder = new TextEncoder()
@@ -186,7 +192,7 @@ export async function POST(req: NextRequest) {
   // Semantic intent routing decides which sources to use (CRM / documents / web) — replaces
   // brittle keyword gates. Run it concurrently with embedding to avoid adding latency.
   let queryEmbedding: number[] = []
-  let intent: Intent = { salesforce: false, documents: true, web: false }
+  let intent: Intent = { salesforce: false, documents: true, web: false, webConfidence: 'low' }
   if (!skipRetrieval) {
     const [emb, routed] = await Promise.all([
       generateEmbedding(content).catch((err) => { console.error('[chat] Embedding failed:', err); return [] as number[] }),
@@ -477,17 +483,30 @@ export async function POST(req: NextRequest) {
       // Web search runs ONLY when the semantic router says the question needs current/external
       // info — never as a default fallback (that was the bug: CRM questions hitting the web).
       let webUsed = false
+      let webSearchSkipped = false
       if (!skipRetrieval && intent.web) {
-        const internalItems: RetrievalItem[] = reranked.map((c) => ({
-          id: '', sourceType: 'internal', content: c.content,
-          title: c.document_name, documentId: c.document_id, documentName: c.document_name,
-          spaceName: crossSpace ? c.space_name : undefined,
-        }))
-        const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
-        if (merged.webUsed) {
-          context = merged.context
-          citations = merged.citations
-          webUsed = true
+        // Hybrid web search: auto-search if confidence is high, ask user if low
+        const shouldAutoSearch = intent.webConfidence === 'high' || webSearchOverride === true
+        if (!shouldAutoSearch && !webSearchOverride) {
+          // Low confidence — skip web search but notify frontend to show confirmation
+          webSearchSkipped = true
+          sseSend({ type: 'webSearchConfirm', question: content })
+        } else {
+          collectStep('Searching the web for supplementary information...', 'webSearch')
+          sseSend({ type: 'thinking', action: 'webSearch', step: 'Searching the web for supplementary information...' })
+          const internalItems: RetrievalItem[] = reranked.map((c) => ({
+            id: '', sourceType: 'internal', content: c.content,
+            title: c.document_name, documentId: c.document_id, documentName: c.document_name,
+            spaceName: crossSpace ? c.space_name : undefined,
+          }))
+          const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
+          if (merged.webUsed) {
+            context = merged.context
+            citations = merged.citations
+            webUsed = true
+            collectStep(`Found ${merged.citations.length} web source(s)`, 'webSearch', merged.citations.map(c => c.documentName || c.url || 'web source').join(', '))
+            sseSend({ type: 'thinking', action: 'webSearch', step: `Found ${merged.citations.length} web source(s)`, result: merged.citations.map(c => c.documentName || c.url || 'web source').join(', ') })
+          }
         }
       }
 
@@ -547,11 +566,16 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
         .slice(0, -1)
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-      sseSend({ type: 'start', userMessageId: userMsg.id })
+      sseSend({ type: 'start', userMessageId: userMsg.id, assistantMessageId: assistantMsg.id })
 
       if (skipRetrieval) {
         collectStep('Processing your message...', 'info')
         sseSend({ type: 'thinking', step: 'Processing your message...', index: steps.length })
+      }
+
+      if (salesforceResult) {
+        collectStep('Drafting response...', 'composeAnswer')
+        sseSend({ type: 'thinking', action: 'composeAnswer', step: 'Drafting response...' })
       }
 
       let fullContent = ''
@@ -574,18 +598,18 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
             hallucinatedTerms: validation.hallucinatedTerms,
             hallucinatedNumbers: validation.hallucinatedNumbers,
           })
+          collectStep('Potential hallucination detected', 'detectHallucination', allIssues.join(' | '))
           sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.join(' | ') })
         } else {
+          collectStep('Hallucination check passed', 'detectHallucination', 'No issues found')
           sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
         }
       }
 
-      const [assistantMsg] = await db
-        .insert(messages)
-        .values({
-          spaceId,
-          userId,
-          role: 'assistant',
+      // Update the assistant message placeholder with final content
+      await db
+        .update(messages)
+        .set({
           content: fullContent || 'No response generated.',
           citations: citations.length > 0 ? citations : null,
           documentImages: documentImages.length > 0 ? documentImages : null,
@@ -593,7 +617,7 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
           thinkingStepActions: stepActions.length > 0 ? stepActions : null,
           thinkingStepResults: stepResults.length > 0 ? stepResults : null,
         })
-        .returning()
+        .where(eq(messages.id, assistantMsg.id))
 
       // Follow-up suggestions — generate 2-3 clickable follow-up questions
       // Wrapped in try-catch so a failure here NEVER blocks the done event
@@ -610,10 +634,11 @@ ${context ? `${webUsed ? 'Context (each item is labeled [INT-n] internal documen
     } catch (err) {
       console.error('[chat] Stream error:', err)
       try {
-        const [assistantMsg] = await db
-          .insert(messages)
-          .values({ spaceId, userId, role: 'assistant', content: 'I encountered an error. Please try again.' })
-          .returning()
+        // Update the existing placeholder with error message
+        await db
+          .update(messages)
+          .set({ content: 'Something went wrong. Please try again.' })
+          .where(eq(messages.id, assistantMsg.id))
         sseSend({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
       } catch (dbErr) {
         console.error('[chat] Failed to save error message to DB:', dbErr)

@@ -191,6 +191,128 @@ export function extractSkillRules(content: string): string[] {
   return rules
 }
 
+/**
+ * Extract critical/mandatory rules from skill file content for append-prompt injection.
+ * Parses markdown tables, imperative keywords, consecutive plain bullet term groups,
+ * and structured rule lines.
+ * Returns a condensed string meant to appear at the END of the system prompt
+ * so the LLM sees it last (avoids "lost in the middle" effect).
+ */
+export function extractCriticalRules(content: string): string {
+  const lines = content.split('\n')
+
+  const termGroups: string[][] = []   // groups of consecutive plain terms
+  const imperativeRules: string[] = [] // lines with imperative keywords
+  const fieldRefs: string[] = []       // lines referencing CRM fields (__c)
+
+  let currentTermGroup: string[] = []
+
+  function flushTermGroup() {
+    if (currentTermGroup.length >= 2) {
+      termGroups.push([...currentTermGroup])
+    }
+    currentTermGroup = []
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    // ── Markdown table rows ──────────────────────────────────────────
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      flushTermGroup()
+      if (/^\|\s*[-:]+/.test(trimmed)) continue // skip separator row
+      const cells = trimmed.split('|').map(c => c.trim()).filter(Boolean)
+      if (cells.length >= 1 && cells[0] && !['Exclusion Term', 'Field', 'Filter', 'Term', 'Rule'].includes(cells[0])) {
+        currentTermGroup.push(cells[0])
+      }
+      continue
+    }
+
+    // ── Bullet / numbered lines ──────────────────────────────────────
+    const bulletMatch = trimmed.match(/^[-*]\s+(.+)/)
+    const numMatch = trimmed.match(/^\d+[.)]\s+(.+)/)
+    const listMatch = bulletMatch || numMatch
+
+    if (listMatch) {
+      const text = listMatch[1].replace(/`/g, '').replace(/\*\*/g, '').trim()
+
+      // Is this a plain short term? (no operators, no field patterns)
+      const isPlainTerm = text.length > 0 && text.length < 60 && !/[=!<>]/.test(text) && !/\b(__c|LIKE)\b/.test(text) && !/\.\w+/.test(text)
+
+      if (isPlainTerm) {
+        currentTermGroup.push(text)
+        continue
+      }
+
+      // Is this a field reference or operator line?
+      const isFieldOrOperator = /(__c|!=|=|LIKE|>=|<=)(\s|$)/.test(text)
+      if (isFieldOrOperator) {
+        flushTermGroup()
+        if (!fieldRefs.includes(text)) fieldRefs.push(text)
+        continue
+      }
+
+      // Other bullet — flush and skip
+      flushTermGroup()
+      continue
+    }
+
+    // ── Non-list line — flush any pending term group ─────────────────
+    flushTermGroup()
+
+    if (!trimmed) continue
+    if (/^#{1,6}\s/.test(trimmed)) continue
+    if (/^[-=*]{3,}$/.test(trimmed)) continue
+
+    // ── Imperative keyword lines ─────────────────────────────────────
+    const lower = trimmed.toLowerCase()
+    if (/\b(must|mandatory|always|exclude|exclusion|never|apply to both|apply these|⚠|‼|critical|required)\b/.test(lower)) {
+      const cleaned = trimmed
+        .replace(/\*\*/g, '')
+        .replace(/`/g, '')
+        .replace(/^[-*]\s+/, '')
+        .replace(/^\d+[.)]\s+/, '')
+      if (cleaned.length > 5 && cleaned.length < 300) {
+        imperativeRules.push(cleaned)
+      }
+    }
+  }
+
+  flushTermGroup()
+
+  // ── Build the summary ──────────────────────────────────────────────
+  const allTerms = [...new Set(termGroups.flat())]
+  const uniqueImperative = [...new Set(imperativeRules)]
+  const uniqueFieldRefs = [...new Set(fieldRefs)]
+
+  if (allTerms.length === 0 && uniqueImperative.length === 0 && uniqueFieldRefs.length === 0) return ''
+
+  const parts: string[] = []
+
+  if (allTerms.length > 0) {
+    // Detect which fields the terms should be applied to from field references
+    const targetFields = uniqueFieldRefs
+      .filter(f => f.includes('__c'))
+      .map(f => f.replace(/.*?(\w+__c).*/, '$1'))
+    const fieldNote = targetFields.length >= 2
+      ? ` (apply to BOTH ${targetFields.join(' AND ')})`
+      : targetFields.length === 1
+        ? ` (apply to ${targetFields[0]})`
+        : ''
+    parts.push(`Exclusion terms${fieldNote}: ${allTerms.join(', ')}`)
+  }
+
+  if (uniqueFieldRefs.length > 0) {
+    parts.push(`Field filters: ${uniqueFieldRefs.join('; ')}`)
+  }
+
+  if (uniqueImperative.length > 0) {
+    parts.push(...uniqueImperative)
+  }
+
+  return `\nMANDATORY SKILL FILE RULES (you MUST apply ALL of these — do not skip any):\n${parts.map(p => `- ${p}`).join('\n')}\n`
+}
+
 // ─── SKILL FILES ──────────────────────────────────────────────────────────────
 // No built-in seed defaults. All skills are user-managed via the Settings UI.
 // The DB is the single source of truth — no auto-update, no overwriting.
@@ -216,10 +338,10 @@ async function ensureSeeded(): Promise<void> {
  * Uses conditional loading: only includes files matching the query intent.
  * Returns both the text and the list of loaded file names (for streaming to UI).
  */
-export async function getSkillFilesPromptText(query?: string): Promise<{ text: string; loadedFiles: string[]; fileRules: Record<string, string[]> }> {
+export async function getSkillFilesPromptText(query?: string): Promise<{ text: string; criticalSummary: string; loadedFiles: string[]; fileRules: Record<string, string[]> }> {
   await ensureSeeded()
   const files = query ? await getMatchingSkillFiles(query) : await getActiveSkillFiles()
-  if (files.length === 0) return { text: '', loadedFiles: [], fileRules: {} }
+  if (files.length === 0) return { text: '', criticalSummary: '', loadedFiles: [], fileRules: {} }
 
   const grouped: Record<string, typeof files> = {}
   for (const f of files) {
@@ -240,8 +362,18 @@ export async function getSkillFilesPromptText(query?: string): Promise<{ text: s
     fileRules[f.name] = extractSkillRules(f.content)
   }
 
+  // Extract critical rules from ALL matched skill files for end-of-prompt injection
+  const criticalParts: string[] = []
+  for (const f of files) {
+    const critical = extractCriticalRules(f.content)
+    if (critical) {
+      criticalParts.push(critical)
+    }
+  }
+
   return {
     text: `\nUSER-DEFINED SKILL FILES (follow these instructions when answering questions):\n\n${sections.join('\n\n---\n\n')}`,
+    criticalSummary: criticalParts.length > 0 ? criticalParts.join('\n') : '',
     loadedFiles: files.map(f => f.name),
     fileRules,
   }

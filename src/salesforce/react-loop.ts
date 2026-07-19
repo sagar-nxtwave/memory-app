@@ -187,7 +187,7 @@ export async function executeReActLoop(
         thought: 'Error occurred',
         action: 'error',
         params: {},
-        observation: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        observation: 'Something went wrong while retrieving data. Please try rephrasing.',
         timestamp: Date.now()
       })
       confidence = 'low'

@@ -33,6 +33,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
   const [loading, setLoading] = useState(false)
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [webSearchConfirm, setWebSearchConfirm] = useState<{ question: string; sid: string } | null>(null)
 
   const { spaces, loaded: spacesLoaded } = useSpacesList()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -52,6 +53,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const loadingRef = useRef(false)
 
   const handleSpeechResult = useCallback((transcript: string) => {
     setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
@@ -147,15 +149,17 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
   const allSelected = spaces.length > 0 && selectedIds.size === spaces.length
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || loading) return
+    if (!content.trim() || loadingRef.current) return
+    loadingRef.current = true
     setInput('')
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     const chips = mentionChips
     setMentionChips([])
     setMentionQuery(null)
     setLoading(true)
 
     const tempUserId = `u-${Date.now()}`
-    const sid = `s-${Date.now()}`
+    let sid = `s-${Date.now()}`
 
     setMessages((p) => [
       ...p,
@@ -199,7 +203,12 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'start') {
-              setMessages((p) => p.map((m) => (m.id === tempUserId ? { ...m, id: event.userMessageId } : m)))
+              setMessages((p) => p.map((m) => {
+                if (m.id === tempUserId) return { ...m, id: event.userMessageId }
+                if (m.id === sid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
+                return m
+              }))
+              if (event.assistantMessageId) sid = event.assistantMessageId
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
@@ -208,6 +217,8 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                 const results = [...(m.thinkingStepResults ?? []), event.result ?? '']
                 return { ...m, thinkingSteps: steps, thinkingStepActions: actions, thinkingStepResults: results }
               }))
+            } else if (event.type === 'webSearchConfirm') {
+              setWebSearchConfirm({ question: event.question, sid })
             } else if (event.type === 'delta') {
               accumulated += event.content
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: accumulated } : m)))
@@ -235,9 +246,91 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
       abortRef.current = null
       setStreamingId(null)
       setLoading(false)
+      loadingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [loading, selectedIds, mentionChips, responseStyle])
+  }, [selectedIds, mentionChips, responseStyle])
+
+  async function confirmWebSearch(accept: boolean) {
+    if (!webSearchConfirm) return
+    const { question } = webSearchConfirm
+    setWebSearchConfirm(null)
+    if (!accept) return
+    const tempUserId = `u-${Date.now()}`
+    let newSid = `s-${Date.now()}`
+    setMessages((p) => [
+      ...p,
+      { id: tempUserId, role: 'user', content: question, createdAt: new Date().toISOString() },
+      { id: newSid, role: 'assistant', content: '', createdAt: new Date().toISOString(), thinkingSteps: [] },
+    ])
+    setStreamingId(newSid)
+    setLoading(true)
+    loadingRef.current = true
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      const res = await fetch('/api/global-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: question, spaceIds: Array.from(selectedIds), responseStyle, provider, webSearch: true }),
+        signal: controller.signal,
+      })
+      if (!res.ok || !res.body) throw new Error('Stream failed')
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let accumulated = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'start') {
+              setMessages((p) => p.map((m) => {
+                if (m.id === tempUserId) return { ...m, id: event.userMessageId }
+                if (m.id === newSid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
+                return m
+              }))
+              if (event.assistantMessageId) newSid = event.assistantMessageId
+            } else if (event.type === 'thinking') {
+              setMessages((p) => p.map((m) => {
+                if (m.id !== newSid) return m
+                const steps = [...(m.thinkingSteps ?? []), event.step]
+                const actions = [...(m.thinkingStepActions ?? []), event.action ?? '']
+                const results = [...(m.thinkingStepResults ?? []), event.result ?? '']
+                return { ...m, thinkingSteps: steps, thinkingStepActions: actions, thinkingStepResults: results }
+              }))
+            } else if (event.type === 'delta') {
+              accumulated += event.content
+              setMessages((p) => p.map((m) => (m.id === newSid ? { ...m, content: accumulated } : m)))
+            } else if (event.type === 'done') {
+              const finalContent = accumulated
+              setMessages((p) => p.map((m) => {
+                if (m.id !== newSid) return m
+                return { ...m, content: finalContent, citations: event.citations ?? [], documentImages: event.documentImages ?? [], suggestions: event.suggestions ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+              }))
+            } else if (event.type === 'error') {
+              setMessages((p) => p.map((m) => (m.id === newSid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      setMessages((p) => p.map((m) => (m.id === newSid ? { ...m, content: 'Something went wrong. Please try again.' } : m)))
+    } finally {
+      abortRef.current = null
+      setStreamingId(null)
+      setLoading(false)
+      loadingRef.current = false
+      setTimeout(() => inputRef.current?.focus(), 100)
+    }
+  }
 
   const isEmpty = messages.length === 0
   const selectedCount = selectedIds.size
@@ -395,6 +488,14 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {webSearchConfirm && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 shrink-0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <span className="text-blue-700 dark:text-blue-300">Search the web for more info?</span>
+                  <button onClick={() => confirmWebSearch(true)} className="ml-auto px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Search</button>
+                  <button onClick={() => confirmWebSearch(false)} className="px-3 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Skip</button>
+                </motion.div>
+              )}
               <div ref={bottomRef} />
             </div>
           )}
@@ -627,7 +728,8 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                 placeholder={`Ask anything across ${selectionLabel.toLowerCase()}… or @ a project`}
                 className="flex-1 min-w-0 text-[15px] sm:text-base lg:text-lg text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
               />
-              <div className="shrink-0 flex items-center gap-1.5">
+              {/* Desktop: all controls inline */}
+              <div className="hidden md:flex shrink-0 items-center gap-1.5">
                 <ModelSelector value={provider} onChange={setProvider} />
                 <StyleToggle value={responseStyle} onChange={setResponseStyle} />
                 {streamingId ? (
@@ -654,6 +756,36 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                   </motion.button>
                 )}
               </div>
+              {/* Mobile: just submit button */}
+              <div className="md:hidden shrink-0">
+                {streamingId ? (
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
+                    onClick={() => { abortRef.current?.abort(); setStreamingId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
+                    className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
+                    title="Stop generating"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    type="submit"
+                    disabled={loading || !input.trim()}
+                    className="h-8 w-8 flex items-center justify-center bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                    </svg>
+                  </motion.button>
+                )}
+              </div>
+              </div>
+              {/* Mobile: model & style selectors below textarea */}
+              <div className="flex md:hidden items-center gap-2 pt-2 mt-2 border-t border-gray-200 dark:border-gray-800">
+                <ModelSelector value={provider} onChange={setProvider} />
+                <StyleToggle value={responseStyle} onChange={setResponseStyle} />
               </div>
             </form>
           </div>
@@ -819,7 +951,25 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
   onSuggestionClick?: (suggestion: string) => void
 }) {
   const isUser = message.role === 'user'
-  const showDots = isStreaming && message.content === '' && (!message.thinkingSteps || message.thinkingSteps.length === 0)
+  const latestAction = message.thinkingStepActions?.[message.thinkingStepActions.length - 1] ?? ''
+  const latestStep = message.thinkingSteps?.[message.thinkingSteps.length - 1] ?? ''
+  const showStatus = isStreaming && message.content === ''
+  const statusText = showStatus ? (
+    latestAction === 'soqlQuery' ? 'Querying CRM data…' :
+    latestAction === 'find' ? 'Searching CRM records…' :
+    latestAction === 'composeAnswer' ? 'Drafting response…' :
+    latestAction === 'verifyAnswer' ? 'Verifying answer…' :
+    latestAction === 'crossCheck' ? 'Cross-checking data…' :
+    latestAction === 'quickCheck' ? 'Validating results…' :
+    latestAction === 'fallthrough' ? 'Trying alternative approach…' :
+    latestAction === 'detectHallucination' ? 'Checking accuracy…' :
+    latestAction === 'classifyIntent' ? 'Understanding your question…' :
+    latestAction === 'loadSkills' ? 'Loading knowledge…' :
+    latestAction === 'skillApplied' ? 'Applying rules…' :
+    latestAction === 'info' ? (latestStep || 'Thinking…') :
+    latestAction ? `${latestAction}…` :
+    'Thinking…'
+  ) : ''
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const [thinkingOpen, setThinkingOpen] = useState(false)
   const prevThinkingLenRef = useRef(0)
@@ -848,12 +998,14 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
           ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
           : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
-        {showDots ? (
-          <span className="flex gap-1 items-center py-0.5">
-            {[0, 1, 2].map((i) => (
-              <motion.span key={i} className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full inline-block"
-                animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }} />
-            ))}
+        {showStatus ? (
+          <span className="flex items-center gap-2 py-0.5">
+            <motion.span
+              className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 dark:border-t-blue-400 rounded-full inline-block"
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{statusText}</span>
           </span>
         ) : isUser ? (
           message.content.split('\n').map((line, i, arr) => (
@@ -900,6 +1052,8 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                       } else if (['crossCheck', 'detectHallucination'].includes(action)) {
                         iconColor = 'text-yellow-500 dark:text-yellow-400'
                         bgColor = 'bg-yellow-50/50 dark:bg-yellow-900/10'
+                      } else if (action === 'webSearch') {
+                        iconColor = 'text-cyan-500 dark:text-cyan-400'
                       } else if (['reactLoop', 'adhocSpec', 'catchAll', 'ragFallback'].includes(action)) {
                         iconColor = 'text-orange-400 dark:text-orange-500'
                       } else if (action === 'composeAnswer') {

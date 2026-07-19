@@ -20,6 +20,16 @@ export function HomeDashboard() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
   const [autoMic, setAutoMic] = useState(false)
+  const [prefill, setPrefill] = useState('')
+
+  const SUGGESTED_QUESTIONS = [
+    'How many units were sold in 2025 and total sales value',
+    'Show month-wise sales for 2025',
+    'Show sales summary by building for 2025',
+    'Show sales by Lead Channel for 2025',
+    'Compare Agency and Direct sales for 2025',
+    'Show sales by community for 2025',
+  ]
 
   useEffect(() => {
     let active = true
@@ -59,6 +69,22 @@ export function HomeDashboard() {
           {greeting(session?.user?.name)}
         </h1>
 
+        {/* -- Suggested questions — quick-access Salesforce reporting chips -- */}
+        {!askOpen && !loading && (
+          <div className="flex flex-wrap gap-2 mb-5 md:mb-6">
+            {SUGGESTED_QUESTIONS.map((q) => (
+              <motion.button
+                key={q}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => { setPrefill(q); setAskOpen(true) }}
+                className="font-sf px-3.5 py-1.5 text-[13px] font-medium rounded-full bg-white dark:bg-[#1a1a1a] text-[#475569] dark:text-slate-300 border border-gray-200 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-[#222] hover:border-gray-300 dark:hover:border-gray-600 hover:text-[#0F172A] dark:hover:text-white transition-all shadow-[0_1px_3px_rgba(0,0,0,0.03)]"
+              >
+                {q}
+              </motion.button>
+            ))}
+          </div>
+        )}
+
         {/* -- Ask memory pill — pad 24/24/24/32, radius 999, Icon shadow -- */}
         {!askOpen && (
           <motion.div
@@ -92,7 +118,8 @@ export function HomeDashboard() {
           <div className="h-[70vh] md:h-[75vh] rounded-3xl overflow-hidden bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5">
             <GlobalChatPanel
               autoStartMic={autoMic}
-              onClose={() => { setAskOpen(false); setAutoMic(false) }}
+              prefill={prefill || undefined}
+              onClose={() => { setAskOpen(false); setAutoMic(false); setPrefill('') }}
             />
           </div>
         ) : loading ? (

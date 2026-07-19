@@ -8,6 +8,8 @@ import { documents, messages } from '@/lib/db/schema'
 import { chatStream } from '@/lib/ai/provider'
 import { briefMePrompt, styleInstruction } from '@/lib/ai/prompts'
 import { checkSpaceAccess } from '@/lib/api/checkSpaceAccess'
+import { soql } from '@/salesforce/client'
+import { getSalesforceConfig } from '@/salesforce/config'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -56,7 +58,55 @@ export async function POST(req: NextRequest) {
         let fullContent = ''
 
         if (readyDocs.length === 0) {
-          fullContent = 'No documents have been processed yet. Upload documents to generate a briefing.'
+          const crmEnabled = getSalesforceConfig().enabled
+          if (crmEnabled) {
+            try {
+              const [salesResult, projectResult] = await Promise.all([
+                soql(
+                  `SELECT COUNT(Id) totalDeals, SUM(Net_Amount__c) totalRevenue ` +
+                  `FROM Opportunity ` +
+                  `WHERE IsClosed = true AND IsWon = true ` +
+                  `AND Order_Date__c = THIS_YEAR ` +
+                  `AND Sold_By_Nshama__c = 'NEW SALE' ` +
+                  `AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') ` +
+                  `AND (NOT Name LIKE '%PK%') AND Amount != 1`
+                ),
+                soql(
+                  `SELECT Building_Community__c, COUNT(Id) deals, SUM(Net_Amount__c) revenue ` +
+                  `FROM Opportunity ` +
+                  `WHERE IsClosed = true AND IsWon = true ` +
+                  `AND Order_Date__c = THIS_YEAR ` +
+                  `AND Sold_By_Nshama__c = 'NEW SALE' ` +
+                  `AND (NOT Name LIKE '%Miscellaneous%') AND (NOT Name LIKE '%RTL%') ` +
+                  `AND (NOT Name LIKE '%PK%') AND Amount != 1 ` +
+                  `GROUP BY Building_Community__c ` +
+                  `ORDER BY SUM(Net_Amount__c) DESC LIMIT 5`
+                ),
+              ])
+
+              const totalDeals = (salesResult.records[0] as Record<string, unknown>)?.totalDeals ?? 0
+              const totalRevenue = (salesResult.records[0] as Record<string, unknown>)?.totalRevenue ?? 0
+              let crmContext = `SALESFORCE CRM DATA (this year, live):\n`
+              crmContext += `Total closed-won deals: ${totalDeals}\n`
+              crmContext += `Total revenue: AED ${totalRevenue}\n`
+              if (projectResult.records.length > 0) {
+                crmContext += `\nTop projects by revenue:\n`
+                for (const p of projectResult.records) {
+                  crmContext += `- ${p.Building_Community__c}: ${p.deals} deals, AED ${p.revenue}\n`
+                }
+              }
+
+              for await (const chunk of chatStream(`${briefMePrompt(space?.name ?? 'this project')}\n${styleInstruction(responseStyle)}`, crmContext, [], provider)) {
+                fullContent += chunk
+                send({ type: 'delta', content: chunk })
+              }
+            } catch (crmErr) {
+              console.error('[brief] CRM fallback failed:', crmErr)
+              fullContent = 'No documents have been uploaded yet. Upload documents or ask about your CRM data in chat to get started.'
+            }
+          } else {
+            fullContent = 'No documents have been uploaded yet. Upload documents or ask about your CRM data in chat to get started.'
+          }
           send({ type: 'delta', content: fullContent })
         } else {
           const docsContext = readyDocs

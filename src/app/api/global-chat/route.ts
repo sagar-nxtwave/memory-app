@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { content, spaceIds: requestedIds, responseStyle, provider, mentionedDocIds } = await req.json()
+  const { content, spaceIds: requestedIds, responseStyle, provider, mentionedDocIds, webSearch: webSearchOverride } = await req.json()
   if (!content?.trim()) return NextResponse.json({ error: 'content required' }, { status: 400 })
 
   // Always fetch from DB — never trust client-supplied IDs without verification
@@ -72,16 +72,23 @@ export async function POST(req: NextRequest) {
     .values({ userId, role: 'user', content: content.trim() })
     .returning()
 
+  // Insert assistant message placeholder BEFORE streaming starts so it's visible on page refresh
+  const [assistantMsg] = await db
+    .insert(globalMessages)
+    .values({ userId, role: 'assistant', content: '' })
+    .returning()
+
   const encoder = new TextEncoder()
 
   if (filteredSpaces.length === 0) {
     const msg = userSpaces.length === 0
       ? 'You have no project spaces yet. Create a space and upload documents to get started.'
       : 'No projects selected. Please select at least one project.'
-    const [assistantMsg] = await db.insert(globalMessages).values({ userId, role: 'assistant', content: msg }).returning()
+    // Update the existing placeholder with the message
+    await db.update(globalMessages).set({ content: msg }).where(eq(globalMessages.id, assistantMsg.id))
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', userMessageId: userMsg.id })}\n\n`))
+        c.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', userMessageId: userMsg.id, assistantMessageId: assistantMsg.id })}\n\n`))
         c.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', content: msg })}\n\n`))
         c.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', assistantMessageId: assistantMsg.id })}\n\n`))
         c.close()
@@ -139,7 +146,7 @@ export async function POST(req: NextRequest) {
 
       // Semantic intent routing (CRM / documents / web) — runs concurrently with embedding.
       let queryEmbedding: number[] = []
-      let intent: Intent = { salesforce: false, documents: true, web: false }
+      let intent: Intent = { salesforce: false, documents: true, web: false, webConfidence: 'low' }
       if (!skipRetrieval) {
         const [emb, routed] = await Promise.all([
           generateEmbedding(content).catch(() => [] as number[]),
@@ -318,17 +325,38 @@ export async function POST(req: NextRequest) {
         }))
       }
 
+      // Collect thinking steps, actions, and results for persistence
+      const steps: string[] = []
+      const stepActions: string[] = []
+      const stepResults: string[] = []
+      const collectStep = (step: string, action?: string, result?: string) => {
+        steps.push(step)
+        stepActions.push(action ?? '')
+        stepResults.push(result ?? '')
+      }
+
       // Web search augmentation (Ask All Spaces) — same non-breaking pattern as per-space chat:
       // classifier gates it, results merge with internal RAG into one labeled+cited context,
       // and it fails soft to the internal-only path when web isn't needed or returns nothing.
       // Web runs ONLY when the semantic router says so — never as a default fallback.
       let webUsed = false
+      let webSearchSkipped = false
       if (!skipRetrieval && intent.web) {
-        const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: 8 })
-        if (merged.webUsed) {
-          contextText = merged.context
-          citations = merged.citations
-          webUsed = true
+        const shouldAutoSearch = intent.webConfidence === 'high' || webSearchOverride === true
+        if (!shouldAutoSearch && !webSearchOverride) {
+          webSearchSkipped = true
+          sseSend({ type: 'webSearchConfirm', question: content })
+        } else {
+          collectStep('Searching the web for supplementary information...', 'webSearch')
+          sseSend({ type: 'thinking', action: 'webSearch', step: 'Searching the web for supplementary information...' })
+          const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: 8 })
+          if (merged.webUsed) {
+            contextText = merged.context
+            citations = merged.citations
+            webUsed = true
+            collectStep(`Found ${merged.citations.length} web source(s)`, 'webSearch', merged.citations.map(c => c.documentName || c.url || 'web source').join(', '))
+            sseSend({ type: 'thinking', action: 'webSearch', step: `Found ${merged.citations.length} web source(s)`, result: merged.citations.map(c => c.documentName || c.url || 'web source').join(', ') })
+          }
         }
       }
 
@@ -341,16 +369,6 @@ export async function POST(req: NextRequest) {
             citations.unshift({ documentId: tc.documentId, documentName: tc.documentName })
           }
         }
-      }
-
-      // Collect thinking steps, actions, and results for persistence
-      const steps: string[] = []
-      const stepActions: string[] = []
-      const stepResults: string[] = []
-      const collectStep = (step: string, action?: string, result?: string) => {
-        steps.push(step)
-        stepActions.push(action ?? '')
-        stepResults.push(result ?? '')
       }
 
       // Live Salesforce CRM path (Ask All Spaces) — same guarded-SOQL connector as per-space chat.
@@ -467,11 +485,16 @@ ${salesforceResult ? (() => {
 ${tabularResult ? `\n${tabularResult.context}\n` : ''}
 ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal document or [WEB-n] web source):' : 'Relevant content from documents:'}\n\n${truncateToTokenLimit(contextText)}` : (tabularResult || salesforceResult) ? '' : 'No relevant document content found for this query.'}`
 
-      sseSend({ type: 'start', userMessageId: userMsg.id })
+      sseSend({ type: 'start', userMessageId: userMsg.id, assistantMessageId: assistantMsg.id })
 
       if (skipRetrieval) {
         collectStep('Processing your message...', 'info')
         sseSend({ type: 'thinking', step: 'Processing your message...', index: steps.length })
+      }
+
+      if (salesforceResult) {
+        collectStep('Drafting response...', 'composeAnswer')
+        sseSend({ type: 'thinking', action: 'composeAnswer', step: 'Drafting response...' })
       }
 
       let fullContent = ''
@@ -494,17 +517,18 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
             hallucinatedTerms: validation.hallucinatedTerms,
             hallucinatedNumbers: validation.hallucinatedNumbers,
           })
+          collectStep('Potential hallucination detected', 'detectHallucination', allIssues.join(' | '))
           sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Potential hallucination detected', result: allIssues.join(' | ') })
         } else {
+          collectStep('Hallucination check passed', 'detectHallucination', 'No issues found')
           sseSend({ type: 'thinking', action: 'detectHallucination', step: 'Hallucination check passed', result: 'No issues found' })
         }
       }
 
-      const [assistantMsg] = await db
-        .insert(globalMessages)
-        .values({
-          userId,
-          role: 'assistant',
+      // Update the assistant message placeholder with final content
+      await db
+        .update(globalMessages)
+        .set({
           content: fullContent || 'No response generated.',
           citations: citations.length > 0 ? citations : null,
           documentImages: documentImages.length > 0 ? documentImages : null,
@@ -512,7 +536,7 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
           thinkingStepActions: stepActions.length > 0 ? stepActions : null,
           thinkingStepResults: stepResults.length > 0 ? stepResults : null,
         })
-        .returning()
+        .where(eq(globalMessages.id, assistantMsg.id))
 
       let suggestions: string[] = []
       if (features.followUpSuggestions && salesforceResult && fullContent.length > 50) {
@@ -527,10 +551,11 @@ ${contextText ? `${webUsed ? 'Context (each item is labeled [INT-n] internal doc
     } catch (err) {
       console.error('[global-chat] Error:', err)
       try {
-        const [assistantMsg] = await db
-          .insert(globalMessages)
-          .values({ userId, role: 'assistant', content: 'Something went wrong. Please try again.' })
-          .returning()
+        // Update the existing placeholder with error message
+        await db
+          .update(globalMessages)
+          .set({ content: 'Something went wrong. Please try again.' })
+          .where(eq(globalMessages.id, assistantMsg.id))
         sseSend({ type: 'error', message: 'Something went wrong. Please try again.', assistantMessageId: assistantMsg.id })
       } catch (dbErr) {
         console.error('[global-chat] Failed to save error message to DB:', dbErr)

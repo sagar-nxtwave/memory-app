@@ -488,7 +488,7 @@ export async function answerSalesforceQuery(
 
   // Step 10: Absolute final fallback — query all objects for any mention of the key terms
   recordMetric({ timestamp: new Date().toISOString(), question: rawQuery, toolMatched: null, confidence: 'low', method: 'fallback', latencyMs: Date.now() - startTime, soqlSuccess: false, soqlError: 'No method matched', guardrailBlocked: false, instructorRetries: 0, resultCount: 0 })
-  return { context: `I couldn't find a specific match for "${query}" in the CRM. Could you rephrase your question or ask about sales, properties, cases, or customers directly?`, citation: { documentName: 'Salesforce (live CRM)' } }
+  return { context: "I didn't find a specific match for that in the CRM. Could you rephrase or ask about sales, properties, cases, or customers directly?", citation: { documentName: 'Salesforce (live CRM)' } }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

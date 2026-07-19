@@ -10,11 +10,12 @@ export interface Intent {
   salesforce: boolean
   documents: boolean
   web: boolean
+  webConfidence: 'high' | 'low'
 }
 
 // Safe default when routing can't run (chitchat, or LLM failure): internal documents only —
 // never web (web must be an explicit decision, never a silent fallback).
-const DOCUMENTS_ONLY: Intent = { salesforce: false, documents: true, web: false }
+const DOCUMENTS_ONLY: Intent = { salesforce: false, documents: true, web: false, webConfidence: 'low' }
 
 export async function classifyIntent(query: string): Promise<Intent> {
   try {
@@ -26,10 +27,23 @@ export async function classifyIntent(query: string): Promise<Intent> {
       return DOCUMENTS_ONLY
     }
     const parsed = JSON.parse(jsonMatch[0]) as Partial<Intent>
+    const web = parsed.web === true
+    // Determine web confidence: high if the question clearly needs external info,
+    // low if it's ambiguous (e.g., "who is X?" could be CRM or web)
+    let webConfidence: 'high' | 'low' = 'low'
+    if (web) {
+      const q = query.toLowerCase()
+      // High confidence: clear external signals
+      const clearSignals = /\b(what is|what are|who is|who are|when was|when did|where is|where was|how many|how much|latest|recent|current|today|news|weather|price of|definition of|meaning of|ikipedia)\b/i.test(q)
+      // Low confidence: could be CRM (e.g., "who is cognita?" might be a customer)
+      const ambiguousSignals = /\b(who|what|which)\s+(is|are|was|were)\s+\w+\??$/i.test(q)
+      webConfidence = clearSignals && !ambiguousSignals ? 'high' : 'low'
+    }
     const intent: Intent = {
       salesforce: parsed.salesforce === true,
       documents: parsed.documents === true,
-      web: parsed.web === true,
+      web,
+      webConfidence,
     }
     // Guarantee at least one source; if the model returned all-false, fall back to documents.
     if (!intent.salesforce && !intent.documents && !intent.web) return DOCUMENTS_ONLY
