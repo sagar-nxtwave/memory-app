@@ -16,7 +16,7 @@ import { buildMetadataGraph, findPaths, type RelationshipField } from './metadat
 import { validateSoql, parseSoqlError } from './soql-validator'
 import { buildFromJsonSpec } from './soql-query-builder'
 import type { SalesforceResult, ChatTurn } from './query'
-import { tryParseJson, isAggregateResult, computeGroupedTotals, computeAggregateTotals } from './format-results'
+import { tryParseJson, isAggregateResult, computeGroupedTotals, computeAggregateTotals, correctArithmeticErrors } from './format-results'
 
 const MAX_STEPS = 12
 
@@ -565,6 +565,7 @@ export async function answerViaMcp(
     let input = `Question: ${fullQuestion}\n\nReason about the first step to answer this question.`
     let finalAnswer: string | null = null
     let foundInCrm = true // default optimistic — only set false when the LLM explicitly says so
+    let lastAggregateRows: Record<string, unknown>[] | null = null
 
     for (let stepNum = 0; stepNum < MAX_STEPS; stepNum++) {
       const raw = await chatJson(systemPrompt, input)
@@ -653,6 +654,7 @@ export async function answerViaMcp(
       try {
         const rows = tryParseJson(flatObservation)
         if (rows && isAggregateResult(rows)) {
+          lastAggregateRows = rows
           const totals = computeGroupedTotals(rows, 'year') || computeAggregateTotals(rows)
           if (totals) flatObservation += '\n\n' + totals
         }
@@ -700,6 +702,14 @@ export async function answerViaMcp(
     // for soqlQuery actions, or the params JSON for other tool calls
     const soqlStep = steps.find(s => s.action === 'soqlQuery' && s.detail)
     const soqlQuery = soqlStep?.detail || undefined
+
+    // ── POST-COMPOSITION ARITHMETIC CHECK ──────────────────────────────
+    // After the LLM composes the answer, verify that any stated total matches
+    // the actual sum of breakdown rows. LLMs often sum rows incorrectly.
+    if (finalAnswer && lastAggregateRows) {
+      finalAnswer = correctArithmeticErrors(finalAnswer, lastAggregateRows)
+    }
+
     console.log(`[mcp-query] completed in ${steps.length} steps (${Date.now() - startTime}ms), foundInCrm=${foundInCrm}`)
     return { context: finalAnswer, citation: { documentName: 'CRM (live data)' }, foundInCrm, rawObservations, soqlQuery }
   } catch (err) {

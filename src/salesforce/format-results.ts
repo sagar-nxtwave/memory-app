@@ -284,3 +284,68 @@ export function formatSalesforceData(result: SalesforceResult): string {
   }
   return buildFormattedText(rows)
 }
+
+/**
+ * Correct arithmetic errors in the LLM's composed answer.
+ * When the answer states a total that doesn't match the sum of breakdown rows,
+ * replace the wrong total with the correct one.
+ *
+ * Example: LLM says "1,282 units across 24 view types" but the rows sum to 1,196.
+ * This function replaces 1,282 with 1,196 in the answer text.
+ */
+export function correctArithmeticErrors(answer: string, rows: Record<string, unknown>[]): string {
+  if (!rows || rows.length < 2) return answer
+
+  // Find the count column (e.g., 'cnt', 'count', 'total')
+  const sample = rows[0]
+  let countCol: string | null = null
+  for (const key of Object.keys(sample)) {
+    const val = sample[key]
+    if (typeof val !== 'number') continue
+    const k = key.toLowerCase()
+    if (k === 'cnt' || k.includes('cnt') || k.includes('count') || k === 'total' || k.includes('sum')) {
+      countCol = key
+      break
+    }
+  }
+  if (!countCol) return answer
+
+  // Compute correct sum from rows
+  const correctSum = rows.reduce((acc, r) => {
+    const val = r[countCol!]
+    return acc + (typeof val === 'number' ? val : 0)
+  }, 0)
+
+  if (correctSum === 0) return answer
+
+  // Find all numbers in the answer that could be totals (>= 100, to skip small per-row values)
+  // Pattern: standalone numbers like "1,282" or "1282" or "1 282"
+  const numberPattern = /\b(\d[\d, ]{2,}\d)\b/g
+  let match: RegExpExecArray | null
+  let corrected = answer
+
+  while ((match = numberPattern.exec(answer)) !== null) {
+    const raw = match[1]
+    const num = parseInt(raw.replace(/[,\s]/g, ''), 10)
+    if (isNaN(num) || num < 100) continue
+
+    // Skip if this number appears in the raw data as a per-row value
+    const isRowValue = rows.some(r => {
+      const v = r[countCol!]
+      return typeof v === 'number' && v === num
+    })
+    if (isRowValue) continue
+
+    // This number is NOT a per-row value — it's likely a stated total
+    // Check if it differs from the correct sum
+    if (num !== correctSum) {
+      // Replace with correct sum, preserving comma formatting
+      const formatted = correctSum.toLocaleString()
+      corrected = corrected.replace(match[0], formatted)
+      console.log(`[format-results] arithmetic fix: ${num} → ${correctSum}`)
+      break // Only fix one total per answer
+    }
+  }
+
+  return corrected
+}
