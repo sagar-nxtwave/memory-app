@@ -1801,14 +1801,6 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
   ) : ''
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const [thinkingOpen, setThinkingOpen] = useState(false)
-  const prevThinkingLenRef = useRef(0)
-  useEffect(() => {
-    const len = message.thinkingSteps?.length ?? 0
-    if (isStreaming && message.content === '' && len > 0 && prevThinkingLenRef.current === 0) {
-      setThinkingOpen(true)
-    }
-    prevThinkingLenRef.current = len
-  }, [isStreaming, message.content, message.thinkingSteps])
 
   const handleVote = async (v: 'up' | 'down') => {
     const next = vote === v ? null : v
