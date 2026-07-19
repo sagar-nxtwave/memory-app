@@ -341,11 +341,12 @@ export default function SpacePage() {
               }))
             } else if (event.type === 'delta') {
               accumulated += event.content
+              setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: accumulated } : m)))
             } else if (event.type === 'done') {
               const finalContent = accumulated
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
-                return { ...m, content: finalContent, isTyping: true, citations: event.citations ?? [], documentImages: event.documentImages ?? [], suggestions: event.suggestions ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
+                return { ...m, content: finalContent, citations: event.citations ?? [], documentImages: event.documentImages ?? [], suggestions: event.suggestions ?? [], ...(event.assistantMessageId ? { id: event.assistantMessageId } : {}) }
               }))
             } else if (event.type === 'error') {
               setMessages((p) => p.map((m) => (m.id === sid ? { ...m, content: event.message ?? 'Something went wrong.' } : m)))
@@ -417,10 +418,6 @@ export default function SpacePage() {
     setStreamingMessageId(null)
     setLoading(false)
   }
-
-  const handleTypingDone = useCallback((id: string) => {
-    setMessages((p) => p.map((m) => (m.id === id ? { ...m, isTyping: false } : m)))
-  }, [])
 
   const fetchDocs = useCallback(async () => {
     const res = await fetch(`/api/documents?spaceId=${spaceId}`)
@@ -772,7 +769,7 @@ export default function SpacePage() {
                   <AnimatePresence initial={false}>
                     {messages.map((msg) => (
                       <motion.div key={msg.id} variants={msgVariants} initial="hidden" animate="show">
-                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onTypingDone={handleTypingDone} onSuggestionClick={(s) => { setInput(s); setTimeout(() => sendMessage(s), 0) }} />
+                        <ChatMessage message={msg} isStreaming={streamingMessageId === msg.id} onSuggestionClick={(s) => { setInput(s); setTimeout(() => sendMessage(s), 0) }} />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -1695,17 +1692,23 @@ function normalizeMarkdown(text: string): string {
     .join('\n')
 }
 
-function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: {
+function ChatMessage({ message, isStreaming, onSuggestionClick }: {
   message: Message
   isStreaming?: boolean
-  onTypingDone?: (id: string) => void
   onSuggestionClick?: (suggestion: string) => void
 }) {
   const isUser = message.role === 'user'
-  const showDots = isStreaming && message.content === ''
-  const [displayed, setDisplayed] = useState(message.isTyping ? '' : message.content)
+  const showDots = isStreaming && message.content === '' && (!message.thinkingSteps || message.thinkingSteps.length === 0)
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const [thinkingOpen, setThinkingOpen] = useState(false)
+  const prevThinkingLenRef = useRef(0)
+  useEffect(() => {
+    const len = message.thinkingSteps?.length ?? 0
+    if (isStreaming && message.content === '' && len > 0 && prevThinkingLenRef.current === 0) {
+      setThinkingOpen(true)
+    }
+    prevThinkingLenRef.current = len
+  }, [isStreaming, message.content, message.thinkingSteps])
 
   const handleVote = async (v: 'up' | 'down') => {
     const next = vote === v ? null : v
@@ -1716,27 +1719,6 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
       body: JSON.stringify({ messageId: message.id, vote: v }),
     }).catch(() => {})
   }
-
-  useEffect(() => {
-    if (!message.isTyping) {
-      setDisplayed(message.content)
-      return
-    }
-    const full = message.content
-    if (!full) return
-    const speed = Math.max(2, Math.min(20, 2000 / full.length))
-    let i = 0
-    setDisplayed('')
-    const iv = setInterval(() => {
-      i++
-      setDisplayed(full.slice(0, i))
-      if (i >= full.length) {
-        clearInterval(iv)
-        onTypingDone?.(message.id)
-      }
-    }, speed)
-    return () => clearInterval(iv)
-  }, [message.id, message.isTyping]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
@@ -1857,15 +1839,15 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                     )
                   },
                 }}
-              >{normalizeMarkdown(displayed)}</ReactMarkdown>
-              {message.isTyping && (
+              >{normalizeMarkdown(message.content)}</ReactMarkdown>
+              {isStreaming && message.content.length > 0 && (
                 <motion.span
                   animate={{ opacity: [1, 0, 1] }}
                   transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
                   className="inline-block w-0.5 h-[0.85em] bg-gray-400 dark:bg-gray-400 ml-0.5 align-text-bottom rounded-full"
                 />
               )}
-              {!message.isTyping && message.documentImages && message.documentImages.length > 0 && (
+              {!isStreaming && message.documentImages && message.documentImages.length > 0 && (
                 <div className="mt-3">
                   <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
                     Images from document ({message.documentImages.length})
@@ -1877,7 +1859,7 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                   </div>
                 </div>
               )}
-              {!message.isTyping && message.citations && message.citations.length > 0 && (() => {
+              {message.citations && message.citations.length > 0 && (() => {
                 const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
                 const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
                 const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
@@ -1915,7 +1897,7 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                   </div>
                 )
               })()}
-              {!message.isTyping && !isStreaming && (
+              {!isStreaming && (
                 <div className="mt-1.5 flex gap-0.5">
                   <button onClick={() => handleVote('up')} title="Helpful"
                     className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
@@ -1933,7 +1915,7 @@ function ChatMessage({ message, isStreaming, onTypingDone, onSuggestionClick }: 
                   </button>
                 </div>
               )}
-              {message.suggestions && message.suggestions.length > 0 && !message.isTyping && !isStreaming && message.role !== 'user' && (
+               {message.suggestions && message.suggestions.length > 0 && !isStreaming && message.role !== 'user' && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {message.suggestions.map((s: string, i: number) => (
                     <button
