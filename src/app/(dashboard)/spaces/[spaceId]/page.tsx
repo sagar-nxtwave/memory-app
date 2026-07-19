@@ -338,7 +338,10 @@ export default function SpacePage() {
                 if (m.id === sid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) sid = event.assistantMessageId
+              if (event.assistantMessageId) {
+                sid = event.assistantMessageId
+                setStreamingMessageId(event.assistantMessageId)
+              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
@@ -1689,7 +1692,7 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.12 }}
-            className="absolute bottom-full right-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
+            className="absolute bottom-full left-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
           >
             {LLM_MODELS.map((m) => (
               <button
@@ -1725,12 +1728,21 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="flex flex-col items-center min-h-[55vh] pt-8">
-      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-gray-900 dark:text-gray-400 text-sm mb-1">
-        What would you like to know?
-      </motion.p>
-      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="text-gray-900 dark:text-gray-500 text-xs mb-10">
-        {spaceName ? `Ask anything about ${spaceName}` : 'Ask a question or choose an action'}
-      </motion.p>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600 dark:text-gray-400">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <p className="text-gray-900 dark:text-white text-base font-semibold mb-1">
+          Hi, I'm Memory
+        </p>
+        <p className="text-gray-900 dark:text-gray-400 text-sm max-w-xs leading-relaxed">
+          {spaceName
+            ? `Ask me anything about ${spaceName}. I can search your documents, CRM data, and the web.`
+            : 'Ask me anything. I can search your documents, CRM data, and the web.'}
+        </p>
+      </motion.div>
       <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
         {actions.map((a, i) => (
           <motion.button

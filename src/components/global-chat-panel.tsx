@@ -208,7 +208,10 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                 if (m.id === sid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) sid = event.assistantMessageId
+              if (event.assistantMessageId) {
+                sid = event.assistantMessageId
+                setStreamingId(event.assistantMessageId)
+              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
@@ -296,7 +299,10 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                 if (m.id === newSid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) newSid = event.assistantMessageId
+              if (event.assistantMessageId) {
+                newSid = event.assistantMessageId
+                setStreamingId(event.assistantMessageId)
+              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== newSid) return m
@@ -885,7 +891,7 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.12 }}
-            className="absolute bottom-full right-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
+            className="absolute bottom-full left-0 mb-1.5 w-48 bg-white dark:bg-[#1c1c1c] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden z-20"
           >
             {LLM_MODELS.map((m) => (
               <button

@@ -172,10 +172,10 @@ export async function rerankWithScores<T extends { content: string }>(
 
 // ── Chat: OpenRouter ────────────────────────────────────────────────────────
 // Switch models by setting OPENROUTER_CHAT_MODEL in .env.local.
-// Recommended: anthropic/claude-sonnet-4-6 (best quality)
+// Recommended: anthropic/claude-fable-5 (best quality, 1M context, reasoning)
+//              anthropic/claude-sonnet-4-6 (fast, great quality)
 //              anthropic/claude-haiku-4-5 (fast + cheap + follows instructions well)
-//              mistralai/mistral-large     (cheaper, good quality)
-export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-sonnet-4-6'
+export const CHAT_MODEL = process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-fable-5'
 
 // ── Available models for user selection ─────────────────────────────────────
 // Re-exported from models.ts to avoid pulling server-side deps into client bundles
