@@ -485,12 +485,9 @@ export async function POST(req: NextRequest) {
         }))
         const merged = await retrieveAndMerge({ query: content, internal: internalItems, topN: crossSpace ? 8 : 6 })
         if (merged.webUsed) {
-          const hasInternalItems = merged.context.includes('[INT-')
-          if (hasInternalItems) {
-            context = merged.context
-            citations = merged.citations
-            webUsed = true
-          }
+          context = merged.context
+          citations = merged.citations
+          webUsed = true
         }
       }
 
