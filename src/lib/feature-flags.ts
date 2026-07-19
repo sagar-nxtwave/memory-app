@@ -15,8 +15,8 @@ export const features = {
   /** Persist feedback (thumbs up/down) to DB for self-improvement learning */
   feedbackPersistence: process.env.NEXT_PUBLIC_FEATURE_FEEDBACK_PERSISTENCE !== 'false',
 
-  /** MCP cross-check — verify MCP answers against independent SOQL query */
-  mcpCrossCheck: process.env.NEXT_PUBLIC_FEATURE_MCP_CROSS_CHECK !== 'false',
+  /** MCP cross-check — verify MCP answers against independent SOQL query (disabled: returns wrong answers due to missing domain filters) */
+  mcpCrossCheck: process.env.NEXT_PUBLIC_FEATURE_MCP_CROSS_CHECK === 'true',
 
   /** MCP verification — quickCheck + verifyAnswer on MCP answers before returning */
   mcpVerification: process.env.NEXT_PUBLIC_FEATURE_MCP_VERIFICATION !== 'false',
