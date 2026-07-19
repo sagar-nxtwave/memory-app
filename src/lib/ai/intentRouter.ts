@@ -45,6 +45,9 @@ export async function classifyIntent(query: string): Promise<Intent> {
       web,
       webConfidence,
     }
+    // TEMPORARILY DISABLED — web search causing messy data
+    intent.web = false
+
     // Guarantee at least one source; if the model returned all-false, fall back to documents.
     if (!intent.salesforce && !intent.documents && !intent.web) return DOCUMENTS_ONLY
     return intent

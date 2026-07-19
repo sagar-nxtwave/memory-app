@@ -205,13 +205,8 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
             if (event.type === 'start') {
               setMessages((p) => p.map((m) => {
                 if (m.id === tempUserId) return { ...m, id: event.userMessageId }
-                if (m.id === sid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) {
-                sid = event.assistantMessageId
-                setStreamingId(event.assistantMessageId)
-              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
@@ -296,13 +291,8 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
             if (event.type === 'start') {
               setMessages((p) => p.map((m) => {
                 if (m.id === tempUserId) return { ...m, id: event.userMessageId }
-                if (m.id === newSid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) {
-                newSid = event.assistantMessageId
-                setStreamingId(event.assistantMessageId)
-              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== newSid) return m

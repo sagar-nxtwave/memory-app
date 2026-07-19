@@ -335,13 +335,8 @@ export default function SpacePage() {
             if (event.type === 'start') {
               setMessages((p) => p.map((m) => {
                 if (m.id === tempUserId) return { ...m, id: event.userMessageId }
-                if (m.id === sid && event.assistantMessageId) return { ...m, id: event.assistantMessageId }
                 return m
               }))
-              if (event.assistantMessageId) {
-                sid = event.assistantMessageId
-                setStreamingMessageId(event.assistantMessageId)
-              }
             } else if (event.type === 'thinking') {
               setMessages((p) => p.map((m) => {
                 if (m.id !== sid) return m
