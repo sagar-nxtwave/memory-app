@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ThemeToggle } from './theme-toggle'
+import { PinnedCharts } from './pinned-charts'
 
 interface Space { id: string; name: string; description: string | null }
 
@@ -228,6 +229,9 @@ export function Sidebar() {
 
       {/* Spaces list */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5 scrollbar-hide">
+        {/* Pinned Charts — inside scrollable nav */}
+        <PinnedCharts />
+
         {spaces.length === 0 && !showCreate && (
           <p className="text-xs text-gray-900 dark:text-gray-500 px-3 py-2">
             No spaces yet

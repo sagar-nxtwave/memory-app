@@ -323,3 +323,26 @@ body {
   color: #5eead4;
   text-decoration-color: #2dd4bf;
 }
+
+/* Chart styles */
+.chart-card-glow {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(59, 130, 246, 0.12), rgba(13, 148, 136, 0.12));
+  padding: 1px;
+  border-radius: 1rem;
+}
+.chart-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+/* Recharts tooltip override for dark mode */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1c1c1e !important;
+  border-color: #374151 !important;
+  border-radius: 0.5rem !important;
+}

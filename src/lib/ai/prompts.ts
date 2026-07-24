@@ -27,6 +27,45 @@ export function styleInstruction(style: 'short' | 'detailed' = 'short'): string 
     : 'RESPONSE STYLE: Short. Maximum 80 words total, 3 bullet points per section maximum. Be ruthlessly concise.'
 }
 
+export const CHART_INSTRUCTIONS = `
+
+## CHART VISUALIZATION
+When the user's question involves trends, comparisons, distributions, time-series data, or numeric breakdowns, embed a chart code block.
+
+### Supported chart types:
+- "line" — trends over time (revenue, sales count, pipeline growth)
+- "bar" — comparisons across categories (buildings, salespeople, communities)
+- "pie" — composition / breakdown (status mix, lead sources, property types)
+- "area" — cumulative buildup (pipeline growth, running totals)
+- "funnel" — conversion stages (leads → opportunities → closed won)
+- "stackedBar" — grouped comparison (sales vs cancellations by month)
+- "scatter" — correlation (price vs area, count vs value)
+- "radial" — single KPI with context (total revenue, conversion rate)
+
+### Format:
+Return a fenced code block with language "chart" containing valid JSON:
+\`\`\`chart
+{
+  "type": "<chart-type>",
+  "title": "Clear insight title",
+  "subtitle": "Units (AED M, count, %)",
+  "data": [
+    {"label": "Category/Date", "value": 123}
+  ],
+  "lines": [{"key": "value", "name": "Series Name", "color": "#3b82f6"}]
+}
+\`\`\`
+
+### Rules:
+- ALWAYS use exact values from the provided data — NEVER fabricate
+- For multi-series charts, add multiple keys in data objects and multiple entries in "lines"
+- Group by the most meaningful dimension for the question
+- Keep data array under 20 items for readability
+- After the chart block, add 1-2 sentences summarizing the key insight in markdown
+- If the data is a single number, use type "radial" instead of a chart
+- For pie charts, each data item is a segment (label = segment name, value = numeric value)
+- For funnel charts, order data from top (widest) to bottom (narrowest) of the funnel`
+
 export function documentProcessingPrompt(documentName: string): string {
   return `You are processing a business document called "${documentName}".
 Extract the following in JSON format:
@@ -100,7 +139,8 @@ If the context truly doesn't cover the question, don't just refuse, say briefly 
 Maximum response: 150 words unless a longer list or table is required.
 NEVER write markdown image syntax (![...](...)) in your response, you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").
 
-NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10, never pad the list.`
+NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10, never pad the list.
+${CHART_INSTRUCTIONS}`
 }
 
 export function globalChatPrompt(): string {
@@ -113,7 +153,8 @@ For comparisons or multi-column data, use a markdown table (| Col | Col |). Bold
 Be concise and executive-focused. If information comes from multiple projects, present it clearly by project.
 NEVER write markdown image syntax (![...](...)) in your response, you do not know real image URLs and inventing one breaks the page. Any relevant images are already rendered separately below your answer; just describe them in prose (e.g. "Image 2 below shows...").
 
-NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10, never pad the list.`
+NEVER HALLUCINATE DATA: When the context contains Salesforce data (lists of names, communities, buildings, statuses, counts, amounts), reproduce ONLY the exact values from the context. Do NOT add, invent, supplement, or "complete" any list with made-up entries. If the context shows 52 communities, list exactly those 52. If it shows 10 names, show exactly those 10, never pad the list.
+${CHART_INSTRUCTIONS}`
 }
 
 // Translates a natural-language question into a constrained query spec over one stored

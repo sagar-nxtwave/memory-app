@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { ChartBlock, parseChartJson } from '@/components/charts/ChartBlock'
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder'
 import { useSpacesList } from '@/lib/hooks/useSpacesList'
 import { formatRelativeTime } from '@/lib/utils/date'
@@ -969,6 +970,38 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const [thinkingOpen, setThinkingOpen] = useState(false)
 
+  const remarkPlugins = useMemo(() => [remarkGfm], [])
+
+  const mdComponents = useMemo(() => ({
+    table: ({ children }: { children: React.ReactNode }) => (
+      <div className="overflow-x-auto my-3"><table>{children}</table></div>
+    ),
+    img: ({ src, alt }: { src?: string; alt?: string }) => {
+      const url = typeof src === 'string' ? src : undefined
+      return (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={url}
+            alt={alt ?? ''}
+            className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
+            loading="lazy"
+          />
+        </a>
+      )
+    },
+    code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string; children?: React.ReactNode }) => {
+      const isChart = /language-chart/.test(className || '')
+      if (isChart) {
+        const raw = String(children).replace(/\n$/, '')
+        const spec = parseChartJson(raw)
+        if (spec) return <ChartBlock spec={spec} />
+      }
+      return <code className={className} {...props}>{children}</code>
+    },
+  } as any), [])
+
+  const mdContent = useMemo(() => normalizeMarkdown(message.content), [message.content])
+
   const handleVote = async (v: 'up' | 'down') => {
     const next = vote === v ? null : v
     setVote(next)
@@ -1081,26 +1114,9 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
             )}
             <div className="markdown-body">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                table: ({ children }) => (
-                  <div className="overflow-x-auto my-3"><table>{children}</table></div>
-                ),
-                img: ({ src, alt }) => {
-                  const url = typeof src === 'string' ? src : undefined
-                  return (
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={url}
-                        alt={alt ?? ''}
-                        className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700 my-3 cursor-zoom-in hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                      />
-                    </a>
-                  )
-                },
-              }}
-            >{normalizeMarkdown(message.content)}</ReactMarkdown>
+              remarkPlugins={remarkPlugins}
+              components={mdComponents}
+            >{mdContent}</ReactMarkdown>
             {isStreaming && message.content.length > 0 && (
               <motion.span
                 animate={{ opacity: [1, 0, 1] }}
