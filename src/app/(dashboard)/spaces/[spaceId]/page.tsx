@@ -735,7 +735,11 @@ export default function SpacePage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              <h1 className="font-sf font-bold text-gray-900 dark:text-white text-xl tracking-normal truncate leading-tight min-w-0 shrink">
+              <h1
+                onClick={() => view !== 'chat' && setView('chat')}
+                className={`font-sf font-bold text-gray-900 dark:text-white text-xl tracking-normal truncate leading-tight min-w-0 shrink ${view !== 'chat' ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+                title={view !== 'chat' ? 'Back to chat' : undefined}
+              >
                 {space?.name ?? nameHint ?? '…'}
               </h1>
               {space && (
@@ -804,10 +808,9 @@ export default function SpacePage() {
           )}
         </div>
 
-        {/* Desktop: nav pills */}
+        {/* Desktop: Recents toggle — clicking again while active returns to chat */}
         <div className="hidden md:flex items-center gap-1 shrink-0">
-          <NavBtn label="Chats" active={view === 'chat'} onClick={() => setView('chat')} />
-          <NavBtn label="Recents" active={view === 'recents'} onClick={openRecents} />
+          <NavBtn label="Recents" active={view === 'recents'} onClick={() => (view === 'recents' ? setView('chat') : openRecents())} />
         </div>
       </motion.header>
 
@@ -1449,9 +1452,6 @@ export default function SpacePage() {
                     </span>
                     <span className="flex flex-col items-start leading-tight">
                       <span className="text-[13px] font-medium text-[#0F172A] dark:text-white">{label}</span>
-                      {space?.lastVisit && (
-                        <span className="text-[11px] text-[#64748B] dark:text-gray-500">Updated {formatRelativeTime(space.lastVisit)}</span>
-                      )}
                     </span>
                   </motion.button>
                 ))}
@@ -1877,10 +1877,10 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
   spaceName?: string; onBriefMe: () => void; onCatchMeUp: () => void; onTimeline: () => void; onDocuments: () => void
 }) {
   const actions = [
-    { icon: 'doc', label: 'Brief me', sub: 'Updated 2 hours ago', onClick: onBriefMe },
-    { icon: 'clock', label: 'Catch me up', sub: 'Updated 2 hours ago', onClick: onCatchMeUp },
-    { icon: 'list', label: 'Timeline', sub: 'Updated 2 hours ago', onClick: onTimeline },
-    { icon: 'folder', label: 'Documents', sub: 'Updated 2 hours ago', onClick: onDocuments },
+    { icon: 'doc', label: 'Brief me', onClick: onBriefMe },
+    { icon: 'clock', label: 'Catch me up', onClick: onCatchMeUp },
+    { icon: 'list', label: 'Timeline', onClick: onTimeline },
+    { icon: 'folder', label: 'Documents', onClick: onDocuments },
   ]
 
   return (
@@ -1923,7 +1923,6 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-figtree text-sm font-medium text-[#0F172A] dark:text-white">{a.label}</p>
-              <p className="font-sf text-xs text-[#64748B] dark:text-gray-400 truncate">{a.sub}</p>
             </div>
           </motion.button>
         ))}
@@ -2020,7 +2019,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div className={`max-w-[85%] px-4 py-3 rounded-[24px] text-[15px] leading-relaxed tracking-[-0.23px] ${
         isUser
-          ? 'bg-[#1A1A1A]/[0.09] dark:bg-gray-700 text-[#0F172A] dark:text-white rounded-br-sm shadow-[0_4px_16px_rgba(0,0,0,0.08)]'
+          ? 'bg-[#F1F5F9] dark:bg-gray-700 text-[#0F172A] dark:text-white rounded-br-sm'
           : 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
         {isUser ? (
