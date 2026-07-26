@@ -29,7 +29,7 @@ export async function GET() {
       .leftJoin(documents, eq(documents.spaceId, spaces.id))
       .where(eq(spaceMembers.userId, userId))
       .groupBy(spaces.id, spaces.name, spaces.description, spaces.status, spaces.imageKey)
-      .orderBy(sql`max(${documents.createdAt}) desc nulls last`),
+      .orderBy(sql`(${spaces.name} ilike '%nshama%') desc, max(${documents.createdAt}) desc nulls last`),
 
     // All documents across all spaces, sorted by most recent
     db

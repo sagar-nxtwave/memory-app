@@ -683,7 +683,7 @@ export default function SpacePage() {
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="flex items-center gap-2 px-4 pb-3 sm:pb-3.5 md:pb-4 min-h-[64px] sm:min-h-[72px] md:min-h-[80px] shrink-0 bg-white/10 dark:bg-[#0f0f0f]/80 backdrop-blur-[24px] z-20 relative"
+        className="flex items-center gap-2 px-4 pb-3 sm:pb-3.5 md:pb-4 min-h-[64px] sm:min-h-[72px] md:min-h-[80px] shrink-0 z-20 relative"
         style={{ paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}
       >
         {/* Mobile: back pill — chevron + "Chats" label */}
@@ -2229,23 +2229,12 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
 }
 
 function NavBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  const icon = label === 'Chats' ? (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
-    </svg>
-  ) : (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
-    </svg>
-  )
-
   return (
     <motion.button whileTap={{ scale: 0.94 }} onClick={onClick}
       className={`font-figtree flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-full transition-all min-h-[44px] backdrop-blur-[132px] ${
         active ? 'bg-white dark:bg-gray-700 text-[#0F172A] dark:text-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]'
                : 'text-gray-400 dark:text-gray-500 hover:text-[#0F172A] dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-800'
       }`}>
-      {icon}
       {label}
     </motion.button>
   )

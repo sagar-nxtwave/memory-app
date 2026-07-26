@@ -23,7 +23,7 @@ export async function GET() {
     .leftJoin(documents, eq(documents.spaceId, spaces.id))
     .where(eq(spaceMembers.userId, session.user.id))
     .groupBy(spaces.id, spaces.name, spaces.description, spaces.createdAt, spaces.imageKey)
-    .orderBy(sql`max(${documents.createdAt}) desc nulls last, ${spaces.createdAt} desc`)
+    .orderBy(sql`(${spaces.name} ilike '%nshama%') desc, max(${documents.createdAt}) desc nulls last, ${spaces.createdAt} desc`)
 
   return NextResponse.json(userSpaces)
 }

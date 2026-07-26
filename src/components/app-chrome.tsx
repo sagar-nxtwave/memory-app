@@ -66,7 +66,7 @@ export function AppChrome() {
     <>
       {/* -- Memory header (mobile only — desktop uses the sidebar) -- */}
       {showChrome && (
-      <header className="md:hidden fixed top-0 inset-x-0 z-20 bg-white/10 dark:bg-[#0a0a0a]/70 backdrop-blur-[48px]">
+      <header className="md:hidden fixed top-0 inset-x-0 z-20">
         {/* Inner container matches the page content width so the logo lines up with the page heading */}
         <div className="w-full max-w-2xl mx-auto px-4 pb-3 flex items-center" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2">

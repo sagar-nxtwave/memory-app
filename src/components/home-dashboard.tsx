@@ -129,7 +129,7 @@ export function HomeDashboard() {
                         onClick={() => router.push(`/spaces/${sig.spaceId}?name=${encodeURIComponent(sig.spaceName)}`)}
                         className="font-sf w-full flex items-start gap-2 text-left"
                       >
-                        <span className="pt-0.5 shrink-0 text-[#94A3B8]"><Sparkle className="w-3 h-3" /></span>
+                        <span className="pt-0.5 shrink-0 text-emerald-500"><Sparkle className="w-3 h-3" /></span>
                         <span className="flex-1 min-w-0 text-[13px] leading-[18px] tracking-[-0.0062em] text-[#475569] dark:text-slate-300">
                           {sig.spaceName} - {sig.text}
                         </span>
@@ -139,12 +139,10 @@ export function HomeDashboard() {
                   {hasMoreSignals && (
                     <button
                       onClick={() => setSheetOpen(true)}
-                      className="font-sf mt-4 mx-6 inline-flex items-center gap-1 px-3 py-1 text-[13px] leading-[16px] text-[#94A3B8] bg-[#F1F5F9] rounded-full hover:bg-[#E2E8F0] transition-colors"
+                      className="font-sf mt-4 mx-6 inline-flex items-center gap-0.5 text-[13px] font-semibold text-[#475569] dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
                     >
                       Show all
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
