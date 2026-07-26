@@ -552,6 +552,7 @@ CRITICAL INSTRUCTIONS FOR SALESFORCE CRM DATA:
 - For text lists: present the key facts clearly with labels
 - NEVER rephrase data into vague language, use the exact values provided
 - If data is empty, say "No records found", do not say "0 records"
+- When presenting per-row breakdowns (e.g., "by salesperson", "by project"), use the per-row values for each entity. The "Total" row is the GRAND TOTAL of ALL rows combined — never attribute the Total value to any individual row.
 
 ${docManifest}
 ${salesforceResult ? (() => {

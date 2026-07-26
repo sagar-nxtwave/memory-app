@@ -37,8 +37,81 @@ export interface Digest {
   recentDocuments: RecentDoc[]
 }
 
-export function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return ''
+// -- Portfolio risk heat-map ---------------------------------------------------
+// Derived client-side from existing status + extracted-risk counts — no new
+// backend fields needed. Gives an at-a-glance "what needs attention" signal.
+
+export type RiskLevel = 'critical' | 'watch' | 'healthy' | 'new'
+
+export function computeRiskLevel(space: SpaceSignal, riskCount: number): RiskLevel {
+  if (space.documentCount === 0) return 'new'
+  if (space.status === 'at_risk' || riskCount >= 3) return 'critical'
+  if (space.status === 'on_hold' || riskCount >= 1) return 'watch'
+  return 'healthy'
+}
+
+export function riskCountsBySpace(recentDocuments: RecentDoc[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const doc of recentDocuments) {
+    const c = (doc.risks ?? []).length
+    map.set(doc.spaceId, (map.get(doc.spaceId) ?? 0) + c)
+  }
+  return map
+}
+
+const RISK_DOT: Record<RiskLevel, string> = {
+  critical: 'bg-red-500',
+  watch: 'bg-amber-400',
+  healthy: 'bg-emerald-400',
+  new: 'bg-slate-300 dark:bg-slate-600',
+}
+
+const RISK_LABEL: Record<RiskLevel, string> = {
+  critical: 'Needs attention',
+  watch: 'Watching',
+  healthy: 'On track',
+  new: 'New',
+}
+
+export function PortfolioHealthBar({
+  counts, active, onFilter,
+}: {
+  counts: Record<RiskLevel, number>
+  active?: RiskLevel | null
+  onFilter?: (level: RiskLevel | null) => void
+}) {
+  const levels: RiskLevel[] = ['critical', 'watch', 'healthy']
+  const total = levels.reduce((sum, l) => sum + counts[l], 0)
+  if (total === 0) return null
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide mb-6 -mx-0.5 px-0.5">
+      {levels.map((level) => {
+        if (counts[level] === 0) return null
+        const isActive = active === level
+        const clickable = !!onFilter
+        return (
+          <button
+            key={level}
+            type="button"
+            onClick={clickable ? () => onFilter(isActive ? null : level) : undefined}
+            className={`font-sf shrink-0 flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full text-[13px] font-medium whitespace-nowrap transition-all ${
+              isActive
+                ? 'bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A] shadow-[0_4px_16px_rgba(0,0,0,0.16)]'
+                : 'bg-white dark:bg-[#111] text-[#475569] dark:text-slate-300 shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)]'
+            } ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${RISK_DOT[level]}`} />
+            <span className="font-semibold">{counts[level]}</span>
+            <span className={isActive ? 'text-white/80 dark:text-[#0F172A]/70' : 'text-[#94A3B8] dark:text-slate-500'}>{RISK_LABEL[level]}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function timeAgo(dateStr: string | null): string {  if (!dateStr) return ''
   const diff = Date.now() - parseUtc(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return mins <= 1 ? 'just now' : `${mins} minutes ago`
@@ -91,7 +164,7 @@ const THUMB_GRADIENTS = [
   'from-cyan-400 to-blue-500',
 ]
 
-export function SpaceCard({ space, index = 0, onClick }: { space: SpaceSignal; index?: number; onClick: () => void }) {
+export function SpaceCard({ space, index = 0, riskLevel, onClick }: { space: SpaceSignal; index?: number; riskLevel?: RiskLevel; onClick: () => void }) {
   const isEmpty = space.documentCount === 0
   const [imgFailed, setImgFailed] = useState(false)
   const gradient = THUMB_GRADIENTS[
@@ -110,22 +183,31 @@ export function SpaceCard({ space, index = 0, onClick }: { space: SpaceSignal; i
       transition={{ delay: index * 0.03 }}
       whileTap={{ scale: 0.99 }}
       onClick={onClick}
-      className="w-full flex items-center gap-4 p-2 pr-4 rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 text-left group"
+      className="w-full flex items-center gap-4 p-2 pr-4 rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-[#F1F5F9] dark:ring-white/5 text-left group"
     >
       {/* Thumbnail 72×72 (fluid), radius 18 — real cover photo when set, else gradient monogram */}
-      {space.hasImage && !imgFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect, not a static asset Next can optimize
-        <img
-          src={`/api/spaces/${space.id}/image`}
-          alt=""
-          onError={() => setImgFailed(true)}
-          className="thumb shrink-0 rounded-[18px] object-cover"
-        />
-      ) : (
-        <div className={`thumb shrink-0 grid place-items-center rounded-[18px] bg-gradient-to-br ${gradient}`}>
-          <span className="font-figtree text-[clamp(1.25rem,6vw,1.5rem)] font-semibold text-white/95">{space.name.charAt(0).toUpperCase()}</span>
-        </div>
-      )}
+      <div className="relative shrink-0">
+        {space.hasImage && !imgFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect, not a static asset Next can optimize
+          <img
+            src={`/api/spaces/${space.id}/image`}
+            alt=""
+            onError={() => setImgFailed(true)}
+            className="thumb shrink-0 rounded-[18px] object-cover"
+          />
+        ) : (
+          <div className={`thumb shrink-0 grid place-items-center rounded-[18px] bg-gradient-to-br ${gradient}`}>
+            <span className="font-figtree text-[clamp(1.25rem,6vw,1.5rem)] font-semibold text-white/95">{space.name.charAt(0).toUpperCase()}</span>
+          </div>
+        )}
+        {/* Risk heat-map dot — omitted for healthy/new spaces to avoid visual noise */}
+        {riskLevel && (riskLevel === 'critical' || riskLevel === 'watch') && (
+          <span
+            className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#111] ${RISK_DOT[riskLevel]}`}
+            title={RISK_LABEL[riskLevel]}
+          />
+        )}
+      </div>
 
       <div className="flex-1 min-w-0">
         {/* Label-1/SemiBold: Figtree 600 16/22, -0.0113em, #0F172A */}
@@ -135,7 +217,7 @@ export function SpaceCard({ space, index = 0, onClick }: { space: SpaceSignal; i
       </div>
 
       {/* Chevron pill: bg #F1F5F9, radius 999, chevron 20 */}
-      <span className="shrink-0 grid place-items-center w-7 h-7 rounded-full bg-[#F1F5F9] dark:bg-white/5 text-slate-700 dark:text-slate-400 transition-colors">
+      <span className="shrink-0 grid place-items-center w-7 h-7 rounded-full bg-[#F1F5F9] dark:bg-white/5 text-[#0E0E0E] dark:text-slate-400 transition-colors">
         <ChevronRight className="w-5 h-5" />
       </span>
     </motion.button>

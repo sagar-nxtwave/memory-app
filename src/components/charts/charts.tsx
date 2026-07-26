@@ -108,7 +108,7 @@ export function PieDonut({ data, height = 250 }: ChartProps) {
         <text x="50%" y="48%" textAnchor="middle" className="fill-gray-900 dark:fill-white text-lg font-semibold">
           {total.toLocaleString()}
         </text>
-        <text x="50%" y="58%" textAnchor="middle" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
+        <text x="50%" y="58%" textAnchor="middle" className="fill-gray-400 dark:fill-gray-500 text-[11px]">
           total
         </text>
       </PieChart>

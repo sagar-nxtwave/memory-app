@@ -5,7 +5,10 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ThemeToggle } from './theme-toggle'
-import { PinnedCharts } from './pinned-charts'
+import dynamic from 'next/dynamic'
+import { SPRING_MEDIUM, SPRING_SOFT, SPRING_SNAPPY } from '@/lib/animations'
+
+const PinnedCharts = dynamic(() => import('./pinned-charts').then(m => m.PinnedCharts), { ssr: false })
 
 interface Space { id: string; name: string; description: string | null }
 
@@ -223,7 +226,7 @@ export function Sidebar() {
       </AnimatePresence>
 
       {/* Section label */}
-      <p className="font-sf px-4 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8] dark:text-gray-500 mb-1.5 shrink-0">
+      <p className="font-sf px-4 text-[11px] font-semibold uppercase tracking-wider text-[#475569] dark:text-gray-500 mb-1.5 shrink-0">
         Spaces
       </p>
 
@@ -248,7 +251,7 @@ export function Sidebar() {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -8 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                transition={{ type: 'spring', ...SPRING_MEDIUM }}
                 className="group flex items-center gap-1"
               >
                 {isEditing ? (
@@ -290,7 +293,8 @@ export function Sidebar() {
                             setMenuOpenId(space.id)
                           }
                         }}
-                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
+                        aria-label="More options for this space"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                           <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
@@ -364,6 +368,7 @@ export function Sidebar() {
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
             title="Sign out"
+            aria-label="Sign out"
             className="p-2 -mr-1 text-gray-300 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors shrink-0 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -414,10 +419,11 @@ export function Sidebar() {
         </div>
       </motion.aside>
 
-      {/* -- Mobile: hamburger button (hidden on home — bottom nav handles it there) -- */}
+      {/* -- Mobile: hamburger button (hidden on home, spaces, account, and space detail pages) -- */}
       <button
         onClick={() => setMobileOpen(true)}
-        className={`${(pathname === '/' || pathname === '/spaces' || pathname === '/account') ? 'hidden' : 'md:hidden'} fixed top-4 left-4 z-40 p-2 bg-white dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl shadow-sm text-gray-600 dark:text-gray-300`}
+        className={`${(pathname === '/' || pathname === '/spaces' || pathname === '/account' || pathname.startsWith('/spaces/')) ? 'hidden' : 'md:hidden'} fixed top-4 left-4 z-40 p-2 bg-white dark:bg-[#111111] rounded-full shadow-sm text-gray-600 dark:text-gray-300`}
+        aria-label="Open menu"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <line x1="3" y1="6" x2="21" y2="6" />
@@ -433,19 +439,22 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-modal-title"
             className="fixed inset-0 z-[60] flex items-center justify-center px-5"
             onClick={() => !deleting && setConfirmDeleteId(null)}
           >
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-[24px]" />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              transition={{ type: 'spring', ...SPRING_SNAPPY }}
               onClick={(e) => e.stopPropagation()}
               className="relative w-full max-w-sm bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl p-5"
             >
-              <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">Delete space?</p>
+              <p id="delete-modal-title" className="text-base font-semibold text-gray-900 dark:text-white mb-1">Delete space?</p>
               <p className="text-sm text-gray-900 dark:text-gray-400 mb-5">
                 All documents, chat history, and memory for{' '}
                 <span className="font-medium text-gray-900 dark:text-gray-300">
@@ -483,7 +492,7 @@ export function Sidebar() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="md:hidden fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+              className="md:hidden fixed inset-0 z-40 bg-black/30 backdrop-blur-[24px]"
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
@@ -491,7 +500,10 @@ export function Sidebar() {
               initial={{ x: -280 }}
               animate={{ x: 0 }}
               exit={{ x: -280 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              transition={{ type: 'spring', ...SPRING_SOFT }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Navigation menu"
               className="md:hidden fixed left-0 top-0 bottom-0 z-50 w-64 max-w-[85vw] flex flex-col bg-[#faf9f9] dark:bg-[#0f0f0f] border-r border-slate-200/70 dark:border-white/5"
               style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
             >

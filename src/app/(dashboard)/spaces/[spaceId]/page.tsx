@@ -34,7 +34,7 @@ const STATUS_CONFIG: Record<SpaceStatus, { label: string; dot: string; badge: st
   on_hold:   { label: 'On Hold',   dot: 'bg-amber-400',                badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' },
   completed: { label: 'Completed', dot: 'bg-gray-400 dark:bg-gray-500', badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
 }
-type View = 'chat' | 'documents' | 'timeline'
+type View = 'chat' | 'documents' | 'timeline' | 'recents'
 interface MentionChip { spaceId: string; spaceName: string; docId?: string; docName?: string }
 interface MentionDoc { id: string; name: string; fileType: string }
 
@@ -43,10 +43,10 @@ import { parseUtc, formatDateTime } from '@/lib/utils/date'
 const FILE_ICONS: Record<string, string> = { pdf: '📄', docx: '📝', xlsx: '📊', csv: '📋', text: '✏️', pptx: '📊', image: '🖼️', zip: '🗜️', email: '✉️', cad: '📐' }
 
 const TIMELINE_EVENT_CONFIG = {
-  document: { label: 'Upload',   icon: '↑', dot: 'bg-gray-200 dark:bg-gray-700',          badge: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-400' },
-  decision:  { label: 'Decision', icon: '✓', dot: 'bg-blue-500 dark:bg-blue-400',           badge: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
-  risk:      { label: 'Risk',     icon: '!', dot: 'bg-red-400 dark:bg-red-400',             badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
-  number:    { label: 'Figure',   icon: '#', dot: 'bg-emerald-400 dark:bg-emerald-400',     badge: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
+  document: { label: 'Upload',   icon: '↑', dot: 'bg-blue-100 dark:bg-blue-900/30',        badge: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',     iconColor: 'text-blue-600 dark:text-blue-400' },
+  decision:  { label: 'Decision', icon: '✓', dot: 'bg-green-100 dark:bg-green-900/30',      badge: 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400',  iconColor: 'text-green-600 dark:text-green-400' },
+  risk:      { label: 'Risk',     icon: '!', dot: 'bg-red-100 dark:bg-red-900/30',          badge: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',          iconColor: 'text-red-600 dark:text-red-400' },
+  number:    { label: 'Figure',   icon: '#', dot: 'bg-blue-100 dark:bg-blue-900/30',        badge: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',     iconColor: 'text-blue-600 dark:text-blue-400' },
 }
 const STATUS_COLOR: Record<string, string> = {
   ready: 'text-emerald-500',
@@ -119,6 +119,7 @@ export default function SpacePage() {
   const [view, setView] = useState<View>('chat')
   const [docs, setDocs] = useState<Doc[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [expandedTimelineGroups, setExpandedTimelineGroups] = useState<Record<string, boolean>>({})
   const [uploadingAll, setUploadingAll] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
@@ -129,10 +130,7 @@ export default function SpacePage() {
   const [docSheet, setDocSheet] = useState<Doc | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null)
   const [loadingDocDetail, setLoadingDocDetail] = useState(false)
-  const [reprocessing, setReprocessing] = useState(false)
-  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set())
-  const [deletingSelected, setDeletingSelected] = useState(false)
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+
   const [chatLoading, setChatLoading] = useState(true)
   const [docsLoading, setDocsLoading] = useState(false)
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -144,6 +142,7 @@ export default function SpacePage() {
   const spaceSuggestionRef = useRef<{ id: string; name: string } | null>(null)
   const [docSearch, setDocSearch] = useState('')
   const [docTypeFilter, setDocTypeFilter] = useState<string>('all')
+  const [docViewMode, setDocViewMode] = useState<'grid' | 'list'>('list')
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionChips, setMentionChips] = useState<MentionChip[]>([])
   // 'space' = picking which project (current space's docs shown flat, others as drill-in
@@ -157,6 +156,8 @@ export default function SpacePage() {
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const mobileHeroRef = useRef<HTMLDivElement>(null)
+  const [showHeaderName, setShowHeaderName] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollingRef = useRef(false)
@@ -195,6 +196,18 @@ export default function SpacePage() {
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => container.removeEventListener('scroll', onScroll)
   }, [])
+
+  // Show space name in header when mobile hero scrolls out of view
+  useEffect(() => {
+    const hero = mobileHeroRef.current
+    if (!hero) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowHeaderName(!entry.isIntersecting),
+      { threshold: 0, root: scrollContainerRef.current }
+    )
+    observer.observe(hero)
+    return () => observer.disconnect()
+  }, [chatLoading, view])
 
   // Poll for doc status updates while any doc is processing
   useEffect(() => {
@@ -513,12 +526,25 @@ export default function SpacePage() {
       })
 
       if (!uploadResult.ok) {
-        // Clean up ghost DB record
-        await fetch(`/api/documents/${documentId}`, { method: 'DELETE' }).catch(() => {})
-        const reason = uploadResult.status === 0
-          ? 'Upload to storage failed — network error or CORS is blocking the request (check the B2 bucket\'s CORS rules for this origin).'
-          : `Upload to storage failed — B2 returned HTTP ${uploadResult.status}${uploadResult.body ? `: ${uploadResult.body.slice(0, 300)}` : ''}`
-        throw new Error(reason)
+        // CORS block (status=0) → fall back to server-side proxy upload
+        if (uploadResult.status === 0) {
+          setPendingUploads((prev) => prev.map((p) => p.id === item.id ? { ...p, progress: 50 } : p))
+          const proxyRes = await fetch(`/api/documents/${documentId}/upload`, {
+            method: 'PUT',
+            headers: { 'Content-Type': item.file.type || 'application/octet-stream' },
+            body: item.file,
+          })
+          if (!proxyRes.ok) {
+            await fetch(`/api/documents/${documentId}`, { method: 'DELETE' }).catch(() => {})
+            const body = await proxyRes.json().catch(() => ({}))
+            throw new Error(body.error ?? 'Upload failed via proxy')
+          }
+        } else {
+          // Clean up ghost DB record
+          await fetch(`/api/documents/${documentId}`, { method: 'DELETE' }).catch(() => {})
+          const reason = `Upload to storage failed — B2 returned HTTP ${uploadResult.status}${uploadResult.body ? `: ${uploadResult.body.slice(0, 300)}` : ''}`
+          throw new Error(reason)
+        }
       }
 
       // Step 3: Notify server to start processing
@@ -575,15 +601,6 @@ export default function SpacePage() {
     setDocSheet(null)
   }
 
-  async function deleteSelected() {
-    setDeletingSelected(true)
-    await Promise.allSettled([...selectedDocIds].map((id) => fetch(`/api/documents/${id}`, { method: 'DELETE' })))
-    setDocs((prev) => prev.filter((d) => !selectedDocIds.has(d.id)))
-    setReadyDocs((prev) => prev.filter((d) => !selectedDocIds.has(d.id)))
-    setSelectedDocIds(new Set())
-    setDeletingSelected(false)
-  }
-
   async function retryDoc(docId: string) {
     const res = await fetch(`/api/documents/${docId}/retry`, { method: 'POST' })
     if (res.ok) {
@@ -608,22 +625,6 @@ export default function SpacePage() {
     if (res.ok) {
       setDocs((prev) => prev.map((d) => d.id === docId ? { ...d, name } : d))
       setDocSheet((prev) => prev ? { ...prev, name } : null)
-    }
-  }
-
-  async function reprocessAll() {
-    setReprocessing(true)
-    try {
-      const res = await fetch(`/api/spaces/${spaceId}/reprocess`, { method: 'POST' })
-      if (res.ok) {
-        const { queued } = await res.json()
-        if (queued > 0) {
-          // Poll docs list — they'll flip to 'processing' then 'ready' as background jobs complete
-          setTimeout(() => fetchDocs(), 1500)
-        }
-      }
-    } finally {
-      setReprocessing(false)
     }
   }
 
@@ -666,35 +667,46 @@ export default function SpacePage() {
     await fetchDocs()
   }
 
+  async function openRecents() {
+    setView('recents')
+    setDocsLoading(true)
+    await fetchDocs()
+  }
+
   const isEmpty = messages.length === 0
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#0f0f0f]">
+    <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-[#0f0f0f]">
 
       {/* ── Header ── */}
       <motion.header
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
+        className="flex items-center gap-2 px-4 pb-3 sm:pb-3.5 md:pb-4 min-h-[64px] sm:min-h-[72px] md:min-h-[80px] shrink-0 bg-white/10 dark:bg-[#0f0f0f]/80 backdrop-blur-[24px] z-20 relative"
+        style={{ paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}
       >
-        <div className="flex-1 min-w-0 pl-12 md:pl-0 flex items-center gap-2">
-          <button
-            onClick={() => router.push('/')}
-            className="shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
-            title="Home"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </button>
-          {/* Cover photo avatar — click to upload/replace the space thumbnail used on Home/Spaces cards */}
+        {/* Mobile: back pill — chevron + "Chats" label */}
+        <button
+          onClick={() => router.push('/')}
+          className="md:hidden shrink-0 flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-800 rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.08)] text-[#0F172A] dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+          title="Back to Chats"
+          aria-label="Go back to Chats"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 0 1-.02 1.06L8.832 10l3.938 3.71a.75.75 0 1 1-1.04 1.08l-4.5-4.25a.75.75 0 0 1 0-1.08l4.5-4.25a.75.75 0 0 1 1.06.02Z" clipRule="evenodd" />
+          </svg>
+          <span className="font-figtree text-sm font-medium">Chats</span>
+        </button>
+
+        {/* Desktop: image + title + status */}
+        <div className="hidden md:flex flex-1 min-w-0 items-center gap-3">
           <button
             onClick={() => coverInputRef.current?.click()}
             disabled={uploadingCover}
             title="Change space photo"
-            className="relative shrink-0 w-9 h-9 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 group/cover"
+            aria-label="Change space photo"
+            className="relative shrink-0 w-12 h-12 rounded-[18px] overflow-hidden bg-gray-100 dark:bg-gray-800 group/cover"
           >
             {space?.imageKey ? (
               // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect
@@ -723,15 +735,14 @@ export default function SpacePage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              <h1 className="font-semibold text-gray-900 dark:text-white text-sm truncate leading-tight min-w-0 shrink">
+              <h1 className="font-sf font-bold text-gray-900 dark:text-white text-xl tracking-normal truncate leading-tight min-w-0 shrink">
                 {space?.name ?? nameHint ?? '…'}
               </h1>
-              {/* Status badge — tap to change */}
               {space && (
                 <div className="relative shrink-0">
                   <button
                     onClick={() => setStatusOpen((o) => !o)}
-                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide transition-opacity hover:opacity-80 ${STATUS_CONFIG[space.status ?? 'on_track'].badge}`}
+                    className={`font-sf text-[11px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide transition-opacity hover:opacity-80 ${STATUS_CONFIG[space.status ?? 'on_track'].badge}`}
                   >
                     {STATUS_CONFIG[space.status ?? 'on_track'].label}
                   </button>
@@ -758,7 +769,7 @@ export default function SpacePage() {
                                   body: JSON.stringify({ status: key }),
                                 })
                               }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-900 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                              className="font-sf w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-900 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
                             >
                               <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
                               {cfg.label}
@@ -771,15 +782,32 @@ export default function SpacePage() {
                 </div>
               )}
             </div>
-            {space?.description && (
-              <p className="text-xs text-gray-900 dark:text-gray-500 truncate">{space.description}</p>
+            {space?.lastVisit && (
+              <p className="font-sf text-xs text-slate-400 dark:text-gray-500 truncate">Updated {formatRelativeTime(space.lastVisit)}</p>
             )}
-            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <NavBtn label="Chat" active={view === 'chat'} onClick={() => setView('chat')} />
-          <NavBtn label="Timeline" active={view === 'timeline'} onClick={openTimeline} />
-          <NavBtn label="Docs" active={view === 'documents'} onClick={openDocuments} />
+
+        {/* Mobile: spacer or space name when scrolled */}
+        <div className="flex-1 md:hidden min-w-0">
+          {showHeaderName && (
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="font-sf font-bold text-[15px] text-[#0F172A] dark:text-white truncate leading-tight">
+                {space?.name ?? nameHint ?? '…'}
+              </h1>
+              {space && (
+                <span className={`font-sf text-[9px] font-bold px-1 py-0.5 rounded uppercase tracking-wide ${STATUS_CONFIG[space.status ?? 'on_track'].badge}`}>
+                  {STATUS_CONFIG[space.status ?? 'on_track'].label}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop: nav pills */}
+        <div className="hidden md:flex items-center gap-1 shrink-0">
+          <NavBtn label="Chats" active={view === 'chat'} onClick={() => setView('chat')} />
+          <NavBtn label="Recents" active={view === 'recents'} onClick={openRecents} />
         </div>
       </motion.header>
 
@@ -790,6 +818,40 @@ export default function SpacePage() {
           {/* CHAT */}
           {view === 'chat' && (
             <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="px-4 py-6 max-w-2xl mx-auto">
+              {/* Mobile: space image + title (hidden on desktop, shown in header) */}
+              <div ref={mobileHeroRef} className="md:hidden flex flex-col items-center mb-6">
+                <button
+                  onClick={() => coverInputRef.current?.click()}
+                  disabled={uploadingCover}
+                  title="Change space photo"
+                  aria-label="Change space photo"
+                  className="relative shrink-0 w-24 h-24 rounded-[18px] overflow-hidden bg-gray-100 dark:bg-gray-800 group/cover mb-3"
+                >
+                  {space?.imageKey ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed-URL redirect
+                    <img key={coverBust} src={`/api/spaces/${spaceId}/image?v=${coverBust}`} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center text-gray-400 dark:text-gray-500 text-2xl font-semibold">
+                      {(space?.name ?? nameHint ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/cover:bg-black/40 transition-colors">
+                    {uploadingCover ? (
+                      <svg className="animate-spin text-white opacity-0 group-hover/cover:opacity-100" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /></svg>
+                    ) : (
+                      <svg className="text-white opacity-0 group-hover/cover:opacity-100 transition-opacity" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+                <h1 className="font-sf font-bold text-[28px] tracking-[0.38px] text-[#0F172A] dark:text-white text-center truncate leading-tight">
+                  {space?.name ?? nameHint ?? '…'}
+                </h1>
+                {space?.lastVisit && (
+                  <p className="font-sf text-xs text-[#94A3B8] dark:text-gray-500 mt-1">Updated {formatRelativeTime(space.lastVisit)}</p>
+                )}
+              </div>
               {chatLoading ? (
                 <ChatSkeleton />
               ) : isEmpty ? (
@@ -812,9 +874,9 @@ export default function SpacePage() {
                   {webSearchConfirm && (
                     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 shrink-0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                      <span className="text-blue-700 dark:text-blue-300">Search the web for more info?</span>
-                      <button onClick={() => confirmWebSearch(true)} className="ml-auto px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Search</button>
-                      <button onClick={() => confirmWebSearch(false)} className="px-3 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Skip</button>
+                      <span className="font-sf text-blue-700 dark:text-blue-300">Search the web for more info?</span>
+                      <button onClick={() => confirmWebSearch(true)} className="font-sf ml-auto px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Search</button>
+                      <button onClick={() => confirmWebSearch(false)} className="font-sf px-3 py-1 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Skip</button>
                     </motion.div>
                   )}
                   <div ref={bottomRef} />
@@ -826,41 +888,86 @@ export default function SpacePage() {
           {/* DOCUMENTS */}
           {view === 'documents' && (
             <motion.div key="documents" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
-              <div className="mb-5 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900 dark:text-white">Documents</h2>
-                {docs.length > 0 && (
-                  <button
-                    onClick={reprocessAll}
-                    disabled={reprocessing}
-                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 transition-colors flex items-center gap-1"
-                    title="Re-chunk all documents with latest AI settings"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                    </svg>
-                    {reprocessing ? 'Queuing…' : 'Reprocess all'}
-                  </button>
-                )}
-              </div>
               {docsLoading && <ListSkeleton />}
               {docsLoading ? null : <>
 
-              {/* Tab toggle */}
-              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl mb-4">
-                {(['upload', 'text'] as const).map((mode) => (
+              {/* Header: Search + View Toggle */}
+              <div className="mb-4 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input
+                    type="text"
+                    value={docSearch}
+                    onChange={e => setDocSearch(e.target.value)}
+                    placeholder="Search document"
+                    className="font-sf w-full pl-11 pr-4 py-3 text-base bg-white dark:bg-gray-900 border border-[rgba(26,26,26,0.20)] dark:border-gray-700 rounded-full outline-none focus:border-gray-400 dark:focus:border-gray-600 text-[#0F172A] dark:text-white placeholder:text-[#94A3B8] dark:placeholder:text-gray-600 shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
+                  />
+                  {docSearch && (
+                    <button onClick={() => setDocSearch('')} aria-label="Clear search" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-gray-600">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  )}
+                </div>
+                {/* View toggle pill */}
+                <div className="flex items-center gap-1 p-1 bg-white dark:bg-gray-900 border border-[rgba(26,26,26,0.20)] dark:border-gray-700 rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                   <button
-                    key={mode}
-                    onClick={() => setDocInputMode(mode)}
-                    className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
-                      docInputMode === mode
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-900 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    onClick={() => setDocViewMode('list')}
+                    className={`w-11 h-11 flex items-center justify-center rounded-full transition-colors ${docViewMode === 'list' ? 'bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A]' : 'bg-[#F1F5F9] dark:bg-gray-800 text-[#0F172A] dark:text-white'}`}
+                    title="List view"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setDocViewMode('grid')}
+                    className={`w-11 h-11 flex items-center justify-center rounded-full transition-colors ${docViewMode === 'grid' ? 'bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A]' : 'bg-[#F1F5F9] dark:bg-gray-800 text-[#0F172A] dark:text-white'}`}
+                    title="Grid view"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter type pills */}
+              <div className="mb-4 flex gap-1.5 flex-wrap">
+                {(['all', 'pdf', 'docx', 'xlsx', 'csv', 'text'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setDocTypeFilter(type)}
+                    className={`font-sf px-4 py-2 text-base rounded-full transition-colors ${
+                      docTypeFilter === type
+                        ? 'bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A]'
+                        : 'bg-white dark:bg-gray-900 border border-[rgba(26,26,26,0.20)] dark:border-gray-700 text-[#64748B] dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 shadow-[0_4px_16px_rgba(0,0,0,0.04)]'
                     }`}
                   >
-                    {mode === 'upload' ? 'Upload file' : 'Minutes of Meeting'}
+                    {type === 'all' ? 'All' : type.toUpperCase()}
                   </button>
                 ))}
               </div>
+
+              {/* Tab toggle for upload/text — only when no docs or upload mode */}
+              {docs.length === 0 && (
+                <div className="flex gap-1 p-1 bg-[#F1F5F9] dark:bg-gray-800/60 rounded-xl mb-4">
+                  {(['upload', 'text'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setDocInputMode(mode)}
+                      className={`font-sf flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
+                        docInputMode === mode
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-900 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      {mode === 'upload' ? 'Upload file' : 'Minutes of Meeting'}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <AnimatePresence mode="wait">
                 {docInputMode === 'upload' ? (
@@ -878,8 +985,8 @@ export default function SpacePage() {
                       }`}
                     >
                       <div className="text-3xl mb-3">📎</div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-300">Drop files or click to upload</p>
-                      <p className="text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 500MB each</p>
+                      <p className="font-sf text-sm font-medium text-gray-900 dark:text-gray-300">Drop files or click to upload</p>
+                      <p className="font-sf text-xs text-gray-900 dark:text-gray-500 mt-1">PDF · Word · Excel · CSV · up to 500MB each</p>
                     </motion.div>
                     <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.pptx,.ppt,.txt,.jpg,.jpeg,.png,.webp,.zip,.eml,.msg,.dwg,.dxf,.skp" className="hidden"
                       onChange={(e) => { if (e.target.files && e.target.files.length > 0) stageFiles(e.target.files); e.target.value = '' }} />
@@ -922,20 +1029,20 @@ export default function SpacePage() {
                                     </svg>
                                   )}
                                 </div>
-                                <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">{fmt(item.file.size)}</p>
+                                <p className="font-sf text-xs text-gray-400 dark:text-gray-600 mt-1">{fmt(item.file.size)}</p>
                                 {item.status === 'uploading' && (
                                   <div className="mt-1.5 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <motion.div className="h-full bg-gray-900 dark:bg-gray-300 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.3 }} />
                                   </div>
                                 )}
                                 {item.status === 'error' && (
-                                  <p className="text-xs text-red-400 mt-0.5">{item.error}</p>
+                                  <p className="font-sf text-xs text-red-400 mt-0.5">{item.error}</p>
                                 )}
                               </div>
                               <div className="shrink-0">
                                 {item.status === 'done' && <span className="text-emerald-500 text-sm">✓</span>}
                                 {item.status === 'uploading' && (
-                                  <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="text-xs text-amber-500">{item.progress}%</motion.span>
+                                  <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="font-sf text-xs text-amber-500">{item.progress}%</motion.span>
                                 )}
                                 {(item.status === 'queued' || item.status === 'error') && !uploadingAll && (
                                   <button
@@ -959,7 +1066,7 @@ export default function SpacePage() {
                                 {!uploadingAll && (
                                   <button
                                     onClick={() => setPendingUploads([])}
-                                    className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                    className="font-sf flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                   >
                                     Clear
                                   </button>
@@ -968,7 +1075,7 @@ export default function SpacePage() {
                                   whileTap={{ scale: 0.97 }}
                                   onClick={uploadAll}
                                   disabled={uploadingAll || queued.length === 0}
-                                  className="flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+                                  className="font-sf flex-1 py-2.5 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
                                 >
                                   {uploadingAll ? 'Uploading…' : queued.length === 1 ? 'Upload & process' : `Upload ${queued.length} files`}
                                 </motion.button>
@@ -986,20 +1093,20 @@ export default function SpacePage() {
                       value={pasteTitle}
                       onChange={(e) => setPasteTitle(e.target.value)}
                       placeholder="Title — e.g. Meeting minutes, 25 Jun"
-                      className="w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                      className="font-sf w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
                     />
                     <textarea
                       value={pasteContent}
                       onChange={(e) => setPasteContent(e.target.value)}
                       placeholder="Paste minutes of meeting, notes, decisions, ideas… Memory will extract insights automatically."
                       rows={8}
-                      className="w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
+                      className="font-sf w-full px-3.5 py-3 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600 resize-none"
                     />
                     <motion.button
                       whileTap={{ scale: 0.97 }}
                       onClick={pasteText}
                       disabled={pasting || !pasteTitle.trim() || !pasteContent.trim()}
-                      className="w-full py-3 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors"
+                      className="font-sf w-full py-3 text-sm font-medium bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors"
                     >
                       {pasting ? 'Adding to Memory…' : 'Add to Memory'}
                     </motion.button>
@@ -1007,147 +1114,109 @@ export default function SpacePage() {
                 )}
               </AnimatePresence>
 
-              {docs.length > 0 && (
-                <div className="mb-4 flex flex-col gap-2">
-                  {/* Search */}
-                  <div className="relative">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input
-                      type="text"
-                      value={docSearch}
-                      onChange={e => setDocSearch(e.target.value)}
-                      placeholder="Search documents…"
-                      className="w-full pl-8 pr-3 py-2 text-base bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl outline-none focus:border-gray-300 dark:focus:border-gray-600 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600"
-                    />
-                    {docSearch && (
-                      <button onClick={() => setDocSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                      </button>
-                    )}
-                  </div>
-                  {/* Type filter pills */}
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(['all', 'pdf', 'docx', 'xlsx', 'csv', 'text'] as const).map(type => (
-                      <button
-                        key={type}
-                        onClick={() => setDocTypeFilter(type)}
-                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                          docTypeFilter === type
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-transparent'
-                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
-                      >
-                        {type === 'all' ? 'All' : type.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {docs.length === 0 ? (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-900 dark:text-gray-400 text-center py-10">
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-sf text-sm text-gray-900 dark:text-gray-400 text-center py-10">
                   No documents yet. Upload one to get started.
                 </motion.p>
               ) : (
                 <>
-                  <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-1">
-                    {docs.filter(doc => {
-                      const matchesSearch = docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())
-                      const matchesType = docTypeFilter === 'all' || doc.fileType === docTypeFilter
-                      return matchesSearch && matchesType
-                    }).map((doc, i) => {
-                      const isReady = doc.status === 'ready'
-                      const isChecked = selectedDocIds.has(doc.id)
-                      return (
-                        <motion.div key={doc.id} custom={i} variants={cardVariants}
-                          className={`flex items-start gap-3 px-3 py-3.5 rounded-2xl transition-colors ${
-                            isChecked ? 'bg-red-50 dark:bg-red-900/10' : isReady ? 'hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer' : ''
-                          }`}
-                          onClick={() => { if (!selectedDocIds.size && isReady) setDocSheet(doc) }}
-                        >
-                          {/* Checkbox — always visible */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedDocIds((prev) => { const next = new Set(prev); next.has(doc.id) ? next.delete(doc.id) : next.add(doc.id); return next }) }}
-                            className={`shrink-0 mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-red-500 border-red-500' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-400'}`}
+                  {docViewMode === 'list' ? (
+                    /* ── LIST VIEW ── */
+                    <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-4">
+                      {docs.filter(doc => {
+                        const matchesSearch = docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())
+                        const matchesType = docTypeFilter === 'all' || doc.fileType === docTypeFilter
+                        return matchesSearch && matchesType
+                      }).map((doc, i) => {
+                        const isReady = doc.status === 'ready'
+                        return (
+                          <motion.div key={doc.id} custom={i} variants={cardVariants}
+                            className="bg-white/70 dark:bg-gray-900/70 border border-white dark:border-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] rounded-2xl flex items-start gap-3 cursor-pointer hover:bg-white dark:hover:bg-gray-900 transition-colors"
+                            onClick={() => { if (isReady) setDocSheet(doc) }}
                           >
-                            {isChecked && (
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                            )}
-                          </button>
-
-                          <div
-                            className="flex-1 min-w-0 cursor-pointer"
-                            onClick={() => { if (selectedDocIds.size > 0) { setSelectedDocIds((prev) => { const next = new Set(prev); next.has(doc.id) ? next.delete(doc.id) : next.add(doc.id); return next }) } else if (isReady) setDocSheet(doc) }}
-                          >
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{doc.name}</p>
-                            {doc.status === 'ready' && doc.summary && (
-                              <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 line-clamp-2">{doc.summary}</p>
-                            )}
-                            {doc.status === 'failed' && doc.failureReason && (
-                              <p className="text-xs text-red-400 mt-0.5 line-clamp-2">{doc.failureReason}</p>
-                            )}
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              {doc.status === 'processing' || doc.status === 'pending' ? (
-                                <ProcessingStatusBadge status={doc.status} />
-                              ) : (
-                                <span className={`text-xs font-medium ${STATUS_COLOR[doc.status]}`}>
-                                  {doc.status === 'ready' ? 'Ready' : 'Failed'}
-                                </span>
-                              )}
-                              <span className="text-gray-300 dark:text-gray-700 text-xs">·</span>
-                              <span className="text-xs text-gray-900 dark:text-gray-400">{fmt(doc.fileSize)}</span>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-xs text-gray-900 dark:text-gray-500">{formatDateTime(doc.createdAt)}</span>
-                            {!isChecked && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
-                                className="p-1.5 text-gray-900 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
-                                title="More options"
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                  <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                            {/* Left icon area */}
+                            <div className="shrink-0 w-[72px] h-[72px] flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 rounded-l-2xl">
+                              <div className="w-9 h-9 flex items-center justify-center bg-white dark:bg-gray-700 rounded-lg">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                                 </svg>
-                              </button>
-                            )}
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                  </motion.div>
-                  {docs.filter(doc => (docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())) && (docTypeFilter === 'all' || doc.fileType === docTypeFilter)).length === 0 && (
-                    <p className="text-sm text-gray-400 dark:text-gray-600 text-center py-8">No documents match your filter.</p>
+                              </div>
+                            </div>
+                            {/* Right content */}
+                            <div className="flex-1 min-w-0 py-3 pr-3">
+                              <p className="font-sf text-[15px] font-semibold text-[#0F172A] dark:text-white truncate leading-[20px] tracking-[-0.23px]">{doc.name}</p>
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="font-sf text-xs text-[#94A3B8]">{doc.fileType.toUpperCase()}</span>
+                                <span className="font-sf text-xs text-[#94A3B8]">·</span>
+                                <span className="font-sf text-xs text-[#94A3B8]">{fmt(doc.fileSize)}</span>
+                              </div>
+                            </div>
+                            {/* Ellipsis */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
+                              className="shrink-0 w-5 h-5 flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 rounded-lg mt-3 mr-3 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                              title="More options"
+                              aria-label="More options"
+                            >
+                              <svg width="1.25" height="11.25" viewBox="0 0 3 12" fill="#0F172A" className="dark:fill-white">
+                                <circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="6" r="1.5"/><circle cx="1.5" cy="10.5" r="1.5"/>
+                              </svg>
+                            </button>
+                          </motion.div>
+                        )
+                      })}
+                    </motion.div>
+                  ) : (
+                    /* ── GRID VIEW ── */
+                    <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="grid grid-cols-2 gap-4">
+                      {docs.filter(doc => {
+                        const matchesSearch = docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())
+                        const matchesType = docTypeFilter === 'all' || doc.fileType === docTypeFilter
+                        return matchesSearch && matchesType
+                      }).map((doc, i) => {
+                        const isReady = doc.status === 'ready'
+                        return (
+                          <motion.div key={doc.id} custom={i} variants={cardVariants}
+                            className="bg-white dark:bg-gray-900 border border-white dark:border-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] rounded-2xl overflow-hidden cursor-pointer hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)] transition-shadow"
+                            onClick={() => { if (isReady) setDocSheet(doc) }}
+                          >
+                            {/* Top section — colored bg */}
+                            <div className="h-24 flex items-end p-4 bg-gradient-to-br from-[#F8FAFC] to-[#D0DCE8]/24">
+                              <div className="w-9 h-9 flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 rounded-lg">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                                </svg>
+                              </div>
+                            </div>
+                            {/* Bottom section — white */}
+                            <div className="p-4">
+                              <p className="font-sf text-[15px] font-semibold text-[#0F172A] dark:text-white truncate leading-[20px] tracking-[-0.23px]">{doc.name}</p>
+                              <div className="flex items-center justify-between mt-2">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-sf text-xs text-[#94A3B8]">{doc.fileType.toUpperCase()}</span>
+                                  <span className="font-sf text-xs text-[#94A3B8]">·</span>
+                                  <span className="font-sf text-xs text-[#94A3B8]">{fmt(doc.fileSize)}</span>
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDocSheet(doc) }}
+                                  className="w-5 h-5 flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                  title="More options"
+                                  aria-label="More options"
+                                >
+                                  <svg width="1.25" height="11.25" viewBox="0 0 3 12" fill="#0F172A" className="dark:fill-white">
+                                    <circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="6" r="1.5"/><circle cx="1.5" cy="10.5" r="1.5"/>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </motion.div>
                   )}
-
-                  {/* Delete bar — appears when anything is selected */}
-                  <AnimatePresence>
-                    {selectedDocIds.size > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 12 }}
-                        className="sticky bottom-4 mt-4 flex gap-2"
-                      >
-                        <button
-                          onClick={() => setSelectedDocIds(new Set())}
-                          className="flex-1 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-                        >
-                          Cancel
-                        </button>
-                        <motion.button
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => setConfirmBulkDelete(true)}
-                          className="flex-[2] py-3 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-2xl transition-colors shadow-sm"
-                        >
-                          Delete ({selectedDocIds.size})
-                        </motion.button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {docs.filter(doc => (docSearch === '' || doc.name.toLowerCase().includes(docSearch.toLowerCase())) && (docTypeFilter === 'all' || doc.fileType === docTypeFilter)).length === 0 && (
+                    <p className="font-sf text-sm text-gray-400 dark:text-gray-600 text-center py-8">No documents match your filter.</p>
+                  )}
                 </>
               )}
               </>}
@@ -1157,52 +1226,170 @@ export default function SpacePage() {
           {/* TIMELINE */}
           {view === 'timeline' && (
             <motion.div key="timeline" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
-              <h2 className="font-semibold text-gray-900 dark:text-white mb-6">Timeline</h2>
               {timelineLoading ? <ListSkeleton /> : timeline.length === 0 ? (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-gray-900 dark:text-gray-400 text-center py-10">
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-sf text-sm text-gray-900 dark:text-gray-400 text-center py-10">
                   No events yet. Upload documents to start your timeline.
                 </motion.p>
-              ) : (
-                <div className="relative pl-6">
-                  <div className="absolute left-[9px] top-2 bottom-2 w-px bg-gray-100 dark:bg-gray-800/80" />
-                  <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="space-y-4">
-                    {timeline.map((ev, i) => {
-                      const cfg = TIMELINE_EVENT_CONFIG[ev.type]
-                      return (
-                        <motion.div key={ev.id} custom={i} variants={cardVariants} className="relative">
-                          {/* Dot */}
-                          <motion.div
-                            initial={{ scale: 0 }} animate={{ scale: 1 }}
-                            transition={{ delay: i * 0.04 + 0.08, type: 'spring', stiffness: 500, damping: 28 }}
-                            className={`absolute -left-6 top-2.5 w-[18px] h-[18px] rounded-full flex items-center justify-center z-10 ${cfg.dot}`}
-                          >
-                            <span className="text-[9px] leading-none">{cfg.icon}</span>
-                          </motion.div>
+              ) : (() => {
+                // Group events by date
+                const groups: { label: string; events: typeof timeline }[] = []
+                let lastDate = ''
+                for (const ev of timeline) {
+                  const d = new Date(ev.date)
+                  const today = new Date()
+                  const yesterday = new Date(today)
+                  yesterday.setDate(yesterday.getDate() - 1)
+                  let label: string
+                  if (d.toDateString() === today.toDateString()) {
+                    label = 'Today'
+                  } else if (d.toDateString() === yesterday.toDateString()) {
+                    label = 'Yesterday'
+                  } else {
+                    label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                  }
+                  if (label !== lastDate) {
+                    groups.push({ label, events: [] })
+                    lastDate = label
+                  }
+                  groups[groups.length - 1].events.push(ev)
+                }
+                return (
+                  <div className="space-y-6">
+                    {groups.map((group, gi) => (
+                      <div key={group.label}>
+                        {/* Day header */}
+                        <div className="flex items-center gap-3 mb-4">
+                          <h3 className="font-figtree font-semibold text-base text-[#0F172A] dark:text-white leading-[22px] tracking-[-0.18px]">{group.label}</h3>
+                          <div className="flex-1 h-px bg-[#E2E8F0] dark:bg-gray-800" />
+                        </div>
+                        {/* Timeline events */}
+                        <div className="relative pl-8">
+                          <div className="absolute left-[11px] top-2 bottom-2 w-px bg-[#E2E8F0] dark:bg-gray-800" />
+                          <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="space-y-4">
+                            {(() => {
+                              // Sub-group consecutive events by source document — a single upload can
+                              // yield dozens of extracted facts (key numbers especially), which would
+                              // otherwise flood one date with a huge unbroken card stack.
+                              const subGroups: { sourceName: string; events: typeof group.events }[] = []
+                              for (const ev of group.events) {
+                                const last = subGroups[subGroups.length - 1]
+                                if (last && last.sourceName === ev.sourceName) last.events.push(ev)
+                                else subGroups.push({ sourceName: ev.sourceName, events: [ev] })
+                              }
+                              const VISIBLE_CAP = 4
+                              let idx = 0
+                              return subGroups.map((sub, si) => {
+                                const key = `${group.label}__${sub.sourceName}__${si}`
+                                const expanded = !!expandedTimelineGroups[key]
+                                const visibleEvents = expanded ? sub.events : sub.events.slice(0, VISIBLE_CAP)
+                                const hiddenCount = sub.events.length - visibleEvents.length
+                                return (
+                                  <div key={key} className="space-y-4">
+                                    {visibleEvents.map((ev) => {
+                                      const cfg = TIMELINE_EVENT_CONFIG[ev.type]
+                                      const i = idx++
+                                      return (
+                                        <motion.div key={ev.id} custom={i} variants={cardVariants} className="relative">
+                                          {/* Icon circle */}
+                                          <motion.div
+                                            initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                            transition={{ delay: i * 0.04 + 0.08, type: 'spring', stiffness: 500, damping: 28 }}
+                                            className={`absolute -left-8 top-2 w-8 h-8 rounded-full flex items-center justify-center z-10 ${cfg.dot} border-2 border-white dark:border-[#0f0f0f]`}
+                                          >
+                                            <span className={`text-[11px] leading-none ${cfg.iconColor}`}>{cfg.icon}</span>
+                                          </motion.div>
 
-                          {/* Card */}
-                          <div className="flex justify-between gap-3 pl-1">
-                            <div className="flex-1 min-w-0">
-                              {/* Type badge + source */}
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${cfg.badge}`}>
-                                  {cfg.label}
-                                </span>
-                                <span className="text-[10px] text-gray-900 dark:text-gray-500 truncate">{ev.sourceName}</span>
-                              </div>
-                              {/* Main text */}
-                              <p className={`text-sm leading-snug ${ev.type === 'document' ? 'text-gray-900 dark:text-gray-400 italic' : 'text-gray-800 dark:text-gray-200'}`}>
-                                {ev.text}
-                              </p>
+                                          {/* Card */}
+                                          <div className="bg-white dark:bg-gray-900 border border-white dark:border-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] rounded-2xl p-4">
+                                            <div className="flex justify-between gap-3">
+                                              <div className="flex-1 min-w-0">
+                                                {/* Type badge + source */}
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <span className={`font-sf inline-block text-xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wide ${cfg.badge}`}>
+                                                    {cfg.label}
+                                                  </span>
+                                                  <span className="font-sf text-xs text-[#94A3B8] truncate">{ev.sourceName}</span>
+                                                </div>
+                                                {/* Main text */}
+                                                <p className={`font-sf text-[13px] leading-[18px] ${ev.type === 'document' ? 'text-[#64748B] dark:text-gray-400 italic' : 'text-[#0F172A] dark:text-gray-200'}`}>
+                                                  {ev.text}
+                                                </p>
+                                              </div>
+                                              <span className="font-sf text-xs text-[#94A3B8] shrink-0 pt-0.5 whitespace-nowrap">
+                                                {formatDateTime(ev.date)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </motion.div>
+                                      )
+                                    })}
+                                    {hiddenCount > 0 && (
+                                      <div className="relative">
+                                        <div className="absolute -left-8 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 border-2 border-white dark:border-[#0f0f0f]">
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                                        </div>
+                                        <button
+                                          onClick={() => setExpandedTimelineGroups((p) => ({ ...p, [key]: true }))}
+                                          className="font-sf text-xs font-medium text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white py-1.5 transition-colors"
+                                        >
+                                          Show {hiddenCount} more from {sub.sourceName}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })
+                            })()}
+                          </motion.div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </motion.div>
+          )}
+
+          {/* RECENTS — recently added documents, sorted newest first */}
+          {view === 'recents' && (
+            <motion.div key="recents" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }} className="px-4 py-6 max-w-2xl mx-auto">
+              {docsLoading ? <ListSkeleton /> : docs.length === 0 ? (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-sf text-sm text-gray-900 dark:text-gray-400 text-center py-10">
+                  No documents yet. Upload one to get started.
+                </motion.p>
+              ) : (
+                <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06 } } }} className="space-y-4">
+                  {[...docs]
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 15)
+                    .map((doc, i) => {
+                      const isReady = doc.status === 'ready'
+                      return (
+                        <motion.div key={doc.id} custom={i} variants={cardVariants}
+                          className="bg-white/70 dark:bg-gray-900/70 border border-white dark:border-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] rounded-2xl flex items-start gap-3 cursor-pointer hover:bg-white dark:hover:bg-gray-900 transition-colors"
+                          onClick={() => { if (isReady) setDocSheet(doc) }}
+                        >
+                          {/* Left icon area */}
+                          <div className="shrink-0 w-[72px] h-[72px] flex items-center justify-center bg-[#F1F5F9] dark:bg-gray-800 rounded-l-2xl">
+                            <div className="w-9 h-9 flex items-center justify-center bg-white dark:bg-gray-700 rounded-lg">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                              </svg>
                             </div>
-                            <span className="text-[10px] text-gray-900 dark:text-gray-500 shrink-0 pt-0.5 whitespace-nowrap">
-                              {formatDateTime(ev.date)}
-                            </span>
+                          </div>
+                          {/* Right content */}
+                          <div className="flex-1 min-w-0 py-3 pr-3">
+                            <p className="font-sf text-[15px] font-semibold text-[#0F172A] dark:text-white truncate leading-[20px] tracking-[-0.23px]">{doc.name}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="font-sf text-xs text-[#94A3B8]">{doc.fileType.toUpperCase()}</span>
+                              <span className="font-sf text-xs text-[#94A3B8]">·</span>
+                              <span className="font-sf text-xs text-[#94A3B8]">Added {formatRelativeTime(doc.createdAt)}</span>
+                            </div>
                           </div>
                         </motion.div>
                       )
                     })}
-                  </motion.div>
-                </div>
+                </motion.div>
               )}
             </motion.div>
           )}
@@ -1220,6 +1407,7 @@ export default function SpacePage() {
             >
               <button
                 onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                aria-label="Scroll to bottom"
                 className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-gray-900 dark:bg-gray-700 text-white shadow-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1237,21 +1425,34 @@ export default function SpacePage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
+          className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-[#F1F5F9]/80 dark:bg-[#0f0f0f]/80 backdrop-blur-[24px]"
         >
           <div className="w-full max-w-2xl mx-auto px-4 pt-3" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
             {!isEmpty && (
               <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-hide pb-0.5">
                 {[
-                  { label: '✦ Brief Me', action: () => aiAction('Brief me on this space.', '/api/brief') },
-                  { label: '↻ Catch Me Up', action: () => aiAction('What changed since my last visit?', '/api/catch-up') },
-                  { label: '◷ Timeline', action: openTimeline },
-                  { label: '⊞ Documents', action: openDocuments },
-                ].map(({ label, action }) => (
+                  { icon: 'doc', label: 'Brief me', action: () => aiAction('Brief me on this space.', '/api/brief') },
+                  { icon: 'clock', label: 'Catch me up', action: () => aiAction('What changed since my last visit?', '/api/catch-up') },
+                  { icon: 'list', label: 'Timeline', action: openTimeline },
+                  { icon: 'folder', label: 'Documents', action: openDocuments },
+                ].map(({ icon, label, action }) => (
                   <motion.button key={label} whileTap={{ scale: 0.94 }} onClick={action}
                     disabled={loading}
-                    className="shrink-0 px-3.5 py-2 text-xs font-medium text-gray-700 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-transparent rounded-xl transition-colors whitespace-nowrap disabled:opacity-40">
-                    {label}
+                    className="font-sf shrink-0 flex items-center gap-1.5 px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-100 dark:border-transparent rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-colors whitespace-nowrap disabled:opacity-40">
+                    <span className="w-5 h-5 flex items-center justify-center text-[#0F172A] dark:text-white shrink-0">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                        {icon === 'doc' && <path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />}
+                        {icon === 'clock' && <path d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />}
+                        {icon === 'list' && <path d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />}
+                        {icon === 'folder' && <path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />}
+                      </svg>
+                    </span>
+                    <span className="flex flex-col items-start leading-tight">
+                      <span className="text-[13px] font-medium text-[#0F172A] dark:text-white">{label}</span>
+                      {space?.lastVisit && (
+                        <span className="text-[11px] text-[#64748B] dark:text-gray-500">Updated {formatRelativeTime(space.lastVisit)}</span>
+                      )}
+                    </span>
                   </motion.button>
                 ))}
               </div>
@@ -1267,9 +1468,9 @@ export default function SpacePage() {
                     ? `@${chip.docName}`
                     : `@${chip.spaceName}${chip.docName ? `:${chip.docName}` : ''}`
                   return (
-                    <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                    <span key={i} className="font-sf inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
                       <span>{label}</span>
-                      <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                      <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} aria-label="Remove reference" className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
                     </span>
@@ -1288,17 +1489,18 @@ export default function SpacePage() {
                   transition={{ duration: 0.15 }}
                   className="mb-2 flex items-center gap-2"
                 >
-                  <span className="text-xs text-gray-400 dark:text-gray-500">Switch to:</span>
+                  <span className="font-sf text-xs text-gray-400 dark:text-gray-500">Switch to:</span>
                   <button
                     type="button"
                     onClick={() => router.push(`/spaces/${spaceSuggestion.id}`)}
-                    className="text-xs px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium"
+                    className="font-sf text-xs px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium"
                   >
                     {spaceSuggestion.name} →
                   </button>
                   <button
                     type="button"
                     onClick={() => setSpaceSuggestion(null)}
+                    aria-label="Dismiss suggestion"
                     className="text-xs text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
                   >✕</button>
                 </motion.div>
@@ -1319,20 +1521,20 @@ export default function SpacePage() {
                   >
                     {mentionStage === 'doc' && mentionSpaceCtx && (
                       <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                        <span className="font-sf text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
                           {mentionSpaceCtx.name} › Select document
                         </span>
                         <button
                           type="button"
                           onMouseDown={(e) => { e.preventDefault(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery(''); setMentionActiveIdx(0) }}
-                          className="ml-auto text-[11px] text-blue-500 hover:text-blue-600"
+                          className="font-sf ml-auto text-[11px] text-blue-500 hover:text-blue-600"
                         >← back</button>
                       </div>
                     )}
                     {(() => {
                       const items = getMentionItems()
                       if (items.length === 0) return (
-                        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-600">
+                        <div className="font-sf px-4 py-3 text-xs text-gray-400 dark:text-gray-600">
                           {mentionStage === 'doc' ? 'No documents found' : 'No matches found'}
                         </div>
                       )
@@ -1347,7 +1549,7 @@ export default function SpacePage() {
                           <span className="text-base shrink-0">
                             {item.kind === 'doc' ? item.icon : item.kind === 'allspace' ? '🗂️' : '📁'}
                           </span>
-                          <span className={`text-sm truncate ${item.kind === 'allspace' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>
+                          <span className={`font-sf text-sm truncate ${item.kind === 'allspace' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>
                             {item.label}
                           </span>
                           {item.kind === 'otherspace' && (
@@ -1361,30 +1563,30 @@ export default function SpacePage() {
               </AnimatePresence>
 
               {speech.listening && (
-                <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs w-fit">
+                <div className="font-sf flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs w-fit">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                   </span>
                   Recording…
-                  <button type="button" onClick={speech.stop} className="ml-1 underline">Done</button>
-                  <button type="button" onClick={speech.cancel} className="underline">Cancel</button>
+                  <button type="button" onClick={speech.stop} className="font-sf ml-1 underline">Done</button>
+                  <button type="button" onClick={speech.cancel} className="font-sf underline">Cancel</button>
                 </div>
               )}
               {speech.transcribing && (
-                <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs w-fit">
+                <div className="font-sf flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs w-fit">
                   Transcribing…
                 </div>
               )}
               {speech.error && (
-                <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs w-fit">
+                <div className="font-sf mb-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs w-fit">
                   {speech.error}
                 </div>
               )}
 
               <form
                 onSubmit={(e) => { e.preventDefault(); sendMessage(input) }}
-                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
+                className="bg-white dark:bg-gray-900 border border-[rgba(26,26,26,0.20)] dark:border-gray-700 rounded-[28px] px-4 py-3 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
               >
                 <div className="flex items-center gap-2">
                 <button
@@ -1392,18 +1594,20 @@ export default function SpacePage() {
                   onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionStage('space'); setMentionSpaceCtx(null); setMentionQuery('') }}
                   disabled={loading || (readyDocs.length === 0 && otherSpaces.length === 0)}
                   title="Reference a document or project"
-                  className="shrink-0 h-7 w-7 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
+                  aria-label="Mention a project or document"
+                  className="font-sf md:hidden shrink-0 h-8 w-8 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-base font-semibold"
                 >@</button>
                 <button
                   type="button"
                   onClick={speech.toggle}
                   disabled={loading || !speech.supported || speech.transcribing}
                   title={!speech.supported ? "Voice input isn't supported in this browser" : speech.listening ? 'Stop recording' : 'Speak your question'}
-                  className={`shrink-0 h-7 w-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${
+                  aria-label="Voice input"
+                  className={`shrink-0 h-8 w-8 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${
                     speech.listening ? 'text-red-500' : 'text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400'
                   }`}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                     <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" />
                   </svg>
@@ -1451,8 +1655,8 @@ export default function SpacePage() {
                     }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
                   }}
-                  placeholder={(readyDocs.length > 0 || otherSpaces.length > 0) ? 'Ask anything… or @ a doc' : 'Ask anything…'}
-                  className="flex-1 min-w-0 text-[15px] sm:text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
+                  placeholder={(readyDocs.length > 0 || otherSpaces.length > 0) ? 'Ask memory… or @ a doc' : 'Ask memory…'}
+                  className="flex-1 min-w-0 text-base text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-[#94A3B8] dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
                 />
                 {/* Desktop: all controls inline */}
                 <div className="hidden md:flex shrink-0 items-center gap-1.5">
@@ -1465,6 +1669,7 @@ export default function SpacePage() {
                       onClick={() => { abortRef.current?.abort(); setStreamingMessageId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
                       className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
                       title="Stop generating"
+                      aria-label="Stop generating"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                     </motion.button>
@@ -1477,7 +1682,7 @@ export default function SpacePage() {
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
                       </svg>
-                      <span className="hidden sm:inline text-xs font-medium">Send</span>
+                      <span className="font-sf hidden sm:inline text-xs font-medium">Send</span>
                     </motion.button>
                   )}
                 </div>
@@ -1490,6 +1695,7 @@ export default function SpacePage() {
                       onClick={() => { abortRef.current?.abort(); setStreamingMessageId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
                       className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
                       title="Stop generating"
+                      aria-label="Stop generating"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                     </motion.button>
@@ -1497,6 +1703,7 @@ export default function SpacePage() {
                     <motion.button
                       whileTap={{ scale: 0.92 }}
                       type="submit" disabled={loading || !input.trim()}
+                      aria-label="Send message"
                       className="h-8 w-8 flex items-center justify-center bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1516,52 +1723,6 @@ export default function SpacePage() {
           </div>
         </motion.div>
       )}
-
-      {/* ── Bulk Delete Confirmation ── */}
-      <AnimatePresence>
-        {confirmBulkDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center px-5"
-            onClick={() => !deletingSelected && setConfirmBulkDelete(false)}
-          >
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 8 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 8 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-sm bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl p-5"
-            >
-              <p className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                Delete {selectedDocIds.size} document{selectedDocIds.size !== 1 ? 's' : ''}?
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
-                This will permanently remove {selectedDocIds.size === 1 ? 'this document' : `all ${selectedDocIds.size} selected documents`} and all associated memory and chat context. This cannot be undone.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setConfirmBulkDelete(false)}
-                  disabled={deletingSelected}
-                  className="flex-1 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => { await deleteSelected(); setConfirmBulkDelete(false) }}
-                  disabled={deletingSelected}
-                  className="flex-1 py-2.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {deletingSelected ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Document Insights Modal ── */}
       <AnimatePresence>
@@ -1615,7 +1776,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white capitalize transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+        className="font-sf flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white capitalize transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
       >
         {value}
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
@@ -1637,7 +1798,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
                 key={s}
                 type="button"
                 onClick={() => { onChange(s); setOpen(false) }}
-                className={`w-full text-left px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                className={`font-sf w-full text-left px-3 py-2 text-xs font-medium capitalize transition-colors ${
                   value === s
                     ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60'
@@ -1673,9 +1834,9 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+        className="font-sf flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
       >
-        <span className="truncate max-w-[80px]">{displayName}</span>
+        <span className="font-sf truncate max-w-[80px]">{displayName}</span>
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -1695,14 +1856,14 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
                 key={m.id}
                 type="button"
                 onClick={() => { onChange(m.id); setOpen(false) }}
-                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                className={`font-sf w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
                   value === m.id
                     ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60'
                 }`}
               >
-                <span className="block">{m.name}</span>
-                <span className="block text-[10px] opacity-60">{m.provider}</span>
+                <span className="font-sf block">{m.name}</span>
+                <span className="font-sf block text-[11px] opacity-60">{m.provider}</span>
               </button>
             ))}
           </motion.div>
@@ -1716,10 +1877,10 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
   spaceName?: string; onBriefMe: () => void; onCatchMeUp: () => void; onTimeline: () => void; onDocuments: () => void
 }) {
   const actions = [
-    { emoji: '✦', label: 'Brief Me', sub: '2-minute executive summary', onClick: onBriefMe },
-    { emoji: '↻', label: 'Catch Me Up', sub: 'Changes since your last visit', onClick: onCatchMeUp },
-    { emoji: '◷', label: 'Timeline', sub: 'Full space history', onClick: onTimeline },
-    { emoji: '⊞', label: 'Documents', sub: 'Upload & manage files', onClick: onDocuments },
+    { icon: 'doc', label: 'Brief me', sub: 'Updated 2 hours ago', onClick: onBriefMe },
+    { icon: 'clock', label: 'Catch me up', sub: 'Updated 2 hours ago', onClick: onCatchMeUp },
+    { icon: 'list', label: 'Timeline', sub: 'Updated 2 hours ago', onClick: onTimeline },
+    { icon: 'folder', label: 'Documents', sub: 'Updated 2 hours ago', onClick: onDocuments },
   ]
 
   return (
@@ -1730,16 +1891,16 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
         </div>
-        <p className="text-gray-900 dark:text-white text-base font-semibold mb-1">
+        <p className="font-sf text-gray-900 dark:text-white text-base font-semibold mb-1">
           Hi, I'm Memory
         </p>
-        <p className="text-gray-900 dark:text-gray-400 text-sm max-w-xs leading-relaxed">
+        <p className="font-sf text-gray-900 dark:text-gray-400 text-sm max-w-xs leading-relaxed">
           {spaceName
             ? `Ask me anything about ${spaceName}. I can search your documents, CRM data, and the web.`
             : 'Ask me anything. I can search your documents, CRM data, and the web.'}
         </p>
       </motion.div>
-      <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
+      <div className="flex flex-col gap-3 w-full max-w-xs">
         {actions.map((a, i) => (
           <motion.button
             key={a.label}
@@ -1750,11 +1911,20 @@ function EmptyState({ spaceName, onBriefMe, onCatchMeUp, onTimeline, onDocuments
             whileHover={{ scale: 1.03, y: -2 }}
             whileTap={{ scale: 0.97 }}
             onClick={a.onClick}
-            className="text-left p-4 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all group shadow-sm hover:shadow-md dark:shadow-none"
+            className="flex items-center gap-3 text-left px-4 py-3 rounded-full bg-white dark:bg-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all group"
           >
-            <div className="text-xl mb-2.5 text-gray-900 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{a.emoji}</div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{a.label}</p>
-            <p className="text-xs text-gray-900 dark:text-gray-400 mt-0.5 leading-relaxed">{a.sub}</p>
+            <div className="w-5 h-5 flex items-center justify-center text-[#0F172A] dark:text-white">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                {a.icon === 'doc' && <path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />}
+                {a.icon === 'clock' && <path d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />}
+                {a.icon === 'list' && <path d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />}
+                {a.icon === 'folder' && <path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />}
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-figtree text-sm font-medium text-[#0F172A] dark:text-white">{a.label}</p>
+              <p className="font-sf text-xs text-[#64748B] dark:text-gray-400 truncate">{a.sub}</p>
+            </div>
           </motion.button>
         ))}
       </div>
@@ -1848,10 +2018,10 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+      <div className={`max-w-[85%] px-4 py-3 rounded-[24px] text-[15px] leading-relaxed tracking-[-0.23px] ${
         isUser
-          ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
-          : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
+          ? 'bg-[#1A1A1A]/[0.09] dark:bg-gray-700 text-[#0F172A] dark:text-white rounded-br-sm shadow-[0_4px_16px_rgba(0,0,0,0.08)]'
+          : 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
         {isUser ? (
           message.content.split('\n').map((line, i, arr) => (
@@ -1859,12 +2029,17 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
           ))
         ) : showStatus ? (
           <span className="flex items-center gap-2 py-0.5">
-            <motion.span
-              className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 dark:border-t-blue-400 rounded-full inline-block"
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
-            />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{statusText}</span>
+            <span className="flex items-center gap-[3px]">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="w-[4px] h-[4px] rounded-full bg-[#0F172A] dark:bg-gray-300"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2, ease: 'easeInOut' }}
+                />
+              ))}
+            </span>
+            <span className="font-sf text-xs text-gray-500 dark:text-gray-400">{statusText}</span>
           </span>
         ) : (
           <div>
@@ -1872,13 +2047,13 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
               <div className="mb-2">
                 <button
                   onClick={() => setThinkingOpen((o) => !o)}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
+                  className="font-sf flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
                     <path d="M9 18l6-6-6-6" />
                   </svg>
-                  <span className="font-medium">Thinking process</span>
-                  <span className="text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
+                  <span className="font-sf font-medium">Thinking process</span>
+                  <span className="font-sf text-gray-300 dark:text-gray-600">({message.thinkingSteps.length} step{message.thinkingSteps.length !== 1 ? 's' : ''})</span>
                 </button>
                 {thinkingOpen && (
                   <div className="mt-1.5 pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-1 max-h-48 overflow-y-auto">
@@ -1903,7 +2078,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
                         if (scoreMatch) {
                           const score = parseInt(scoreMatch[1])
                           const scoreColor = score >= 70 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : score >= 40 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                          badge = <span className={`ml-1 px-1 py-0.5 rounded text-[9px] font-medium ${scoreColor}`}>{score}</span>
+                          badge = <span className={`ml-1 px-1 py-0.5 rounded text-[11px] font-medium ${scoreColor}`}>{score}</span>
                         }
                       } else if (['crossCheck', 'detectHallucination'].includes(action)) {
                         iconColor = 'text-yellow-500 dark:text-yellow-400'
@@ -1929,7 +2104,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
                             <span>{displayStep}{badge}</span>
                           </div>
                           {result && !isResult && (
-                            <div className="ml-5 mt-0.5 text-[10px] text-gray-300 dark:text-gray-600">
+                            <div className="ml-5 mt-0.5 text-[11px] text-gray-300 dark:text-gray-600">
                               {(() => {
                                 try {
                                   const parsed = JSON.parse(result)
@@ -1961,7 +2136,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
               )}
               {!isStreaming && message.documentImages && message.documentImages.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
+                  <p className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
                     Images from document ({message.documentImages.length})
                   </p>
                   <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
@@ -1974,13 +2149,13 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
               {message.citations && message.citations.length > 0 && (() => {
                 const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
                 const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
-                const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+                const chip = "text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
                 const chipLink = `${chip} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`
                 return (
                   <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
                     {internalCites.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
+                        <span className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
                         {internalCites.map((c, i) => {
                           const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
                           return c.documentId ? (
@@ -1993,9 +2168,9 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
                     )}
                     {webCites.length > 0 && (
                       <>
-                        <p className="text-[10px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
+                        <p className="font-sf text-[11px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
                         <div className="flex flex-wrap gap-1">
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
+                          <span className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
                           {webCites.map((c, i) => {
                             let host = c.documentName
                             try { host = new URL(c.url!).hostname.replace(/^www\./, '') } catch {}
@@ -2012,6 +2187,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
               {!isStreaming && (
                 <div className="mt-1.5 flex gap-0.5">
                   <button onClick={() => handleVote('up')} title="Helpful"
+                    aria-label="Mark as helpful"
                     className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
@@ -2019,6 +2195,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
                     </svg>
                   </button>
                   <button onClick={() => handleVote('down')} title="Not helpful"
+                    aria-label="Mark as not helpful"
                     className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
@@ -2029,11 +2206,11 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
               )}
                {message.suggestions && message.suggestions.length > 0 && !isStreaming && message.role !== 'user' && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {message.suggestions.map((s: string, i: number) => (
+                   {message.suggestions.map((s: string, i: number) => (
                     <button
                       key={i}
                       onClick={() => onSuggestionClick?.(s)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                      className="font-sf text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
                     >
                       {s}
                     </button>
@@ -2044,7 +2221,7 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
           </div>
         )}
       </div>
-      <div className={`text-[10px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+      <div className={`font-sf text-[11px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
         {message.createdAt && formatRelativeTime(message.createdAt)}
       </div>
     </div>
@@ -2052,12 +2229,23 @@ function ChatMessage({ message, isStreaming, onSuggestionClick }: {
 }
 
 function NavBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  const icon = label === 'Chats' ? (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+    </svg>
+  )
+
   return (
     <motion.button whileTap={{ scale: 0.94 }} onClick={onClick}
-      className={`px-3.5 py-2.5 text-xs font-medium rounded-xl transition-all min-h-[44px] ${
-        active ? 'bg-gray-900 dark:bg-gray-700 text-white shadow-sm'
-               : 'text-gray-900 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+      className={`font-figtree flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-full transition-all min-h-[44px] backdrop-blur-[132px] ${
+        active ? 'bg-white dark:bg-gray-700 text-[#0F172A] dark:text-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]'
+               : 'text-gray-400 dark:text-gray-500 hover:text-[#0F172A] dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-800'
       }`}>
+      {icon}
       {label}
     </motion.button>
   )
@@ -2074,7 +2262,7 @@ function ProcessingStatusBadge({ status }: { status: string }) {
 
   if (status === 'pending') {
     return (
-      <span className="text-xs text-gray-900 dark:text-gray-500 flex items-center gap-1.5">
+      <span className="font-sf text-xs text-gray-900 dark:text-gray-500 flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full" />
         Queued
       </span>
@@ -2082,7 +2270,7 @@ function ProcessingStatusBadge({ status }: { status: string }) {
   }
 
   return (
-    <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+    <span className="font-sf text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
       <motion.span
         animate={{ opacity: [1, 0.3, 1] }}
         transition={{ repeat: Infinity, duration: 1.2 }}
@@ -2099,17 +2287,20 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Document insights"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[24px]" />
       <motion.div
         initial={{ opacity: 0, y: 32, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 32, scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 380, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full sm:max-w-lg max-h-[85vh] sm:max-h-[80vh] overflow-y-auto bg-white dark:bg-[#1a1a1a] rounded-t-3xl sm:rounded-3xl shadow-2xl"
+        className="relative w-full sm:max-w-lg max-h-[85vh] sm:max-h-[80vh] overflow-y-auto bg-[#F1F5F9] dark:bg-[#1a1a1a] rounded-t-3xl sm:rounded-3xl shadow-2xl backdrop-blur-[24px]"
       >
         {loading || !doc ? (
           <div className="flex items-center justify-center h-48">
@@ -2123,16 +2314,17 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
         ) : (
           <>
             {/* Modal header */}
-            <div className="sticky top-0 z-10 flex items-start gap-3 p-5 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 rounded-t-3xl">
+            <div className="sticky top-0 z-10 flex items-start gap-3 p-5 bg-[#F1F5F9] dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 rounded-t-3xl backdrop-blur-[24px]">
               <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug break-words">{doc.name}</p>
-                <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
+                <p className="font-sf font-semibold text-gray-900 dark:text-white text-sm leading-snug break-words">{doc.name}</p>
+                <p className="font-sf text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                   {fmt(doc.fileSize)} · {formatDateTime(doc.createdAt, { long: true })}
                 </p>
               </div>
               <button
                 onClick={onClose}
+                aria-label="Close"
                 className="shrink-0 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -2169,7 +2361,7 @@ function DocInsightsModal({ doc, loading, onClose }: { doc: DocDetail | null; lo
                 <InsightSection label="Important Dates" icon="📅" items={doc.importantDates!} />
               )}
               {!doc.summary && !doc.keyNumbers?.length && !doc.risks?.length && !doc.decisions?.length && !doc.importantDates?.length && (
-                <p className="text-sm text-gray-900 dark:text-gray-500 text-center py-4">No insights extracted from this document.</p>
+                <p className="font-sf text-sm text-gray-900 dark:text-gray-500 text-center py-4">No insights extracted from this document.</p>
               )}
             </div>
           </>
@@ -2188,10 +2380,10 @@ function InsightSection({
     <div>
       <div className="flex items-center gap-2 mb-2.5">
         <span className="text-sm">{icon}</span>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500">{label}</p>
+        <p className="font-sf text-xs font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500">{label}</p>
       </div>
       {isSummary ? (
-        <p className="text-sm text-gray-900 dark:text-gray-300 leading-relaxed">{items[0]}</p>
+        <p className="font-sf text-sm text-gray-900 dark:text-gray-300 leading-relaxed">{items[0]}</p>
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => (
@@ -2201,7 +2393,7 @@ function InsightSection({
                 : 'bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-300'
             }`}>
               <span className="shrink-0 text-gray-900 dark:text-gray-500 mt-0.5">—</span>
-              <span className="leading-relaxed">{item}</span>
+              <span className="font-sf leading-relaxed">{item}</span>
             </div>
           ))}
         </div>
@@ -2289,17 +2481,20 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Document actions"
       className="fixed inset-0 z-50 flex items-end justify-center"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[24px]" />
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 420, damping: 36 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg bg-white dark:bg-[#1c1c1e] rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto"
+        className="relative w-full max-w-lg bg-[#F1F5F9] dark:bg-[#1c1c1e] rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto backdrop-blur-[24px]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
       >
         {/* Drag handle */}
@@ -2314,24 +2509,24 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
               <div className="flex items-center gap-3">
                 <span className="text-2xl shrink-0">{FILE_ICONS[doc.fileType] ?? '📄'}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate flex items-center gap-2">
+                  <p className="font-sf font-semibold text-gray-900 dark:text-white text-sm leading-snug truncate flex items-center gap-2">
                     {doc.name}
-                    {doc.version > 1 && <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">v{doc.version}</span>}
+                    {doc.version > 1 && <span className="font-sf shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">v{doc.version}</span>}
                   </p>
-                  <p className="text-xs text-gray-900 dark:text-gray-500 mt-0.5">
+                  <p className="font-sf text-xs text-gray-900 dark:text-gray-500 mt-0.5">
                     <span className={STATUS_COLOR[doc.status]}>{doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>
                     {' · '}{fmt(doc.fileSize)}
                     {' · '}{formatDateTime(doc.createdAt)}
                   </p>
                   {doc.status === 'failed' && doc.failureReason && (
-                    <p className="text-xs text-red-400 mt-1.5 leading-relaxed">{doc.failureReason}</p>
+                    <p className="font-sf text-xs text-red-400 mt-1.5 leading-relaxed">{doc.failureReason}</p>
                   )}
                 </div>
               </div>
               {doc.status === 'ready' && doc.summary && (
                 <div className="mt-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500 mb-1">Short Summary</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{doc.summary}</p>
+                  <p className="font-sf text-[11px] font-semibold uppercase tracking-wider text-gray-900 dark:text-gray-500 mb-1">Short Summary</p>
+                  <p className="font-sf text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{doc.summary}</p>
                 </div>
               )}
             </div>
@@ -2354,7 +2549,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
                     disabled={viewing}
                   />
                   {viewError && (
-                    <p className="text-xs text-red-400 px-4 pb-1 leading-relaxed">{viewError}</p>
+                    <p className="font-sf text-xs text-red-400 px-4 pb-1 leading-relaxed">{viewError}</p>
                   )}
                 </>
               )}
@@ -2388,7 +2583,7 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
             <div className="px-4 pt-1 pb-5">
               <button
                 onClick={onClose}
-                className="w-full py-3.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="font-sf w-full py-3.5 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -2398,30 +2593,30 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
 
         {mode === 'rename' && (
           <div className="px-5 pt-3 pb-5">
-            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+            <button onClick={() => setMode('actions')} className="font-sf flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Back
             </button>
-            <p className="text-base font-semibold text-gray-900 dark:text-white mb-4">Rename document</p>
+            <p className="font-sf text-base font-semibold text-gray-900 dark:text-white mb-4">Rename document</p>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleRename() }}
               autoFocus
-              className="w-full px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors mb-4"
+              className="font-sf w-full px-4 py-3 text-base text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors mb-4"
             />
             <div className="flex gap-3">
               <button
                 onClick={() => setMode('actions')}
-                className="flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="font-sf flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRename}
                 disabled={saving || !newName.trim()}
-                className="flex-1 py-3 text-sm font-medium text-white bg-gray-900 dark:bg-gray-700 rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+                className="font-sf flex-1 py-3 text-sm font-medium text-white bg-gray-900 dark:bg-gray-700 rounded-xl disabled:opacity-40 hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -2431,25 +2626,25 @@ function DocActionSheet({ doc, onClose, onViewInsights, onDelete, onRename, onRe
 
         {mode === 'delete' && (
           <div className="px-5 pt-3 pb-5">
-            <button onClick={() => setMode('actions')} className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+            <button onClick={() => setMode('actions')} className="font-sf flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-400 mb-5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Back
             </button>
-            <p className="text-base font-semibold text-gray-900 dark:text-white mb-2">Delete document?</p>
-            <p className="text-sm text-gray-900 dark:text-gray-400 mb-6 leading-relaxed">
+            <p className="font-sf text-base font-semibold text-gray-900 dark:text-white mb-2">Delete document?</p>
+            <p className="font-sf text-sm text-gray-900 dark:text-gray-400 mb-6 leading-relaxed">
               This removes the file and all memory associated with it. This cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setMode('actions')}
-                className="flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="font-sf flex-1 py-3 text-sm font-medium text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex-1 py-3 text-sm font-medium text-white bg-red-500 rounded-xl disabled:opacity-50 hover:bg-red-600 transition-colors"
+                className="font-sf flex-1 py-3 text-sm font-medium text-white bg-red-500 rounded-xl disabled:opacity-50 hover:bg-red-600 transition-colors"
               >
                 {deleting ? 'Deleting…' : 'Delete'}
               </button>
@@ -2478,7 +2673,7 @@ function ListSkeleton() {
     <div className="space-y-3 animate-pulse mt-2">
       {[1, 2, 3, 4].map((i) => (
         <div key={i} className="flex items-center gap-3 px-1 py-2">
-          <div className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 shrink-0" />
+          <div className="w-9 h-9 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 shrink-0" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
             <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
@@ -2504,7 +2699,7 @@ function SheetRow({ icon, label, onClick, destructive, disabled }: {
       }`}
     >
       <span className="shrink-0">{icon}</span>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="font-sf text-sm font-medium">{label}</span>
     </motion.button>
   )
 }

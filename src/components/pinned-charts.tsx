@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChartBlock, type ChartSpec } from './charts/ChartBlock'
+import { SPRING_MEDIUM } from '@/lib/animations'
 
 interface PinnedChart {
   id: string
@@ -51,7 +52,7 @@ export function PinnedCharts() {
 
   return (
     <>
-      <p className="font-sf text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8] dark:text-gray-500 mb-1 mt-1 px-1">
+      <p className="font-sf text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8] dark:text-gray-500 mb-1 mt-1 px-1">
         Pinned Charts
       </p>
       <div className="space-y-0.5 mb-2">
@@ -93,7 +94,7 @@ export function PinnedCharts() {
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              transition={{ type: 'spring', ...SPRING_MEDIUM }}
               onClick={(e) => e.stopPropagation()}
               className="w-[95vw] max-w-3xl max-h-[85vh] flex flex-col bg-white dark:bg-[#111] rounded-3xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.4)]"
             >

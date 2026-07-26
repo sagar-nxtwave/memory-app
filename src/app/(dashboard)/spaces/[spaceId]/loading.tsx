@@ -2,7 +2,7 @@ export default function SpaceLoading() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#0f0f0f]">
       {/* Header skeleton */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-[#F1F5F9]/80 dark:bg-[#0f0f0f]/80 backdrop-blur-[24px]">
         <div className="flex-1 min-w-0 pl-12 md:pl-0 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 shrink-0 animate-pulse" />
           <div className="flex items-center gap-2 min-w-0">

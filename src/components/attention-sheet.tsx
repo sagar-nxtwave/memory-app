@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence, useMotionValue, animate, useDragControls, type PanInfo } from 'framer-motion'
 import { Sparkle, ChevronRight } from '@/components/portfolio-ui'
+import { SPRING_SHEET } from '@/lib/animations'
 
 export type Signal = { text: string; spaceName: string; spaceId: string }
 
 // Visible fraction of the viewport at each snap — Figma: Few → More → Updates scroll
 const SNAPS = [0.55, 0.75, 0.94]
 const PANEL = 0.94
-const SPRING = { type: 'spring' as const, stiffness: 420, damping: 40 }
+const SPRING = { type: 'spring' as const, ...SPRING_SHEET }
 
 function ItemList({ signals, onNavigate }: { signals: Signal[]; onNavigate: (id: string, name?: string) => void }) {
   return (
@@ -22,9 +23,9 @@ function ItemList({ signals, onNavigate }: { signals: Signal[]; onNavigate: (id:
           >
             <span className="pt-1 shrink-0 text-teal-400"><Sparkle className="w-3 h-3" /></span>
             <span className="flex-1 min-w-0">
-              {/* Subheadline/Regular 15/20 — name #475569, desc #64748B */}
-              <span className="block text-[15px] leading-[20px] tracking-[-0.0153em] text-[#475569] dark:text-slate-200">{sig.spaceName}</span>
-              <span className="block text-[15px] leading-[20px] tracking-[-0.0153em] text-[#64748B] dark:text-slate-400 mt-0.5">{sig.text}</span>
+              {/* Subheadline/Regular 13/18 — name #475569, desc #475569 */}
+              <span className="block text-[13px] leading-[18px] tracking-[-0.08px] text-[#475569] dark:text-slate-200">{sig.spaceName}</span>
+              <span className="block text-[13px] leading-[18px] tracking-[-0.08px] text-[#475569] dark:text-slate-400 mt-0.5">{sig.text}</span>
             </span>
             <span className="shrink-0 mt-1 grid place-items-center w-7 h-7 rounded-full bg-[#F1F5F9] dark:bg-white/5 text-slate-700 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-white/10 transition-colors">
               <ChevronRight className="w-5 h-5" />
@@ -92,17 +93,20 @@ export function AttentionSheet({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[rgba(26,26,26,0.36)] backdrop-blur-[2px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Needs attention"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[rgba(26,26,26,0.36)] backdrop-blur-[24px]"
           >
             <motion.div
               initial={{ scale: 0.96, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0, y: 8 }}
               transition={SPRING}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg max-h-[80vh] flex flex-col bg-white dark:bg-[#111] rounded-3xl overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.25)]"
+              className="w-full max-w-lg max-h-[80vh] flex flex-col bg-white dark:bg-[#111] rounded-3xl overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.25)] backdrop-blur-[24px]"
             >
               <div className="shrink-0 flex items-center justify-between h-16 px-6 shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
-                <p className="font-sf text-[15px] font-semibold tracking-[-0.0153em] text-[#0F172A] dark:text-white">Need your attention</p>
-                <button onClick={onClose} className="grid place-items-center w-8 h-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+                <p className="font-sf text-[20px] leading-[23px] font-semibold tracking-[-0.45px] text-[#0F172A] dark:text-white">Need your attention</p>
+                <button onClick={onClose} aria-label="Close" className="grid place-items-center w-8 h-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -124,9 +128,12 @@ export function AttentionSheet({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => animate(y, panelH, SPRING).then(onClose)}
-            className="fixed inset-0 z-40 bg-[rgba(26,26,26,0.36)] backdrop-blur-[2px]"
+            className="fixed inset-0 z-40 bg-[rgba(26,26,26,0.36)] backdrop-blur-[24px]"
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Needs attention"
             className="fixed inset-x-0 bottom-0 z-50 flex flex-col px-2"
             style={{ height: panelH, y }}
             drag="y" dragListener={false} dragControls={controls}
@@ -134,14 +141,14 @@ export function AttentionSheet({
             dragElastic={0.02} onDragEnd={onDragEnd}
           >
             <div onPointerDown={(e) => controls.start(e)} className="shrink-0 flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none">
-              <div className="w-12 h-[5px] rounded-full bg-white/80" />
+              <div className="w-12 h-[5px] rounded-full bg-white" />
             </div>
-            <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-[#111] rounded-t-3xl overflow-hidden shadow-[0_-1px_24px_rgba(0,0,0,0.12)]">
+            <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-[#111] rounded-t-3xl overflow-hidden shadow-[0_-1px_24px_rgba(0,0,0,0.12)] backdrop-blur-[24px]">
               <div
                 onPointerDown={(e) => controls.start(e)}
                 className="shrink-0 flex items-center justify-center h-16 px-6 touch-none cursor-grab active:cursor-grabbing shadow-[0_1px_8px_rgba(0,0,0,0.06)] rounded-t-3xl bg-white dark:bg-[#111] z-10"
               >
-                <p className="font-sf text-[15px] leading-[18px] font-semibold tracking-[-0.0153em] text-[#0F172A] dark:text-white">Need your attention</p>
+                <p className="font-sf text-[20px] leading-[23px] font-semibold tracking-[-0.45px] text-[#0F172A] dark:text-white">Need your attention</p>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 pt-2 pb-8">
                 <ItemList signals={signals} onNavigate={onNavigate} />

@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Digest, SpaceSignal, SpaceCard, openCreateSpace } from '@/components/portfolio-ui'
+import { Digest, SpaceSignal, SpaceCard, openCreateSpace, computeRiskLevel, riskCountsBySpace, PortfolioHealthBar, type RiskLevel } from '@/components/portfolio-ui'
 
 export default function SpacesListPage() {
   const router = useRouter()
   const [digest, setDigest] = useState<Digest | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [riskFilter, setRiskFilter] = useState<RiskLevel | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/portfolio/digest')
@@ -30,15 +31,23 @@ export default function SpacesListPage() {
   }, [load])
 
   const spaces = (digest?.spaces ?? []).filter((s: SpaceSignal) => !s.name.toLowerCase().startsWith('test'))
-  const filtered = query.trim()
-    ? spaces.filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase()))
-    : spaces
+  const riskCounts = riskCountsBySpace(digest?.recentDocuments ?? [])
+  const spaceRiskLevels = new Map<string, RiskLevel>(spaces.map((s) => [s.id, computeRiskLevel(s, riskCounts.get(s.id) ?? 0)]))
+  const healthCounts: Record<RiskLevel, number> = { critical: 0, watch: 0, healthy: 0, new: 0 }
+  for (const level of spaceRiskLevels.values()) healthCounts[level]++
+
+  const filtered = spaces
+    .filter((s) => !query.trim() || s.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((s) => !riskFilter || spaceRiskLevels.get(s.id) === riskFilter)
 
   return (
     <div className="relative min-h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,#faf9f9_68%,#e2e8f0_100%)] dark:bg-[#0a0a0a] dark:bg-none">
-      <div className="w-full max-w-2xl md:max-w-5xl mx-auto px-4 md:px-8 pt-16 md:pt-10 pb-40 md:pb-16">
+      <div className="w-full max-w-2xl md:max-w-5xl mx-auto px-4 md:px-8 pt-[calc(max(1rem,env(safe-area-inset-top))+5.25rem)] md:pt-10 pb-40 md:pb-16">
 
         <h1 className="font-sf t-title font-normal text-[#0F172A] dark:text-white mb-5">Spaces</h1>
+
+        {/* -- Portfolio health at a glance — click a pill to filter -- */}
+        {!loading && <PortfolioHealthBar counts={healthCounts} active={riskFilter} onFilter={setRiskFilter} />}
 
         {/* Search */}
         <div className="relative mb-6 md:max-w-xl">
@@ -68,10 +77,10 @@ export default function SpacesListPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="font-sf text-[15px] text-[#64748B] dark:text-slate-400 mb-5">
-              {query.trim() ? 'No spaces match your search.' : 'No spaces yet.'}
+            <p className="font-sf text-[15px] tracking-[-0.0153em] text-[#64748B] dark:text-slate-400 mb-5">
+              {query.trim() || riskFilter ? 'No spaces match your filters.' : 'No spaces yet.'}
             </p>
-            {!query.trim() && (
+            {!query.trim() && !riskFilter && (
               <motion.button
                 whileTap={{ scale: 0.97 }}
                 onClick={openCreateSpace}
@@ -84,7 +93,7 @@ export default function SpacesListPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {filtered.map((space, i) => (
-              <SpaceCard key={space.id} space={space} index={i} onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)} />
+              <SpaceCard key={space.id} space={space} index={i} riskLevel={spaceRiskLevels.get(space.id)} onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)} />
             ))}
           </div>
         )}

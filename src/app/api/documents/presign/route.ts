@@ -10,6 +10,19 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const BUCKET = process.env.MINIO_BUCKET ?? 'memory-docs'
 
+const MIME_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  text: 'text/plain',
+  image: 'image/jpeg',
+  zip: 'application/zip',
+  email: 'message/rfc822',
+  cad: 'application/octet-stream',
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -65,6 +78,7 @@ export async function POST(req: NextRequest) {
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: storageKey,
+    ContentType: MIME_TYPES[fileType] ?? 'application/octet-stream',
   })
   const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
 

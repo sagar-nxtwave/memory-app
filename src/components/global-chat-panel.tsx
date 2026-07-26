@@ -337,26 +337,27 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
     : `${selectedCount} of ${spaces.length} project${spaces.length !== 1 ? 's' : ''}`
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#0f0f0f]">
+    <div className="flex flex-col h-full bg-[#F1F5F9] dark:bg-[#0f0f0f]">
       {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
+        className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-white/10 dark:bg-[#0f0f0f]/80 backdrop-blur-[48px]"
       >
         {onClose && (
           <button
             onClick={onClose}
             title="Back to home"
+            aria-label="Back to home"
             className="shrink-0 h-8 w-8 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
           </button>
         )}
         <div className={`${onClose ? '' : 'pl-12 md:pl-0'} flex-1 min-w-0`}>
-          <h1 className="font-semibold text-gray-900 dark:text-white text-sm">All Projects</h1>
-          <p className="text-xs text-gray-900 dark:text-gray-500">Ask questions across your portfolio</p>
+          <h1 className="font-sf font-semibold text-gray-900 dark:text-white text-sm">All Projects</h1>
+          <p className="font-sf text-xs text-gray-900 dark:text-gray-500">Ask questions across your portfolio</p>
         </div>
 
         {/* Project filter — compact dropdown, only shown when 2+ spaces */}
@@ -422,7 +423,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                               </svg>
                             )}
                           </div>
-                          <span className={`text-sm truncate ${
+                          <span className={`font-sf text-sm truncate ${
                             checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-900 dark:text-gray-400'
                           }`}>
                             {space.name}
@@ -452,14 +453,14 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
             </div>
           ) : isEmpty ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center pt-6">
-              <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-5">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-900 dark:text-gray-400">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                 </svg>
               </div>
-              <p className="text-gray-900 dark:text-white font-semibold text-sm mb-1">Ask across your projects</p>
-              <p className="text-gray-900 dark:text-gray-400 text-xs mb-8 text-center max-w-xs">
+              <p className="font-sf text-gray-900 dark:text-white font-semibold text-sm mb-1">Ask across your projects</p>
+              <p className="font-sf text-gray-900 dark:text-gray-400 text-xs mb-8 text-center max-w-xs">
                 Memory searches documents from all selected projects and answers with context from each.
               </p>
               <div className="w-full max-w-sm space-y-2">
@@ -469,7 +470,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                     whileTap={{ scale: 0.98 }}
                     onClick={() => sendMessage(s)}
                     disabled={loading}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white border border-gray-100 dark:border-gray-800 rounded-2xl transition-all disabled:opacity-50"
+                    className="w-full text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white border border-gray-100 dark:border-gray-800 rounded-3xl transition-all disabled:opacity-50"
                   >
                     {s}
                   </motion.button>
@@ -503,7 +504,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/80 dark:bg-[#0f0f0f]/80 backdrop-blur-sm"
+        className="border-t border-gray-100 dark:border-gray-800 shrink-0 bg-white/10 dark:bg-[#0f0f0f]/80 backdrop-blur-[48px]"
       >
         <div className="w-full max-w-2xl mx-auto px-4 pt-3" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
           {/* mention chips */}
@@ -512,7 +513,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
               {mentionChips.map((chip, i) => (
                 <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
                   <span>@{chip.spaceName}{chip.docName ? `/${chip.docName}` : ''}</span>
-                  <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                  <button onClick={() => setMentionChips((p) => p.filter((_, j) => j !== i))} aria-label="Remove reference" className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </button>
                 </span>
@@ -586,7 +587,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                           }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                         >
-                          <span className="text-sm text-gray-900 dark:text-white truncate font-medium">{space.name}</span>
+                           <span className="font-sf text-sm text-gray-900 dark:text-white truncate font-medium">{space.name}</span>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="ml-auto shrink-0 text-gray-400"><path d="M9 18l6-6-6-6"/></svg>
                         </button>
                       ))
@@ -618,7 +619,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                         >
                           <span className="text-base shrink-0">{item.id === '__space__' ? '🗂️' : (FILE_ICONS[item.fileType] ?? '📄')}</span>
-                          <span className={`text-sm truncate ${item.id === '__space__' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>{item.name}</span>
+                           <span className={`font-sf text-sm truncate ${item.id === '__space__' ? 'text-gray-500 dark:text-gray-400 italic' : 'text-gray-900 dark:text-white'}`}>{item.name}</span>
                         </button>
                       ))
                     }
@@ -629,7 +630,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
 
             <form
               onSubmit={(e) => { e.preventDefault(); sendMessage(input) }}
-              className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 transition-all"
+              className="bg-white dark:bg-gray-900 border border-[rgba(26,26,26,0.12)] dark:border-gray-700 rounded-[28px] px-3 py-2 focus-within:border-[rgba(26,26,26,0.20)] dark:focus-within:border-gray-600 focus-within:bg-white dark:focus-within:bg-gray-800 shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all"
             >
               <div className="flex items-center gap-2">
               <button
@@ -637,14 +638,16 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                 onClick={() => { setInput((v) => v + '@'); inputRef.current?.focus(); setMentionStage('space'); setMentionQuery(''); setMentionActiveIdx(0) }}
                 disabled={loading}
                 title="Reference a project or document"
-                className="shrink-0 h-7 w-7 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
+                aria-label="Mention a project or document"
+                className="font-sf touch-target shrink-0 h-11 w-11 flex items-center justify-center text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-30 text-sm font-semibold"
               >@</button>
               <button
                 type="button"
                 onClick={speech.toggle}
                 disabled={loading || !speech.supported || speech.transcribing}
                 title={!speech.supported ? "Voice input isn't supported in this browser" : speech.listening ? 'Stop recording' : 'Speak your question'}
-                className={`shrink-0 h-7 w-7 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${
+                aria-label="Voice input"
+                className={`touch-target shrink-0 h-11 w-11 flex items-center justify-center rounded-lg transition-colors disabled:opacity-30 ${
                   speech.listening ? 'text-red-500' : 'text-gray-500 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400'
                 }`}
               >
@@ -723,7 +726,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
                 }}
                 placeholder={`Ask anything across ${selectionLabel.toLowerCase()}… or @ a project`}
-                className="flex-1 min-w-0 text-[15px] sm:text-base lg:text-lg text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
+                className="font-sf flex-1 min-w-0 text-[15px] tracking-[-0.0153em] sm:text-base lg:text-lg text-gray-900 dark:text-white bg-transparent outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-gray-600 min-h-[28px] max-h-[120px] overflow-y-auto leading-relaxed"
               />
               {/* Desktop: all controls inline */}
               <div className="hidden md:flex shrink-0 items-center gap-1.5">
@@ -736,6 +739,7 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                     onClick={() => { abortRef.current?.abort(); setStreamingId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
                     className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
                     title="Stop generating"
+                    aria-label="Stop generating"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                   </motion.button>
@@ -760,8 +764,9 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                     whileTap={{ scale: 0.92 }}
                     type="button"
                     onClick={() => { abortRef.current?.abort(); setStreamingId(null); setLoading(false); setTimeout(() => inputRef.current?.focus(), 100) }}
-                    className="h-8 w-8 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
+                    className="touch-target h-11 w-11 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
                     title="Stop generating"
+                    aria-label="Stop generating"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                   </motion.button>
@@ -770,7 +775,8 @@ export function GlobalChatPanel({ onClose, autoStartMic, prefill }: { onClose?: 
                     whileTap={{ scale: 0.92 }}
                     type="submit"
                     disabled={loading || !input.trim()}
-                    className="h-8 w-8 flex items-center justify-center bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
+                    aria-label="Send message"
+                    className="touch-target h-11 w-11 flex items-center justify-center bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 transition-colors"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
@@ -809,7 +815,7 @@ function StyleToggle({ value, onChange }: { value: 'short' | 'detailed'; onChang
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white capitalize transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+        className="font-sf flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white capitalize transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
       >
         {value}
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
@@ -867,7 +873,7 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
+        className="font-sf flex items-center gap-1 h-8 px-2.5 text-[11px] font-medium rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
       >
         <span className="truncate max-w-[80px]">{displayName}</span>
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
@@ -896,7 +902,7 @@ function ModelSelector({ value, onChange }: { value: string; onChange: (v: strin
                 }`}
               >
                 <span className="block">{m.name}</span>
-                <span className="block text-[10px] opacity-60">{m.provider}</span>
+                <span className="block text-[11px] opacity-60">{m.provider}</span>
               </button>
             ))}
           </motion.div>
@@ -1014,10 +1020,10 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+      <div className={`font-sf max-w-[85%] px-4 py-3 rounded-3xl text-sm leading-relaxed ${
         isUser
-          ? 'bg-gray-900 dark:bg-gray-700 text-white rounded-br-sm'
-          : 'bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
+          ? 'bg-[#0F172A] dark:bg-gray-700 text-white rounded-br-sm'
+          : 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-800 rounded-bl-sm'
       }`}>
         {showStatus ? (
           <span className="flex items-center gap-2 py-0.5">
@@ -1026,7 +1032,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
             />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{statusText}</span>
+            <span className="font-sf text-xs text-gray-500 dark:text-gray-400">{statusText}</span>
           </span>
         ) : isUser ? (
           message.content.split('\n').map((line, i, arr) => (
@@ -1039,7 +1045,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
               <div className="mb-2">
                 <button
                   onClick={() => setThinkingOpen((o) => !o)}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
+                  className="font-sf flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors select-none"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${thinkingOpen ? 'rotate-90' : ''}`}>
                     <path d="M9 18l6-6-6-6" />
@@ -1068,7 +1074,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                         if (scoreMatch) {
                           const score = parseInt(scoreMatch[1])
                           const scoreColor = score >= 70 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : score >= 40 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                          badge = <span className={`ml-1 px-1 py-0.5 rounded text-[9px] font-medium ${scoreColor}`}>{score}</span>
+                          badge = <span className={`font-sf ml-1 px-1 py-0.5 rounded text-[11px] font-medium ${scoreColor}`}>{score}</span>
                         }
                       } else if (['crossCheck', 'detectHallucination'].includes(action)) {
                         iconColor = 'text-yellow-500 dark:text-yellow-400'
@@ -1094,7 +1100,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                             <span>{displayStep}{badge}</span>
                           </div>
                           {result && !isResult && (
-                            <div className="ml-5 mt-0.5 text-[10px] text-gray-300 dark:text-gray-600">
+                            <div className="font-sf ml-5 mt-0.5 text-[11px] text-gray-300 dark:text-gray-600">
                               {(() => {
                                 try {
                                   const parsed = JSON.parse(result)
@@ -1126,7 +1132,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
              )}
              {message.documentImages && message.documentImages.length > 0 && (
               <div className="mt-3">
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
+                <p className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wide">
                   Images from document ({message.documentImages.length})
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
@@ -1139,13 +1145,13 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
              {message.citations && message.citations.length > 0 && (() => {
               const webCites = message.citations.filter((c) => c.sourceType === 'web' && c.url)
               const internalCites = message.citations.filter((c) => c.sourceType !== 'web')
-              const chip = "text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
+              const chip = "text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 truncate max-w-[180px]"
               const chipLink = `${chip} hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer transition-colors`
               return (
                 <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
                   {internalCites.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
+                      <span className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">Sources:</span>
                       {internalCites.map((c, i) => {
                         const label = c.spaceName ? `${c.spaceName} › ${c.documentName}` : c.documentName
                         return c.documentId ? (
@@ -1158,9 +1164,9 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                   )}
                   {webCites.length > 0 && (
                     <>
-                      <p className="text-[10px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
+                      <p className="font-sf text-[11px] italic text-gray-400 dark:text-gray-500">🌐 Includes information from the web — please verify against the sources below.</p>
                       <div className="flex flex-wrap gap-1">
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
+                        <span className="font-sf text-[11px] text-gray-400 dark:text-gray-500 mr-0.5 self-center">🌐 Web:</span>
                         {webCites.map((c, i) => {
                           let host = c.documentName
                           try { host = new URL(c.url!).hostname.replace(/^www\./, '') } catch {}
@@ -1177,14 +1183,16 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
              {!isStreaming && (
               <div className="mt-1.5 flex gap-0.5">
                 <button onClick={() => handleVote('up')} title="Helpful"
-                  className={`p-1 rounded transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  aria-label="Mark as helpful"
+                  className={`touch-target p-1 rounded-lg transition-colors ${vote === 'up' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
                     <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                   </svg>
                 </button>
                 <button onClick={() => handleVote('down')} title="Not helpful"
-                  className={`p-1 rounded transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
+                  aria-label="Mark as not helpful"
+                  className={`touch-target p-1 rounded-lg transition-colors ${vote === 'down' ? 'text-gray-700 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
                     <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
@@ -1198,7 +1206,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
                   <button
                     key={i}
                     onClick={() => onSuggestionClick?.(s)}
-                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                    className="font-sf text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
                   >
                     {s}
                   </button>
@@ -1210,7 +1218,7 @@ function GlobalChatMessage({ message, isStreaming, onSuggestionClick }: {
         )}
       </div>
       {message.createdAt && (
-        <div className={`text-[10px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+        <div className={`font-sf text-[11px] text-gray-400 dark:text-gray-600 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
           {formatRelativeTime(message.createdAt)}
         </div>
       )}

@@ -6,7 +6,7 @@ export function AuthedLayout({ children }: { children: React.ReactNode }) {
     <>
       <div className="flex h-full">
         <Sidebar />
-        <main className="flex-1 min-w-0 overflow-y-auto relative">
+        <main id="main-content" className="flex-1 min-w-0 overflow-y-auto relative">
           {children}
         </main>
       </div>

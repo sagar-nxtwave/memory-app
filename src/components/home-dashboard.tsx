@@ -1,14 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { motion } from 'framer-motion'
 import {
   Digest, SpaceSignal, RecentDoc, greeting, Sparkle, ChevronRight, SpaceCard, openCreateSpace,
+  computeRiskLevel, riskCountsBySpace, type RiskLevel,
 } from '@/components/portfolio-ui'
-import { AttentionSheet } from '@/components/attention-sheet'
-import { GlobalChatPanel } from '@/components/global-chat-panel'
+import dynamic from 'next/dynamic'
+
+const AttentionSheet = dynamic(() => import('@/components/attention-sheet').then(m => m.AttentionSheet), { ssr: false })
+const GlobalChatPanel = dynamic(() => import('@/components/global-chat-panel').then(m => m.GlobalChatPanel), { ssr: false })
 
 type SignalItem = { text: string; spaceName: string; spaceId: string }
 
@@ -50,14 +53,22 @@ export function HomeDashboard() {
   const previewSpaces = spaces.slice(0, 6)
   const hasMoreSpaces = spaces.length > previewSpaces.length
 
+  // Portfolio risk heat-map — derived from status + extracted-risk counts, no new backend fields.
+  // Surfaced as a small dot on each SpaceCard only (the "Need your attention" section above
+  // already covers the summary — no need to duplicate it as a pill row here).
+  const riskCounts = riskCountsBySpace(allDocs)
+  const spaceRiskLevels = new Map<string, RiskLevel>(spaces.map((s) => [s.id, computeRiskLevel(s, riskCounts.get(s.id) ?? 0)]))
+
+  // Picked once per mount so the greeting doesn't re-randomize on every re-render
+  const greetingText = useMemo(() => greeting(session?.user?.name), [session?.user?.name])
+
   return (
-    // Background: radial-gradient(circle at 50% 0%, #faf9f9 68%, #e2e8f0 100%)
-    <div className="relative min-h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,#faf9f9_68%,#e2e8f0_100%)] dark:bg-[#0a0a0a] dark:bg-none">
-      <div className="w-full max-w-2xl md:max-w-5xl mx-auto px-4 md:px-8 pt-16 md:pt-10 pb-40 md:pb-16">
+    <div className="relative min-h-full overflow-y-auto bg-white dark:bg-[#0a0a0a]">
+      <div className="w-full max-w-2xl md:max-w-5xl mx-auto px-4 md:px-8 pt-[calc(max(1rem,env(safe-area-inset-top))+5.25rem)] md:pt-10 pb-40 md:pb-16">
 
         {/* -- Greeting — Title1/Regular: SF Pro 28/34, +0.0136em, #0F172A -- */}
         <h1 className="font-sf t-title font-normal text-[#0F172A] dark:text-white mb-6">
-          {greeting(session?.user?.name)}
+          {greetingText}
         </h1>
 
         {/* -- Ask memory pill — pad 24/24/24/32, radius 999, Icon shadow -- */}
@@ -68,9 +79,9 @@ export function HomeDashboard() {
             tabIndex={0}
             onClick={() => setAskOpen(true)}
             onKeyDown={(e) => { if (e.key === 'Enter') setAskOpen(true) }}
-            className="font-sf w-full md:max-w-2xl flex items-center gap-2 pl-8 pr-6 py-6 mb-6 md:mb-8 rounded-full bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 text-left cursor-pointer"
+            className="font-sf w-full md:max-w-2xl flex items-center gap-2 pl-8 pr-6 py-6 mb-6 md:mb-8 rounded-full bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:ring-white/5 text-left cursor-pointer"
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0 text-[#64748B] dark:text-slate-400">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="shrink-0 text-[#94A3B8] dark:text-slate-400">
               <path d="M12 5v14M5 12h14" />
             </svg>
             {/* Title3/Regular: SF Pro 20/25, -0.0225em, #64748B */}
@@ -78,6 +89,7 @@ export function HomeDashboard() {
             <button
               type="button"
               title="Speak your question"
+              aria-label="Voice input"
               onClick={(e) => { e.stopPropagation(); setAutoMic(true); setAskOpen(true) }}
               className="shrink-0 text-[#94A3B8] dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
             >
@@ -90,7 +102,7 @@ export function HomeDashboard() {
         )}
 
         {askOpen ? (
-          <div className="h-[70vh] md:h-[75vh] rounded-3xl overflow-hidden bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5">
+          <div className="h-[70vh] md:h-[75vh] rounded-3xl overflow-hidden bg-[#F1F5F9] dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:ring-white/5">
             <GlobalChatPanel
               autoStartMic={autoMic}
               prefill={prefill || undefined}
@@ -103,7 +115,7 @@ export function HomeDashboard() {
           <div className="space-y-6">
 
             {/* -- Need your attention -- */}
-            <section className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5">
+            <section className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:ring-white/5">
               {allSignals.length > 0 ? (
                 <div className="py-6">
                   <p className="font-sf px-6 text-[15px] leading-[18px] font-semibold tracking-[-0.0153em] text-[#0F172A] dark:text-white mb-4">
@@ -117,7 +129,7 @@ export function HomeDashboard() {
                         onClick={() => router.push(`/spaces/${sig.spaceId}?name=${encodeURIComponent(sig.spaceName)}`)}
                         className="font-sf w-full flex items-start gap-2 text-left"
                       >
-                        <span className="pt-0.5 shrink-0 text-teal-400"><Sparkle className="w-3 h-3" /></span>
+                        <span className="pt-0.5 shrink-0 text-[#94A3B8]"><Sparkle className="w-3 h-3" /></span>
                         <span className="flex-1 min-w-0 text-[13px] leading-[18px] tracking-[-0.0062em] text-[#475569] dark:text-slate-300">
                           {sig.spaceName} - {sig.text}
                         </span>
@@ -127,20 +139,20 @@ export function HomeDashboard() {
                   {hasMoreSignals && (
                     <button
                       onClick={() => setSheetOpen(true)}
-                      className="font-sf mt-4 px-6 flex items-center gap-1 text-[13px] text-[#94A3B8] hover:text-slate-500 transition-colors"
+                      className="font-sf mt-4 mx-6 inline-flex items-center gap-1 px-3 py-1 text-[13px] leading-[16px] text-[#94A3B8] bg-[#F1F5F9] rounded-full hover:bg-[#E2E8F0] transition-colors"
                     >
                       Show all
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
                       </svg>
                     </button>
                   )}
                 </div>
               ) : (
                 <div className="font-sf px-6 py-8 flex flex-col items-center text-center">
-                  <span className="text-teal-400 mb-3"><Sparkle className="w-6 h-6" /></span>
-                  <p className="text-[17px] font-semibold text-[#0F172A] dark:text-white mb-1.5">You&rsquo;re all caught up</p>
-                  <p className="text-[15px] leading-snug text-[#64748B] dark:text-slate-400 max-w-[280px]">
+                  <span className="text-white mb-3"><Sparkle className="w-6 h-6" /></span>
+                  <p className="text-[15px] leading-[18px] font-semibold text-[#0F172A] dark:text-white mb-1.5">You&rsquo;re all caught up</p>
+                  <p className="text-[13px] tracking-[-0.0153em] leading-[18px] text-[#475569] dark:text-slate-400 max-w-[280px]">
                     No new updates since your last visit. We&rsquo;ll let you know when something changes
                   </p>
                 </div>
@@ -165,9 +177,9 @@ export function HomeDashboard() {
               {spaces.length === 0 ? (
                 <EmptyState onCreateClick={openCreateSpace} />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
                   {previewSpaces.map((space, i) => (
-                    <SpaceCard key={space.id} space={space} index={i} onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)} />
+                    <SpaceCard key={space.id} space={space} index={i} riskLevel={spaceRiskLevels.get(space.id)} onClick={() => router.push(`/spaces/${space.id}?name=${encodeURIComponent(space.name)}`)} />
                   ))}
                 </div>
               )}
@@ -190,12 +202,12 @@ export function HomeDashboard() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl h-44 shimmer shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02]" />
+      <div className="rounded-3xl h-44 shimmer shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]" />
       <div>
         <div className="h-7 w-40 rounded-lg shimmer mb-4" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-4 p-2 pr-4 rounded-3xl bg-white/70 dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5">
+            <div key={i} className="flex items-center gap-4 p-2 pr-4 rounded-3xl bg-[#F1F5F9]/70 dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] dark:ring-white/5">
               <div className="w-[72px] h-[72px] rounded-[18px] shimmer" />
               <div className="flex-1 space-y-2">
                 <div className="h-4 w-2/5 rounded shimmer" />

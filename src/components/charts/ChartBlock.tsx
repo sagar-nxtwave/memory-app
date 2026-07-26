@@ -7,6 +7,7 @@ import {
   FunnelChart, StackedBarComp, ScatterPlot, RadialKPI,
   type ChartDataPoint, type LineConfig,
 } from './charts'
+import { SPRING_MEDIUM } from '@/lib/animations'
 
 export interface ChartSpec {
   type: 'line' | 'bar' | 'pie' | 'area' | 'funnel' | 'stackedBar' | 'scatter' | 'radial'
@@ -98,12 +99,12 @@ export const ChartBlock = memo(function ChartBlock({ spec }: { spec: ChartSpec }
         transition={{ duration: 0.4, ease: 'easeOut' }}
         className={`my-3 chart-card-glow ${expanded ? 'invisible h-0 overflow-hidden my-0' : ''}`}
       >
-        <div className="bg-white dark:bg-[#111] rounded-2xl overflow-hidden">
+        <div className="bg-white dark:bg-[#111] rounded-3xl overflow-hidden">
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{spec.title}</p>
               {spec.subtitle && (
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{spec.subtitle}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{spec.subtitle}</p>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -148,7 +149,7 @@ export const ChartBlock = memo(function ChartBlock({ spec }: { spec: ChartSpec }
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              transition={{ type: 'spring', ...SPRING_MEDIUM }}
               onClick={(e) => e.stopPropagation()}
               className="w-[95vw] max-w-3xl max-h-[85vh] flex flex-col bg-white dark:bg-[#111] rounded-3xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.4)]"
             >

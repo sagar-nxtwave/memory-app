@@ -247,15 +247,15 @@ export default function SettingsPage() {
 
   return (
     <div className="relative min-h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,#faf9f9_68%,#e2e8f0_100%)] dark:bg-[#0a0a0a] dark:bg-none">
-      <div className="w-full max-w-2xl mx-auto px-4 md:px-8 pt-16 md:pt-10 pb-40 md:pb-16">
+      <div className="w-full max-w-2xl mx-auto px-4 md:px-8 pt-[calc(max(1rem,env(safe-area-inset-top))+5.25rem)] md:pt-10 pb-40 md:pb-16">
         <h1 className="font-sf t-title font-normal text-[#0F172A] dark:text-white mb-6">Settings</h1>
 
         {/* Business Glossary — how casual business terms map to Salesforce schema.
             This is what backs the MCP/Salesforce answer prompt's terminology understanding. */}
-        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
+        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-figtree text-[18px] font-semibold text-[#0F172A] dark:text-white">Business Glossary</h2>
+              <h2 className="font-figtree text-[17px] font-semibold text-[#0F172A] dark:text-white">Business Glossary</h2>
               <p className="font-sf text-[13px] text-[#94A3B8] dark:text-slate-500 mt-1">
                 How business terms map to Salesforce fields/objects. E.g., &quot;Customer&quot; → Account/Contact. Used by the AI when answering questions.
               </p>
@@ -368,10 +368,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Skill Files — free-form instruction documents for MCP system prompt */}
-        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
+        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-figtree text-[18px] font-semibold text-[#0F172A] dark:text-white">Skill Files</h2>
+              <h2 className="font-figtree text-[17px] font-semibold text-[#0F172A] dark:text-white">Skill Files</h2>
               <p className="font-sf text-[13px] text-[#94A3B8] dark:text-slate-500 mt-1">
                 Free-form instruction documents injected into the AI prompt. Write detailed business rules, query patterns, or domain knowledge.
               </p>
@@ -456,8 +456,8 @@ export default function SettingsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-figtree text-[14px] font-semibold text-[#0F172A] dark:text-white">{f.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-[#64748B] dark:text-slate-400">{f.category}</span>
-                        {!f.active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-500/10 text-red-500">disabled</span>}
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-[#64748B] dark:text-slate-400">{f.category}</span>
+                        {!f.active && <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-500/10 text-red-500">disabled</span>}
                       </div>
                       <p className="font-sf text-[12px] text-[#94A3B8] dark:text-slate-500 mt-1 line-clamp-3 whitespace-pre-wrap">{f.content}</p>
                     </div>
@@ -481,10 +481,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Synonym Management */}
-        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
+        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5 mb-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-figtree text-[18px] font-semibold text-[#0F172A] dark:text-white">Synonyms</h2>
+              <h2 className="font-figtree text-[17px] font-semibold text-[#0F172A] dark:text-white">Synonyms</h2>
               <p className="font-sf text-[13px] text-[#94A3B8] dark:text-slate-500 mt-1">
                 Map similar words to CRM fields. E.g., "home" → Building_Name__c
               </p>
@@ -638,8 +638,8 @@ export default function SettingsPage() {
         </div>
 
         {/* Info card */}
-        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5">
-          <h2 className="font-figtree text-[18px] font-semibold text-[#0F172A] dark:text-white mb-2">Built-in Synonyms</h2>
+        <div className="rounded-3xl bg-white dark:bg-[#111] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.02] dark:ring-white/5 p-5">
+          <h2 className="font-figtree text-[17px] font-semibold text-[#0F172A] dark:text-white mb-2">Built-in Synonyms</h2>
           <p className="font-sf text-[13px] text-[#94A3B8] dark:text-slate-500 mb-3">
             The system has 100+ built-in synonyms for common CRM terms. Custom synonyms above will be prioritized.
           </p>

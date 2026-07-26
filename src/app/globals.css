@@ -3,8 +3,79 @@
 /* Class-based dark mode for Tailwind v4 */
 @variant dark (&:where(.dark, .dark *));
 
+/* Figma Design Tokens */
+:root {
+  /* Primary Colors */
+  --color-primary: #0F172A;
+  --color-secondary: #1E293B;
+  --color-body: #475569;
+  --color-placeholder: #64748B;
+  --color-icon: #94A3B8;
+  
+  /* Background Colors */
+  --color-bg: #FFFFFF;
+  --color-card: #F1F5F9;
+  --color-card-light: #F8FAFC;
+  --color-border: #E2E8F0;
+  
+  /* Accent Colors */
+  --color-accent-blue: #BFDBFE;
+  --color-accent-blue-light: #DBEAFE;
+  --color-accent-green: #D1FAE5;
+  --color-accent-red: #FEE2E2;
+  --color-accent-red-badge: #FEBFBE;
+  --color-accent-yellow: #FEF3BF;
+  
+  /* Shadows */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-pill: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.04);
+  
+  /* Glass Effects */
+  --blur-glass: 24px;
+  --blur-heavy: 48px;
+  --blur-backdrop: 88px;
+  
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+}
+
+/* Dark Mode Tokens */
+.dark {
+  /* Primary Colors */
+  --color-primary: #F8FAFC;
+  --color-secondary: #CBD5E1;
+  --color-body: #94A3B8;
+  --color-placeholder: #64748B;
+  --color-icon: #475569;
+  
+  /* Background Colors */
+  --color-bg: #0F0F0F;
+  --color-card: #1A1A1A;
+  --color-card-light: #141414;
+  --color-border: #262626;
+  
+  /* Accent Colors */
+  --color-accent-blue: #1E3A5F;
+  --color-accent-blue-light: #172554;
+  --color-accent-green: #14532D;
+  --color-accent-red: #7F1D1D;
+  --color-accent-red-badge: #991B1B;
+  --color-accent-yellow: #78350F;
+  
+  /* Shadows */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-pill: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 @theme inline {
-  --font-sans: var(--font-geist);
+  --font-sans: var(--font-inter);
   --font-serif: var(--font-playfair);
   --font-figtree: var(--font-figtree);
 }
@@ -14,6 +85,12 @@
 .font-sf {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
 }
+
+/* Figma SF Pro Semibold = 590 (Tailwind font-semibold = 600) */
+.font-sf.font-semibold { font-weight: 590; }
+
+/* iOS minimum touch target: 44x44px */
+.touch-target { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 
 /* Fluid, responsive sizing for the mobile view (baseline = Figma 402px width).
    Values scale with viewport width and cap at the Figma size on larger phones. */
@@ -328,7 +405,7 @@ body {
 .chart-card-glow {
   background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(59, 130, 246, 0.12), rgba(13, 148, 136, 0.12));
   padding: 1px;
-  border-radius: 1rem;
+  border-radius: 1.5rem;
 }
 .chart-fullscreen {
   position: fixed;
